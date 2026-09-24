@@ -1,0 +1,519 @@
+/* ==========================================================================
+   AlumNet — Design System
+   Kenya Airways alumni engagement portal
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap');
+
+:root {
+  /* Brand */
+  --kq-red: #C8102E;
+  --kq-red-dark: #A00C24;
+  --kq-green: #045C43;
+  --kq-green-light: #0A7A5A;
+
+  /* Neutrals */
+  --ink: #15201C;
+  --ink-soft: #45524C;
+  --slate: #6E7A75;
+  --paper: #FBFAF7;
+  --panel: #FFFFFF;
+  --stone: #E4E1D8;
+  --stone-line: #D8D4C8;
+  --wash: #F2EFE6;
+
+  /* Type */
+  --font-display: 'Space Grotesk', sans-serif;
+  --font-body: 'Inter', sans-serif;
+
+  /* Scale */
+  --radius: 3px;
+  --radius-lg: 4px;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  color: var(--ink);
+  background: var(--paper);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: 1.15;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+p { margin: 0; }
+
+a { color: inherit; text-decoration: none; }
+
+button, input, select, textarea {
+  font-family: var(--font-body);
+  font-size: 1rem;
+}
+
+img { max-width: 100%; display: block; }
+
+/* --- Focus visibility --- */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--kq-green);
+  outline-offset: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   Utility
+   -------------------------------------------------------------------------- */
+
+.container {
+  width: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 32px;
+}
+
+.eyebrow {
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  color: var(--kq-green);
+  font-weight: 600;
+}
+
+.divider {
+  height: 1px;
+  background: var(--stone-line);
+  border: none;
+  margin: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Buttons
+   -------------------------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 13px 22px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.btn-primary {
+  background: var(--kq-red);
+  color: #fff;
+}
+.btn-primary:hover { background: var(--kq-red-dark); }
+
+.btn-secondary {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--stone-line);
+}
+.btn-secondary:hover { border-color: var(--ink); }
+
+.btn-quiet {
+  background: transparent;
+  color: var(--kq-green);
+  padding: 8px 10px;
+}
+.btn-quiet:hover { text-decoration: underline; }
+
+.btn-block { width: 100%; }
+
+/* --------------------------------------------------------------------------
+   Form elements
+   -------------------------------------------------------------------------- */
+
+.field { margin-bottom: 20px; }
+
+.field label {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  margin-bottom: 7px;
+}
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--stone-line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--ink);
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  border-color: var(--kq-green);
+}
+
+.field textarea { resize: vertical; min-height: 88px; }
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.field-hint {
+  font-size: 0.78rem;
+  color: var(--slate);
+  margin-top: 6px;
+}
+
+/* --------------------------------------------------------------------------
+   Auth layout — angled split hero
+   -------------------------------------------------------------------------- */
+
+.auth-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1.05fr 1fr;
+}
+
+.auth-panel {
+  position: relative;
+  background: var(--kq-green);
+  color: #fff;
+  padding: 48px 56px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+  clip-path: polygon(0 0, 100% 0, 82% 100%, 0% 100%);
+}
+
+.auth-panel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(155deg, rgba(200,16,46,0.35), transparent 55%);
+  pointer-events: none;
+}
+
+.auth-brand {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 1;
+}
+
+.auth-brand .mark {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: var(--kq-red);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+}
+
+.auth-copy { z-index: 1; max-width: 380px; }
+
+.auth-copy h1 {
+  font-size: 2.1rem;
+  margin-bottom: 16px;
+}
+
+.auth-copy p {
+  color: rgba(255,255,255,0.82);
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.auth-stat-row {
+  display: flex;
+  gap: 36px;
+  z-index: 1;
+  margin-top: 40px;
+}
+
+.auth-stat .num {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 700;
+}
+.auth-stat .label {
+  font-size: 0.78rem;
+  color: rgba(255,255,255,0.72);
+  margin-top: 2px;
+}
+
+.auth-form-side {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px;
+}
+
+.auth-form-card {
+  width: 100%;
+  max-width: 400px;
+}
+
+.auth-form-card .step {
+  font-size: 0.78rem;
+  color: var(--slate);
+  margin-bottom: 6px;
+}
+
+.auth-form-card h2 {
+  font-size: 1.6rem;
+  margin-bottom: 8px;
+}
+
+.auth-form-card .sub {
+  color: var(--slate);
+  font-size: 0.92rem;
+  margin-bottom: 30px;
+  display: block;
+}
+
+.auth-switch {
+  margin-top: 22px;
+  font-size: 0.9rem;
+  color: var(--slate);
+  text-align: center;
+}
+.auth-switch a { color: var(--kq-green); font-weight: 600; }
+
+@media (max-width: 880px) {
+  .auth-shell { grid-template-columns: 1fr; }
+  .auth-panel { display: none; }
+  .auth-form-side { padding: 32px 24px; }
+}
+
+/* --------------------------------------------------------------------------
+   App shell — dashboard layout
+   -------------------------------------------------------------------------- */
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: 100vh;
+}
+
+.app-sidebar {
+  background: var(--ink);
+  color: #fff;
+  padding: 28px 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-brand {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.05rem;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 40px;
+}
+.app-brand .mark {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: var(--kq-red);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.75rem;
+}
+
+.nav-group { margin-bottom: 28px; }
+.nav-group-label {
+  font-size: 0.7rem;
+  text-transform: none;
+  color: rgba(255,255,255,0.45);
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  font-size: 0.92rem;
+  color: rgba(255,255,255,0.78);
+  margin-bottom: 2px;
+}
+.nav-link:hover { background: rgba(255,255,255,0.06); color: #fff; }
+.nav-link.active {
+  background: rgba(255,255,255,0.1);
+  color: #fff;
+  border-left: 2px solid var(--kq-red);
+  padding-left: 10px;
+}
+
+.app-sidebar-foot {
+  margin-top: auto;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255,255,255,0.12);
+  font-size: 0.85rem;
+  color: rgba(255,255,255,0.65);
+}
+
+.app-main {
+  padding: 36px 44px;
+  max-width: 920px;
+}
+
+.app-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 28px;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.app-header h1 { font-size: 1.6rem; }
+.app-header .sub { color: var(--slate); font-size: 0.92rem; margin-top: 6px; display: block; }
+
+.app-toolbar {
+  display: flex;
+  gap: 10px;
+}
+
+.select-pill {
+  border: 1px solid var(--stone-line);
+  border-radius: var(--radius);
+  padding: 9px 14px;
+  font-size: 0.85rem;
+  background: var(--panel);
+  color: var(--ink-soft);
+}
+
+.search-pill {
+  border: 1px solid var(--stone-line);
+  border-radius: var(--radius);
+  padding: 9px 14px;
+  font-size: 0.85rem;
+  min-width: 200px;
+}
+
+/* --------------------------------------------------------------------------
+   Mentor recommendation cards
+   -------------------------------------------------------------------------- */
+
+.mentor-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.mentor-card {
+  display: grid;
+  grid-template-columns: 52px 1fr auto;
+  gap: 18px;
+  align-items: start;
+  padding: 22px 4px;
+  border-bottom: 1px solid var(--stone-line);
+}
+.mentor-card:first-child { padding-top: 4px; }
+
+.mentor-avatar {
+  width: 52px; height: 52px;
+  border-radius: 50%;
+  background: var(--wash);
+  color: var(--kq-green);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.mentor-name-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+
+.mentor-name { font-family: var(--font-display); font-size: 1.05rem; font-weight: 600; }
+
+.match-score {
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--kq-green);
+  border: 1px solid var(--kq-green);
+  border-radius: 12px;
+  padding: 2px 10px;
+}
+
+.mentor-tags {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.tag {
+  font-size: 0.76rem;
+  color: var(--ink-soft);
+  background: var(--wash);
+  padding: 3px 9px;
+  border-radius: 12px;
+}
+
+.mentor-blurb {
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  max-width: 52ch;
+}
+
+.mentor-meta {
+  font-size: 0.78rem;
+  color: var(--slate);
+  margin-top: 6px;
+}
+
+.mentor-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.icon-btn {
+  width: 34px; height: 34px;
+  border: 1px solid var(--stone-line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.icon-btn:hover { border-color: var(--ink); }
+.icon-btn.saved { border-color: var(--kq-red); color: var(--kq-red); }
+
+@media (max-width: 720px) {
+  .app-shell { grid-template-columns: 1fr; }
+  .app-sidebar { display: none; }
+  .app-main { padding: 24px; }
+  .mentor-card { grid-template-columns: 44px 1fr; }
+  .mentor-actions { grid-column: 1 / -1; flex-direction: row; justify-content: flex-start; margin-top: 8px; }
+}
