@@ -11,11 +11,30 @@ async function register(req, res, next) {
     skills, experience, careerInterests, industry
   } = req.body;
 
-  if (!name || !email || !password || !role || !idNumber || !country || !city) {
-    return res.status(400).json({ error: 'name, email, password, role, idNumber, country and city are required' });
+  if (!password || !role || !idNumber || !country || !city) {
+    return res.status(400).json({ error: 'password, role, idNumber, country and city are required' });
   }
   if (!['mentee', 'mentor'].includes(role)) {
     return res.status(400).json({ error: "role must be 'mentee' or 'mentor'" });
+  }
+
+  let finalName = name;
+  let finalEmail = email;
+
+  if (role === 'mentee') {
+    if (!staffNumber) return res.status(400).json({ error: 'staffNumber is required for current employees' });
+    const [[staff]] = await pool.execute(
+      `SELECT * FROM staff_directory WHERE staff_number = :staffNumber AND employment_status = 'active'`,
+      { staffNumber }
+    );
+    if (!staff) return res.status(404).json({ error: 'Staff number not found or not active' });
+    if (staff.id_number !== idNumber) {
+      return res.status(400).json({ error: 'ID number does not match staff records' });
+    }
+    finalName = staff.full_name;
+    finalEmail = staff.kq_email;
+  } else if (!name || !email) {
+    return res.status(400).json({ error: 'name and email are required for mentors' });
   }
 
   const connection = await pool.getConnection();
@@ -28,7 +47,7 @@ async function register(req, res, next) {
       `INSERT INTO users
          (name, email, password_hash, id_number, staff_number, mobile_number, country, city)
        VALUES (:name, :email, :passwordHash, :idNumber, :staffNumber, :mobileNumber, :country, :city)`,
-      { name, email, passwordHash, idNumber, staffNumber: staffNumber || null, mobileNumber: mobileNumber || null, country, city }
+      { name: finalName, email: finalEmail, passwordHash, idNumber, staffNumber: staffNumber || null, mobileNumber: mobileNumber || null, country, city }
     );
     const userId = userResult.insertId;
 
@@ -92,5 +111,20 @@ async function resolveRole(userId) {
 function signToken(payload) {
   return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
 }
+async function staffLookup(req, res, next) {
+  const { staffNumber } = req.query;
+  if (!staffNumber) return res.status(400).json({ error: 'staffNumber is required' });
+  try {
+    const [[staff]] = await pool.execute(
+      `SELECT full_name, kq_email, department FROM staff_directory
+       WHERE staff_number = :staffNumber AND employment_status = 'active'`,
+      { staffNumber }
+    );
+    if (!staff) return res.status(404).json({ error: 'Staff number not found or not active' });
+    res.json(staff);
+  } catch (err) {
+    next(err);
+  }
+}
 
-module.exports = { register, login };
+module.exports = { register, login, staffLookup };

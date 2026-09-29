@@ -1,7 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const { requireAuth } = require('../middleware/auth.middleware');
+const profileController = require('../controllers/profile.controller');
 
-router.get('/', requireAuth, (req, res) => res.status(501).json({ error: 'Not implemented yet' }));
+router.get('/me', requireAuth, profileController.getMyProfile);
+router.put('/me', requireAuth, profileController.updateMyProfile);
 
 module.exports = router;

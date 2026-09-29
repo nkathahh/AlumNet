@@ -517,3 +517,39 @@ textarea:focus-visible {
   .mentor-card { grid-template-columns: 44px 1fr; }
   .mentor-actions { grid-column: 1 / -1; flex-direction: row; justify-content: flex-start; margin-top: 8px; }
 }
+
+/* --- Tabs (Mentorship Requests) --- */
+.tabs { display: flex; gap: 4px; margin-bottom: 24px; border-bottom: 1px solid var(--stone-line); }
+.tab { padding: 10px 16px; font-size: 0.88rem; color: var(--slate); cursor: pointer; border-bottom: 2px solid transparent; background: none; border-left: none; border-right: none; border-top: none; }
+.tab.active { color: var(--ink); border-bottom-color: var(--kq-red); font-weight: 600; }
+
+.request-card { display: flex; justify-content: space-between; align-items: flex-start; padding: 20px 4px; border-bottom: 1px solid var(--stone-line); gap: 16px; }
+.request-status { font-size: 0.72rem; font-weight: 600; padding: 3px 10px; border-radius: 12px; white-space: nowrap; }
+.request-status.pending { background: var(--wash); color: var(--ink-soft); }
+.request-status.accepted { background: var(--kq-green); color: #fff; }
+.request-status.declined { background: var(--stone); color: var(--ink-soft); }
+
+/* --- Admin stats + table --- */
+.stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
+.stat-card { border: 1px solid var(--stone-line); border-radius: var(--radius); padding: 18px; }
+.stat-card .num { font-family: var(--font-display); font-size: 1.5rem; font-weight: 700; }
+.stat-card .label { font-size: 0.78rem; color: var(--slate); margin-top: 4px; }
+
+.data-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.data-table th { text-align: left; font-size: 0.75rem; color: var(--slate); padding: 10px 8px; border-bottom: 1px solid var(--stone-line); }
+.data-table td { padding: 12px 8px; border-bottom: 1px solid var(--stone-line); vertical-align: middle; }
+
+/* --- Events --- */
+.event-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 18px; }
+.event-card { border: 1px solid var(--stone-line); border-radius: var(--radius); padding: 18px; }
+.event-card .date { font-size: 0.78rem; color: var(--kq-green); font-weight: 600; margin-bottom: 8px; }
+.event-card h3 { font-size: 1rem; margin-bottom: 8px; }
+.event-card p { font-size: 0.86rem; color: var(--ink-soft); margin-bottom: 16px; }
+
+/* --- Career opportunities --- */
+.opportunity-card { padding: 20px 4px; border-bottom: 1px solid var(--stone-line); display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+
+/* --- Notifications --- */
+.notif-item { display: flex; gap: 12px; padding: 16px 4px; border-bottom: 1px solid var(--stone-line); }
+.notif-item.unread { background: var(--wash); }
+.notif-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--kq-red); margin-top: 6px; flex-shrink: 0; }

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Create your account — AlumNet</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+
+  <div class="auth-shell">
+    <aside class="auth-panel">
+      <div class="auth-brand">
+        <span class="mark">KQ</span> AlumNet
+      </div>
+      <div class="auth-copy">
+        <h1>Your Kenya Airways network, still on the flight plan.</h1>
+        <p>Find a mentor who's flown the route you're on, share openings within the group and stay looped into what
+          former colleagues are building.</p>
+      </div>
+      <div class="auth-stat-row">
+        <div class="auth-stat">
+          <div class="num">8,400+</div>
+          <div class="label">Alumni profiles</div>
+        </div>
+        <div class="auth-stat">
+          <div class="num">300+</div>
+          <div class="label">Active mentorships</div>
+        </div>
+        <div class="auth-stat">
+          <div class="num">40+</div>
+          <div class="label">Countries reached</div>
+        </div>
+      </div>
+    </aside>
+
+    <div class="auth-form-side">
+      <div class="auth-form-card">
+        <span class="step">Step 1 of 1</span>
+        <h2>Create your alumni account</h2>
+        <span class="sub">A few details help AlumNet match you with the right mentors.</span>
+
+        <form id="signup-form" novalidate>
+          <div class="field">
+            <label for="role">I am a</label>
+            <select id="role" name="role" required>
+              <option value="">Select one</option>
+              <option value="mentee">Current Kenya Airways employee</option>
+              <option value="mentor">Former crew / staff (alumnus)</option>
+            </select>
+          </div>
+
+          <div id="mentee-fields" style="display:none;">
+            <div class="field">
+              <label for="staffNumber">Staff number</label>
+              <input type="text" id="staffNumber" name="staffNumber" placeholder="KQ10234">
+              <p class="field-hint" id="staff-lookup-status"></p>
+            </div>
+            <div class="field">
+              <label for="fullNameMentee">Full name</label>
+              <input type="text" id="fullNameMentee" readonly placeholder="Auto-filled after verification">
+            </div>
+            <div class="field">
+              <label for="emailMentee">Kenya Airways email</label>
+              <input type="email" id="emailMentee" readonly placeholder="Auto-filled after verification">
+            </div>
+          </div>
+
+          <div id="mentor-fields" style="display:none;">
+            <div class="field">
+              <label for="fullNameMentor">Full name</label>
+              <input type="text" id="fullNameMentor" placeholder="Alexandra Moreno">
+            </div>
+            <div class="field">
+              <label for="emailMentor">Personal email</label>
+              <input type="email" id="emailMentor" placeholder="you@gmail.com">
+            </div>
+            <div class="field">
+              <label for="staffNumberMentor">Staff number (optional)</label>
+              <input type="text" id="staffNumberMentor" placeholder="If you remember it">
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" minlength="8" required>
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label for="idNumber">ID number / passport no.</label>
+              <input type="text" id="idNumber" name="idNumber" placeholder="23456789" required>
+            </div>
+            <div class="field">
+              <label for="mobileNumber">Mobile number (optional)</label>
+              <input type="text" id="mobileNumber" name="mobileNumber" placeholder="+254712345678">
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label for="country">Country</label>
+              <input type="text" id="country" name="country" placeholder="Kenya" required>
+            </div>
+            <div class="field">
+              <label for="city">City</label>
+              <input type="text" id="city" name="city" placeholder="Nairobi" required>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="skills">Skills</label>
+            <textarea id="skills" name="skills"></textarea>
+          </div>
+          <div class="field">
+            <label for="experience">Experience</label>
+            <textarea id="experience" name="experience"></textarea>
+          </div>
+          <div class="field">
+            <label for="interests">Career interests</label>
+            <textarea id="interests" name="interests"></textarea>
+          </div>
+          <div class="field">
+            <label for="industry">Industry</label>
+            <select id="industry" name="industry">
+              <option>Aviation</option>
+              <option>Ground Operations</option>
+              <option>Logistics</option>
+              <option>Corporate / Support</option>
+              <option>Other</option>
+            </select>
+          </div>
+
+          <p id="signup-error" style="color:#C8102E; font-size:0.85rem; display:none; margin-bottom:16px;"></p>
+
+          <button type="submit" class="btn btn-primary btn-block">Sign up</button>
+        </form>
+
+        <p class="auth-switch">Already have an account? <a href="login.html">Log in</a></p>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/main.js"></script>
+</body>
+
+</html>
