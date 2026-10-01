@@ -40,10 +40,10 @@
           <input type="email" id="email" name="email" placeholder="you@kenya-airways.com" required>
         </div>
 
-        <div class="field">
-          <label for="password">Password</label>
-          <input type="password" id="password" name="password" required>
-        </div>
+        <div style="position:relative;" class="field">
+  <input type="password" id="password" name="password" required>
+  <button type="button" id="toggle-password-login" class="btn-quiet" style="position:absolute; right:6px; top:6px; padding:4px 8px;">Show</button>
+</div>
 
         <button type="submit" class="btn btn-primary btn-block">Log in</button>
         <p id="login-error" style="color:#C8102E; font-size:0.85rem; display:none; margin-bottom:16px;"></p>

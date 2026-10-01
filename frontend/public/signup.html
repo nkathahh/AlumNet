@@ -52,51 +52,54 @@
             </select>
           </div>
 
-          <div id="mentee-fields" style="display:none;">
+          <div id="staff-fields" style="display:none;">
             <div class="field">
               <label for="staffNumber">Staff number</label>
               <input type="text" id="staffNumber" name="staffNumber" placeholder="KQ10234">
               <p class="field-hint" id="staff-lookup-status"></p>
             </div>
-            <div class="field">
-              <label for="fullNameMentee">Full name</label>
-              <input type="text" id="fullNameMentee" readonly placeholder="Auto-filled after verification">
+            <div class="field-row">
+              <div class="field">
+                <label for="fullName">Full name</label>
+                <input type="text" id="fullName" readonly placeholder="Auto-filled after verification">
+              </div>
+              <div class="field">
+                <label for="department">Department</label>
+                <input type="text" id="department" readonly placeholder="Auto-filled after verification">
+              </div>
             </div>
             <div class="field">
-              <label for="emailMentee">Kenya Airways email</label>
-              <input type="email" id="emailMentee" readonly placeholder="Auto-filled after verification">
+              <label for="idNumberDisplay">ID number / passport no.</label>
+              <input type="text" id="idNumberDisplay" readonly placeholder="Auto-filled after verification">
             </div>
           </div>
 
-          <div id="mentor-fields" style="display:none;">
-            <div class="field">
-              <label for="fullNameMentor">Full name</label>
-              <input type="text" id="fullNameMentor" placeholder="Alexandra Moreno">
-            </div>
-            <div class="field">
-              <label for="emailMentor">Personal email</label>
-              <input type="email" id="emailMentor" placeholder="you@gmail.com">
-            </div>
-            <div class="field">
-              <label for="staffNumberMentor">Staff number (optional)</label>
-              <input type="text" id="staffNumberMentor" placeholder="If you remember it">
-            </div>
+          <div id="mentee-email-field" style="display:none;" class="field">
+            <label for="emailMentee">Kenya Airways email</label>
+            <input type="email" id="emailMentee" readonly placeholder="Auto-filled after verification">
+          </div>
+          <div id="mentor-email-field" style="display:none;" class="field">
+            <label for="emailMentor">Personal email</label>
+            <input type="email" id="emailMentor" placeholder="you@gmail.com">
           </div>
 
           <div class="field">
             <label for="password">Password</label>
-            <input type="password" id="password" name="password" minlength="8" required>
+            <div style="position:relative;">
+              <input type="password" id="password" name="password" minlength="8" required>
+              <button type="button" id="toggle-password" class="btn-quiet"
+                style="position:absolute; right:6px; top:6px; padding:4px 8px;">Show</button>
+            </div>
+          </div>
+          <div class="field">
+            <label for="confirmPassword">Confirm password</label>
+            <input type="password" id="confirmPassword" minlength="8" required>
+            <p class="field-hint" id="password-match-status"></p>
           </div>
 
-          <div class="field-row">
-            <div class="field">
-              <label for="idNumber">ID number / passport no.</label>
-              <input type="text" id="idNumber" name="idNumber" placeholder="23456789" required>
-            </div>
-            <div class="field">
-              <label for="mobileNumber">Mobile number (optional)</label>
-              <input type="text" id="mobileNumber" name="mobileNumber" placeholder="+254712345678">
-            </div>
+          <div class="field">
+            <label for="mobileNumber">Mobile number</label>
+            <input type="text" id="mobileNumber" name="mobileNumber" placeholder="+254712345678">
           </div>
 
           <div class="field-row">
@@ -110,18 +113,11 @@
             </div>
           </div>
 
-          <div class="field">
-            <label for="skills">Skills</label>
-            <textarea id="skills" name="skills"></textarea>
-          </div>
-          <div class="field">
-            <label for="experience">Experience</label>
-            <textarea id="experience" name="experience"></textarea>
-          </div>
-          <div class="field">
-            <label for="interests">Career interests</label>
-            <textarea id="interests" name="interests"></textarea>
-          </div>
+          <div class="field"><label for="skills">Skills</label><textarea id="skills" name="skills"></textarea></div>
+          <div class="field"><label for="experience">Experience</label><textarea id="experience"
+              name="experience"></textarea></div>
+          <div class="field"><label for="interests">Career interests</label><textarea id="interests"
+              name="interests"></textarea></div>
           <div class="field">
             <label for="industry">Industry</label>
             <select id="industry" name="industry">
@@ -134,7 +130,6 @@
           </div>
 
           <p id="signup-error" style="color:#C8102E; font-size:0.85rem; display:none; margin-bottom:16px;"></p>
-
           <button type="submit" class="btn btn-primary btn-block">Sign up</button>
         </form>
 

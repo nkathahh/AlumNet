@@ -1,8 +1,3 @@
-/* AlumNet — shared front-end behaviour
-   Forms currently log to console / use mock data.
-   Replace the TODO blocks with fetch() calls to the Node/Express API
-   once the backend routes exist (see IR-02, IR-03 in the documentation). */
-
 document.addEventListener('DOMContentLoaded', () => {
   wireSignupForm();
   wireLoginForm();
@@ -14,6 +9,17 @@ document.addEventListener('DOMContentLoaded', () => {
   renderAdminTable();
   renderNotifications();
 });
+async function updateSidebar() {
+  const el = document.querySelector('.app-sidebar-foot');
+  const token = localStorage.getItem('alumnet_token');
+  if (!el || !token) return;
+  try {
+    const res = await fetch(`${API_BASE}/profile/me`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) return;
+    const data = await res.json();
+    el.innerHTML = `${data.name}<br>${data.department || ''}`;
+  } catch {}
+}
 
 const API_BASE = 'http://localhost:4000/api';
 
@@ -22,22 +28,45 @@ function wireSignupForm() {
   if (!form) return;
 
   const roleSelect = document.getElementById('role');
-  const menteeFields = document.getElementById('mentee-fields');
-  const mentorFields = document.getElementById('mentor-fields');
+  const staffFields = document.getElementById('staff-fields');
+  const menteeEmailField = document.getElementById('mentee-email-field');
+  const mentorEmailField = document.getElementById('mentor-email-field');
   const staffNumberInput = document.getElementById('staffNumber');
   const staffStatus = document.getElementById('staff-lookup-status');
   const errorEl = document.getElementById('signup-error');
+  const passwordInput = document.getElementById('password');
+  const confirmInput = document.getElementById('confirmPassword');
+  const matchStatus = document.getElementById('password-match-status');
+  const toggleBtn = document.getElementById('toggle-password');
   let verifiedStaff = null;
 
+  toggleBtn.addEventListener('click', () => {
+    const show = passwordInput.type === 'password';
+    passwordInput.type = show ? 'text' : 'password';
+    toggleBtn.textContent = show ? 'Hide' : 'Show';
+  });
+
+  function checkPasswordsMatch() {
+    if (!confirmInput.value) { matchStatus.textContent = ''; return; }
+    const match = passwordInput.value === confirmInput.value;
+    matchStatus.textContent = match ? 'Passwords match.' : 'Passwords do not match.';
+    matchStatus.style.color = match ? 'var(--kq-green)' : 'var(--kq-red)';
+  }
+  passwordInput.addEventListener('input', checkPasswordsMatch);
+  confirmInput.addEventListener('input', checkPasswordsMatch);
+
   roleSelect.addEventListener('change', () => {
-    const isMentee = roleSelect.value === 'mentee';
-    menteeFields.style.display = isMentee ? 'block' : 'none';
-    mentorFields.style.display = roleSelect.value === 'mentor' ? 'block' : 'none';
+    const role = roleSelect.value;
+    staffFields.style.display = role ? 'block' : 'none';
+    menteeEmailField.style.display = role === 'mentee' ? 'block' : 'none';
+    mentorEmailField.style.display = role === 'mentor' ? 'block' : 'none';
   });
 
   staffNumberInput.addEventListener('blur', async () => {
     verifiedStaff = null;
-    document.getElementById('fullNameMentee').value = '';
+    document.getElementById('fullName').value = '';
+    document.getElementById('department').value = '';
+    document.getElementById('idNumberDisplay').value = '';
     document.getElementById('emailMentee').value = '';
     if (!staffNumberInput.value) { staffStatus.textContent = ''; return; }
 
@@ -45,14 +74,15 @@ function wireSignupForm() {
     try {
       const res = await fetch(`${API_BASE}/auth/staff-lookup?staffNumber=${encodeURIComponent(staffNumberInput.value)}`);
       const data = await res.json();
-      if (!res.ok) {
-        staffStatus.textContent = data.error || 'Staff number not found';
-        return;
-      }
+      if (!res.ok) { staffStatus.textContent = data.error || 'Staff number not found'; return; }
+
       verifiedStaff = data;
-      document.getElementById('fullNameMentee').value = data.full_name;
-      document.getElementById('emailMentee').value = data.kq_email;
-      staffStatus.textContent = `Verified: ${data.full_name} (${data.department})`;
+      document.getElementById('fullName').value = data.full_name;
+      document.getElementById('department').value = data.department;
+      document.getElementById('idNumberDisplay').value = data.id_number;
+      if (data.mobile_number) document.getElementById('mobileNumber').value = data.mobile_number;
+      if (roleSelect.value === 'mentee') document.getElementById('emailMentee').value = data.kq_email || '';
+      staffStatus.textContent = `Verified: ${data.full_name} (${data.department}, ${data.employment_status})`;
     } catch {
       staffStatus.textContent = 'Could not reach the server.';
     }
@@ -61,48 +91,39 @@ function wireSignupForm() {
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     errorEl.style.display = 'none';
-
     const role = roleSelect.value;
-    if (role === 'mentee' && !verifiedStaff) {
+
+    if (!verifiedStaff) {
       errorEl.textContent = 'Enter your staff number and wait for it to verify.';
-      errorEl.style.display = 'block';
-      return;
+      errorEl.style.display = 'block'; return;
+    }
+    if (role === 'mentee' && verifiedStaff.employment_status !== 'active') {
+      errorEl.textContent = 'Only current employees can register as mentees.';
+      errorEl.style.display = 'block'; return;
+    }
+    if (passwordInput.value !== confirmInput.value) {
+      errorEl.textContent = 'Passwords do not match.';
+      errorEl.style.display = 'block'; return;
     }
 
-    const common = {
-      password: document.getElementById('password').value,
-      idNumber: document.getElementById('idNumber').value,
+    const payload = {
+      role, staffNumber: staffNumberInput.value, password: passwordInput.value,
       mobileNumber: document.getElementById('mobileNumber').value || undefined,
       country: document.getElementById('country').value,
       city: document.getElementById('city').value,
       skills: document.getElementById('skills').value,
       experience: document.getElementById('experience').value,
       careerInterests: document.getElementById('interests').value,
-      industry: document.getElementById('industry').value
+      industry: document.getElementById('industry').value,
+      email: role === 'mentor' ? document.getElementById('emailMentor').value : undefined
     };
-
-    const payload = role === 'mentee'
-      ? { ...common, role, staffNumber: staffNumberInput.value }
-      : {
-          ...common,
-          role,
-          name: document.getElementById('fullNameMentor').value,
-          email: document.getElementById('emailMentor').value,
-          staffNumber: document.getElementById('staffNumberMentor').value || undefined
-        };
 
     try {
       const res = await fetch(`${API_BASE}/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
       });
       const result = await res.json();
-      if (!res.ok) {
-        errorEl.textContent = result.error || 'Registration failed';
-        errorEl.style.display = 'block';
-        return;
-      }
+      if (!res.ok) { errorEl.textContent = result.error || 'Registration failed'; errorEl.style.display = 'block'; return; }
       localStorage.setItem('alumnet_token', result.token);
       localStorage.setItem('alumnet_role', result.role);
       window.location.href = 'recommendations.html';
@@ -116,6 +137,15 @@ function wireSignupForm() {
 function wireLoginForm() {
   const form = document.getElementById('login-form');
   if (!form) return;
+  const toggleBtn = document.getElementById('toggle-password-login');
+if (toggleBtn) {
+  toggleBtn.addEventListener('click', () => {
+    const pwd = document.getElementById('password');
+    const show = pwd.type === 'password';
+    pwd.type = show ? 'text' : 'password';
+    toggleBtn.textContent = show ? 'Hide' : 'Show';
+  });
+}
   const errorEl = document.getElementById('login-error');
 
   form.addEventListener('submit', async (e) => {

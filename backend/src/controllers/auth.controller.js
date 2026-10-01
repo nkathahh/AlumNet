@@ -6,48 +6,46 @@ const SALT_ROUNDS = 10;
 
 async function register(req, res, next) {
   const {
-    name, email, password, role,
-    idNumber, staffNumber, mobileNumber, country, city,
+    email, password, role, staffNumber, mobileNumber, country, city,
     skills, experience, careerInterests, industry
   } = req.body;
 
-  if (!password || !role || !idNumber || !country || !city) {
-    return res.status(400).json({ error: 'password, role, idNumber, country and city are required' });
+  if (!password || !role || !staffNumber || !country || !city) {
+    return res.status(400).json({ error: 'password, role, staffNumber, country and city are required' });
   }
   if (!['mentee', 'mentor'].includes(role)) {
     return res.status(400).json({ error: "role must be 'mentee' or 'mentor'" });
   }
 
-  let finalName = name;
-  let finalEmail = email;
+  const [[staff]] = await pool.execute(
+    'SELECT * FROM staff_directory WHERE staff_number = :staffNumber',
+    { staffNumber }
+  );
+  if (!staff) return res.status(404).json({ error: 'Staff number not found' });
 
-  if (role === 'mentee') {
-    if (!staffNumber) return res.status(400).json({ error: 'staffNumber is required for current employees' });
-    const [[staff]] = await pool.execute(
-      `SELECT * FROM staff_directory WHERE staff_number = :staffNumber AND employment_status = 'active'`,
-      { staffNumber }
-    );
-    if (!staff) return res.status(404).json({ error: 'Staff number not found or not active' });
-    if (staff.id_number !== idNumber) {
-      return res.status(400).json({ error: 'ID number does not match staff records' });
-    }
-    finalName = staff.full_name;
-    finalEmail = staff.kq_email;
-  } else if (!name || !email) {
-    return res.status(400).json({ error: 'name and email are required for mentors' });
+  if (role === 'mentee' && staff.employment_status !== 'active') {
+    return res.status(400).json({ error: 'Only current employees can register as mentees' });
+  }
+
+  const finalEmail = role === 'mentee' ? staff.kq_email : email;
+  if (!finalEmail) {
+    return res.status(400).json({ error: role === 'mentee' ? 'No Kenya Airways email on record for this staff number' : 'Personal email is required' });
   }
 
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
-
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
     const [userResult] = await connection.execute(
       `INSERT INTO users
-         (name, email, password_hash, id_number, staff_number, mobile_number, country, city)
-       VALUES (:name, :email, :passwordHash, :idNumber, :staffNumber, :mobileNumber, :country, :city)`,
-      { name: finalName, email: finalEmail, passwordHash, idNumber, staffNumber: staffNumber || null, mobileNumber: mobileNumber || null, country, city }
+         (name, email, password_hash, id_number, staff_number, mobile_number, country, city, department)
+       VALUES (:name, :email, :passwordHash, :idNumber, :staffNumber, :mobileNumber, :country, :city, :department)`,
+      {
+        name: staff.full_name, email: finalEmail, passwordHash,
+        idNumber: staff.id_number, staffNumber, mobileNumber: mobileNumber || staff.mobile_number || null,
+        country, city, department: staff.department
+      }
     );
     const userId = userResult.insertId;
 
@@ -64,13 +62,12 @@ async function register(req, res, next) {
     );
 
     await connection.commit();
-
     const token = signToken({ userId, role });
     res.status(201).json({ token, userId, role });
   } catch (err) {
     await connection.rollback();
     if (err.code === 'ER_DUP_ENTRY') {
-      return res.status(409).json({ error: 'An account with that email or ID number already exists' });
+      return res.status(409).json({ error: 'An account for this staff number or email already exists' });
     }
     next(err);
   } finally {
@@ -116,11 +113,11 @@ async function staffLookup(req, res, next) {
   if (!staffNumber) return res.status(400).json({ error: 'staffNumber is required' });
   try {
     const [[staff]] = await pool.execute(
-      `SELECT full_name, kq_email, department FROM staff_directory
-       WHERE staff_number = :staffNumber AND employment_status = 'active'`,
+      `SELECT full_name, id_number, mobile_number, department, kq_email, employment_status
+       FROM staff_directory WHERE staff_number = :staffNumber`,
       { staffNumber }
     );
-    if (!staff) return res.status(404).json({ error: 'Staff number not found or not active' });
+    if (!staff) return res.status(404).json({ error: 'Staff number not found' });
     res.json(staff);
   } catch (err) {
     next(err);
