@@ -1,0 +1,1 @@
+ALTER TABLE users ADD COLUMN department VARCHAR(100) NULL AFTER staff_number;

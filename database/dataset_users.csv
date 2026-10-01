@@ -1,0 +1,5 @@
+user_id	name	email	password_hash	id_number	staff_number	department	mobile_number	country	city	status	created_at
+1	Test User	test@example.com	$2b$10$Q5Cst3yQCxZKuRVjHZi3VOBIAkSEDyF2yul9Smipm7q/LjteYTCh6	12345678	NULL	NULL	NULL	Kenya	Nairobi	active	2026-09-28 00:01:59
+2	Nelly Nkatha	nellymuriuki@kenya-airways.com	$2b$10$a05vsydVUX9suy9PkjPmHuuDM5wTX9sftpgR2JHOjPObVhnUuiK8u	41997449	NULL	NULL	+254719155507	Kenya	Nairobi	active	2026-09-29 16:19:13
+3	Admin User	admin@alumnet.local	$2b$10$F5ndWLdk4H7GzsGzE9R1.OU10G1uIbNViMv4ga.EMnqwZAfoQbQbC	ADMIN-1790708164565	NULL	NULL	NULL	Kenya	Nairobi	active	2026-09-29 21:56:05
+4	Mark Thuo	markthuo@gmail.com	$2b$10$SBAfSGjQcgdLWBrnoKvo8.6b6ut6HqO268cXgbjOFPQfxBCaefWcO	34567895	KQ09321	Flight Operations	+254711000005	Kenya	Nairobi	active	2026-09-29 22:02:09
