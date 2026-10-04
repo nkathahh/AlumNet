@@ -1,12 +1,4 @@
-CREATE TABLE staff_directory (
-  staff_number VARCHAR(20) PRIMARY KEY,
-  id_number VARCHAR(20) NOT NULL UNIQUE,
-  full_name VARCHAR(150) NOT NULL,
-  department VARCHAR(100) NOT NULL,
-  mobile_number VARCHAR(20) NULL,
-  kq_email VARCHAR(190) NULL,
-  employment_status ENUM('active','former') NOT NULL DEFAULT 'active'
-);
+
 
 TRUNCATE TABLE staff_directory;
 

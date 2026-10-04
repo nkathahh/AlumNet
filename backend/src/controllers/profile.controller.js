@@ -4,11 +4,11 @@ async function getMyProfile(req, res, next) {
     try {
         const { userId } = req.user;
         const [[profile]] = await pool.execute(
-            `SELECT p.skills, p.experience, p.career_interests, p.industry, u.name, u.email, u.department
-   FROM profiles p JOIN users u ON u.user_id = p.user_id
-   WHERE p.user_id = :userId`,
-            { userId }
-        );
+  `SELECT p.skills, p.experience, p.career_interests, p.industry, u.name, u.email, u.department
+   FROM users u LEFT JOIN profiles p ON p.user_id = u.user_id
+   WHERE u.user_id = :userId`,
+  { userId }
+);
         if (!profile) return res.status(404).json({ error: 'Profile not found' });
         res.json(profile);
     } catch (err) {

@@ -1,14 +1,66 @@
 document.addEventListener('DOMContentLoaded', () => {
+  initTheme();
+  guardRoute();
+  renderSidebar();
+  wireThemeToggle();
+  wireLogout();
   wireSignupForm();
   wireLoginForm();
   renderMentorList();
   renderRequests();
+  setRequestsSubtitle();
   wireProfileForm();
   renderEvents();
   renderOpportunities();
+  wireRoleVisibility();
   renderAdminTable();
   renderNotifications();
+  updateSidebar();
 });
+
+
+function initTheme() {
+  const saved = localStorage.getItem('alumnet_theme') || 'light';
+  document.documentElement.setAttribute('data-theme', saved);
+  const checkbox = document.getElementById('theme-toggle-checkbox');
+  if (checkbox) checkbox.checked = saved === 'dark';
+}
+
+function wireThemeToggle() {
+  const checkbox = document.getElementById('theme-toggle-checkbox');
+  if (!checkbox) return;
+  checkbox.addEventListener('change', () => {
+    const next = checkbox.checked ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('alumnet_theme', next);
+  });
+}
+function wireLogout() {
+  const btn = document.getElementById('logout-btn');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    localStorage.removeItem('alumnet_token');
+    localStorage.removeItem('alumnet_role');
+    window.location.href = 'login.html';
+  });
+}
+
+function setRequestsSubtitle() {
+  const el = document.getElementById('requests-subtitle');
+  if (!el) return;
+  const role = localStorage.getItem('alumnet_role');
+  el.textContent = role === 'mentor'
+    ? 'Requests from mentees awaiting your decision.'
+    : 'Mentorship requests you have sent to mentors.';
+}
+
+function wireRoleVisibility() {
+  const role = localStorage.getItem('alumnet_role');
+  const postBtn = document.getElementById('post-opportunity-btn');
+  if (postBtn) postBtn.style.display = role === 'mentor' ? 'inline-flex' : 'none';
+}
+
+
 async function updateSidebar() {
   const el = document.querySelector('.app-sidebar-foot');
   const token = localStorage.getItem('alumnet_token');
@@ -22,6 +74,70 @@ async function updateSidebar() {
 }
 
 const API_BASE = 'http://localhost:4000/api';
+
+const HOME_PAGE = { mentee: 'recommendations.html', mentor: 'requests.html', admin: 'admin.html' };
+
+const PAGE_ROLES = {
+  'recommendations.html': ['mentee'],
+  'requests.html': ['mentee', 'mentor'],
+  'profile.html': ['mentee', 'mentor'],
+  'events.html': ['mentee', 'mentor'],
+  'opportunities.html': ['mentee', 'mentor'],
+  'notifications.html': ['mentee', 'mentor'],
+  'admin.html': ['admin']
+};
+
+const NAV_CONFIG = {
+  mentee: [
+    { group: 'Network', links: [
+      { href: 'recommendations.html', label: 'Find a mentor' },
+      { href: 'requests.html', label: 'My requests' },
+      { href: 'profile.html', label: 'My profile' }
+    ]},
+    { group: 'Community', links: [
+      { href: 'events.html', label: 'Alumni events' },
+      { href: 'opportunities.html', label: 'Career opportunities' },
+      { href: 'notifications.html', label: 'Notifications' }
+    ]}
+  ],
+  mentor: [
+    { group: 'Mentorship', links: [
+      { href: 'requests.html', label: 'Mentee requests' },
+      { href: 'profile.html', label: 'My profile' }
+    ]},
+    { group: 'Community', links: [
+      { href: 'events.html', label: 'Alumni events' },
+      { href: 'opportunities.html', label: 'Career opportunities' },
+      { href: 'notifications.html', label: 'Notifications' }
+    ]}
+  ],
+  admin: [
+    { group: 'Admin', links: [{ href: 'admin.html', label: 'Dashboard' }] }
+  ]
+};
+
+function guardRoute() {
+  const page = location.pathname.split('/').pop();
+  const allowed = PAGE_ROLES[page];
+  if (!allowed) return;
+  const token = localStorage.getItem('alumnet_token');
+  const role = localStorage.getItem('alumnet_role');
+  if (!token) { window.location.href = 'login.html'; return; }
+  if (!allowed.includes(role)) window.location.href = HOME_PAGE[role] || 'login.html';
+}
+
+function renderSidebar() {
+  const nav = document.getElementById('sidebar-nav');
+  if (!nav) return;
+  const role = localStorage.getItem('alumnet_role');
+  const groups = NAV_CONFIG[role] || [];
+  const currentPage = location.pathname.split('/').pop();
+  nav.innerHTML = groups.map((g) => `
+    <div class="nav-group">
+      <div class="nav-group-label">${g.group}</div>
+      ${g.links.map((l) => `<a class="nav-link ${l.href === currentPage ? 'active' : ''}" href="${l.href}">${l.label}</a>`).join('')}
+    </div>`).join('');
+}
 
 function wireSignupForm() {
   const form = document.getElementById('signup-form');
@@ -115,7 +231,8 @@ function wireSignupForm() {
       experience: document.getElementById('experience').value,
       careerInterests: document.getElementById('interests').value,
       industry: document.getElementById('industry').value,
-      email: role === 'mentor' ? document.getElementById('emailMentor').value : undefined
+      email: role === 'mentor' ? document.getElementById('emailMentor').value : undefined,
+      yearsOfExperience: role === 'mentor' ? document.getElementById('mentorYears').value || null : undefined
     };
 
     try {
@@ -126,7 +243,7 @@ function wireSignupForm() {
       if (!res.ok) { errorEl.textContent = result.error || 'Registration failed'; errorEl.style.display = 'block'; return; }
       localStorage.setItem('alumnet_token', result.token);
       localStorage.setItem('alumnet_role', result.role);
-      window.location.href = 'recommendations.html';
+      window.location.href = HOME_PAGE[result.role] || 'login.html';
     } catch {
       errorEl.textContent = 'Could not reach the server. Is the backend running on port 4000?';
       errorEl.style.display = 'block';
@@ -168,7 +285,7 @@ if (toggleBtn) {
 
       localStorage.setItem('alumnet_token', result.token);
       localStorage.setItem('alumnet_role', result.role);
-      window.location.href = 'recommendations.html';
+      window.location.href = HOME_PAGE[result.role] || 'login.html';
     } catch (err) {
       errorEl.textContent = 'Could not reach the server. Is the backend running on port 4000?';
       errorEl.style.display = 'block';
@@ -178,84 +295,70 @@ if (toggleBtn) {
 
 
 /* --------------------------------------------------------------------
-   Mentor recommendations (FR-04) — mock data standing in for a call to
-   GET /api/recommendations until the Python matching service is wired up.
+   Mentor recommendations (FR-04) — real call to the ML service via
+   GET /api/recommendations (cosine similarity over sentence embeddings)
    -------------------------------------------------------------------- */
 
-const MOCK_MENTORS = [
-  {
-    initials: 'MT',
-    name: 'Mark Thuo',
-    match: 95,
-    tags: ['Flight Ops', 'Crew Scheduling', 'Route Planning'],
-    blurb: 'Former Head of Flight Operations with 15 years experience across intercontinental routes.',
-    meta: '3 mutual connections',
-    saved: false
-  },
-  {
-    initials: 'RN',
-    name: 'Ruth Njoroge',
-    match: 89,
-    tags: ['Cabin Services', 'Customer Experience', 'Training'],
-    blurb: 'Ex-Cabin Services Manager focused on guest experience and crew coaching.',
-    meta: '5 mentees',
-    saved: true
-  },
-  {
-    initials: 'CS',
-    name: 'Caroline Sande',
-    match: 81,
-    tags: ['Ground Ops', 'Ramp Coordination', 'Logistics'],
-    blurb: 'Director at Ground Services with deep knowledge of airport operations and turnaround processes.',
-    meta: 'Available next month',
-    saved: false
-  }
-];
-
-function renderMentorList() {
+async function renderMentorList() {
   const list = document.getElementById('mentor-list');
   if (!list) return;
+  const token = localStorage.getItem('alumnet_token');
+  if (!token) { window.location.href = 'login.html'; return; }
 
-  // TODO: replace MOCK_MENTORS with the response of
-  // GET /api/recommendations?menteeId=... (backed by RecommendationEngine)
-  list.innerHTML = MOCK_MENTORS.map(mentorCardHTML).join('');
+  list.innerHTML = '<p style="color:var(--slate); padding:20px 4px;">Loading recommendations...</p>';
 
+  try {
+    const res = await fetch(`${API_BASE}/recommendations`, { headers: { Authorization: `Bearer ${token}` } });
+    const data = await res.json();
+    if (!res.ok) {
+      list.innerHTML = `<p style="color:var(--kq-red); padding:20px 4px;">${data.error || 'Could not load recommendations.'}</p>`;
+      return;
+    }
+    if (!data.length) {
+      list.innerHTML = '<p style="color:var(--slate); padding:20px 4px;">No mentor matches yet.</p>';
+      return;
+    }
+    list.innerHTML = data.map(apiMentorCardHTML).join('');
+    wireMentorCardActions(list);
+  } catch {
+    list.innerHTML = '<p style="color:var(--kq-red); padding:20px 4px;">Could not reach the server.</p>';
+  }
+}
+
+function apiMentorCardHTML(m) {
+  const initials = m.name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
+  return `
+    <article class="mentor-card">
+      <div class="mentor-avatar">${initials}</div>
+      <div>
+        <div class="mentor-name-row">
+          <span class="mentor-name">${m.name}</span>
+          <span class="match-score">${m.score}% match</span>
+        </div>
+        <div class="mentor-tags">${m.matched_attributes.map((t) => `<span class="tag">${t}</span>`).join('')}</div>
+        <div class="mentor-meta">${m.department || ''}${m.years_of_experience ? ' · ' + m.years_of_experience + ' yrs experience' : ''}</div>
+      </div>
+      <div class="mentor-actions">
+        <button class="btn btn-primary" data-action="request" data-mentor-id="${m.mentor_id}">Request</button>
+        <button class="icon-btn" data-action="bookmark" data-mentor-id="${m.mentor_id}" aria-label="Bookmark mentor">★</button>
+      </div>
+    </article>`;
+}
+
+function wireMentorCardActions(list) {
   list.querySelectorAll('[data-action="bookmark"]').forEach((btn) => {
     btn.addEventListener('click', () => {
       btn.classList.toggle('saved');
       // TODO: POST/DELETE /api/bookmarks/:mentorId
     });
   });
-
   list.querySelectorAll('[data-action="request"]').forEach((btn) => {
     btn.addEventListener('click', () => {
       btn.textContent = 'Requested';
       btn.disabled = true;
-      // TODO: POST /api/mentorship-requests (FR-05)
+      // TODO: POST /api/mentorship-requests with { mentorId: btn.dataset.mentorId }
     });
   });
-}
-
-function mentorCardHTML(m) {
-  return `
-    <article class="mentor-card">
-      <div class="mentor-avatar">${m.initials}</div>
-      <div>
-        <div class="mentor-name-row">
-          <span class="mentor-name">${m.name}</span>
-          <span class="match-score">${m.match}% match</span>
-        </div>
-        <div class="mentor-tags">
-          ${m.tags.map((t) => `<span class="tag">${t}</span>`).join('')}
-        </div>
-        <p class="mentor-blurb">${m.blurb}</p>
-        <div class="mentor-meta">${m.meta}</div>
-      </div>
-      <div class="mentor-actions">
-        <button class="btn btn-primary" data-action="request">Request</button>
-        <button class="icon-btn ${m.saved ? 'saved' : ''}" data-action="bookmark" aria-label="Bookmark mentor">★</button>
-      </div>
-    </article>`;
 }
 
 
@@ -303,6 +406,8 @@ function renderRequests() {
 }
 
 function requestCardHTML(r) {
+  const role = localStorage.getItem('alumnet_role');
+  const canDecide = role === 'mentor' && r.status === 'pending';
   return `
     <div class="request-card">
       <div>
@@ -310,7 +415,7 @@ function requestCardHTML(r) {
         <span style="font-size:0.82rem; color:var(--slate);">Requested on ${r.date}</span>
         <p class="mentor-blurb" style="margin-top:8px;">${r.note}</p>
       </div>
-      ${r.status === 'pending'
+      ${canDecide
         ? `<div style="display:flex; gap:8px;">
              <button class="btn btn-primary" data-action="accepted">Accept</button>
              <button class="btn btn-secondary" data-action="declined">Decline</button>

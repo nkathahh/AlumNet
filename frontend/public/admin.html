@@ -1,40 +1,49 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Admin dashboard — AlumNet</title>
-<link rel="stylesheet" href="css/style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Admin dashboard — AlumNet</title>
+    <link rel="stylesheet" href="css/style.css">
 </head>
+
 <body>
-<div class="app-shell">
-  <aside class="app-sidebar">
-    <div class="app-brand"><span class="mark">KQ</span> AlumNet</div>
-    <nav class="nav-group">
-      <div class="nav-group-label">Admin</div>
-      <a class="nav-link active" href="admin.html">Dashboard</a>
-    </nav>
-    <div class="app-sidebar-foot">Super Admin</div>
-  </aside>
+    <div class="app-shell">
+        <div class="topbar-actions">
+            <label class="theme-switch" title="Toggle dark mode">
+                <input type="checkbox" id="theme-toggle-checkbox">
+                <span class="switch-track"><span class="switch-thumb"></span></span>
+            </label>
+            <button id="logout-btn" class="icon-btn" aria-label="Log out" title="Log out">⏻</button>
+        </div>
 
-  <main class="app-main" style="max-width: 100%;">
-    <div class="app-header">
-      <div>
-        <h1>Admin dashboard</h1>
-        <span class="sub">Platform activity and account management.</span>
-      </div>
+        <main class="app-main" style="max-width: 100%;">
+            <div class="app-header">
+                <div>
+                    <h1>Admin dashboard</h1>
+                    <span class="sub">Platform activity and account management.</span>
+                </div>
+            </div>
+
+            <div class="stat-row" id="stat-row"></div>
+
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Status</th>
+                        <th>Joined</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="admin-table-body"></tbody>
+            </table>
+        </main>
     </div>
-
-    <div class="stat-row" id="stat-row"></div>
-
-    <table class="data-table">
-      <thead>
-        <tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Joined</th><th></th></tr>
-      </thead>
-      <tbody id="admin-table-body"></tbody>
-    </table>
-  </main>
-</div>
-<script src="js/main.js"></script>
+    <script src="js/main.js"></script>
 </body>
+
 </html>

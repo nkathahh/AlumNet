@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { requireAuth } = require('../middleware/auth.middleware');
+const { getRecommendations } = require('../controllers/recommendations.controller');
 
-router.get('/', requireAuth, (req, res) => res.status(501).json({ error: 'Not implemented yet' }));
+router.get('/', requireAuth, getRecommendations);
 
 module.exports = router;
