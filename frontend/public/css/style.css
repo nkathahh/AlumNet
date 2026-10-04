@@ -1024,3 +1024,21 @@ textarea:focus-visible {
     margin-top: 8px;
   }
 }
+/*View a public profile*/
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+}
+.modal-card {
+  background: var(--panel);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+  max-width: 440px; width: 90%;
+  max-height: 80vh; overflow-y: auto;
+}
+.modal-card h3 { font-size: 1.3rem; margin-bottom: 4px; }
+.modal-card .modal-meta { color: var(--slate); font-size: 0.85rem; margin-bottom: 20px; }
+.modal-card .modal-section { margin-bottom: 16px; }
+.modal-card .modal-section .label { font-size: 0.75rem; color: var(--slate); margin-bottom: 4px; font-weight: 600; }
+.modal-card .modal-section .value { font-size: 0.92rem; color: var(--ink-soft); }

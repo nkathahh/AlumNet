@@ -392,9 +392,17 @@ async function renderMentorList() {
   list.innerHTML = '<p style="color:var(--slate); padding:20px 4px;">Loading recommendations...</p>';
 
   try {
-    const res = await fetch(`${API_BASE}/recommendations`, { headers: { Authorization: `Bearer ${token}` } });
-    const data = await res.json();
-    if (!res.ok) {
+    const [recRes, reqRes] = await Promise.all([
+      fetch(`${API_BASE}/recommendations`, { headers: { Authorization: `Bearer ${token}` } }),
+      fetch(`${API_BASE}/mentorship-requests`, { headers: { Authorization: `Bearer ${token}` } })
+    ]);
+    const data = await recRes.json();
+    const myRequests = reqRes.ok ? await reqRes.json() : [];
+    const pendingMentorIds = new Set(
+      myRequests.filter((r) => r.status === 'pending').map((r) => r.other_user_id)
+    );
+
+    if (!recRes.ok) {
       list.innerHTML = `<p style="color:var(--kq-red); padding:20px 4px;">${data.error || 'Could not load recommendations.'}</p>`;
       return;
     }
@@ -402,75 +410,124 @@ async function renderMentorList() {
       list.innerHTML = '<p style="color:var(--slate); padding:20px 4px;">No mentor matches yet.</p>';
       return;
     }
-    list.innerHTML = data.map(apiMentorCardHTML).join('');
+    list.innerHTML = data.map((m) => apiMentorCardHTML(m, pendingMentorIds.has(m.mentor_id))).join('');
     wireMentorCardActions(list);
   } catch {
     list.innerHTML = '<p style="color:var(--kq-red); padding:20px 4px;">Could not reach the server.</p>';
   }
 }
 
-function apiMentorCardHTML(m) {
+function apiMentorCardHTML(m, alreadyRequested) {
   const initials = m.name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
   return `
     <article class="mentor-card">
       <div class="mentor-avatar">${initials}</div>
       <div>
         <div class="mentor-name-row">
-          <span class="mentor-name">${m.name}</span>
+          <span class="mentor-name" style="cursor:pointer; text-decoration:underline;" data-action="view-profile" data-mentor-id="${m.mentor_id}">${m.name}</span>
           <span class="match-score">${m.score}% match</span>
         </div>
         <div class="mentor-tags">${m.matched_attributes.map((t) => `<span class="tag">${t}</span>`).join('')}</div>
         <div class="mentor-meta">${m.department || ''}${m.years_of_experience ? ' · ' + m.years_of_experience + ' yrs experience' : ''}</div>
       </div>
       <div class="mentor-actions">
-        <button class="btn btn-primary" data-action="request" data-mentor-id="${m.mentor_id}">Request</button>
+        <button class="btn ${alreadyRequested ? 'btn-secondary' : 'btn-primary'}" data-action="request" data-mentor-id="${m.mentor_id}" ${alreadyRequested ? 'disabled' : ''}>
+          ${alreadyRequested ? 'Requested' : 'Request'}
+        </button>
         <button class="icon-btn" data-action="bookmark" data-mentor-id="${m.mentor_id}" aria-label="Bookmark mentor">★</button>
       </div>
     </article>`;
 }
 
 function wireMentorCardActions(list) {
+  const token = localStorage.getItem('alumnet_token');
+
   list.querySelectorAll('[data-action="bookmark"]').forEach((btn) => {
     btn.addEventListener('click', () => {
       btn.classList.toggle('saved');
       // TODO: POST/DELETE /api/bookmarks/:mentorId
     });
   });
+
   list.querySelectorAll('[data-action="request"]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      btn.textContent = 'Requested';
+    btn.addEventListener('click', async () => {
       btn.disabled = true;
-      // TODO: POST /api/mentorship-requests with { mentorId: btn.dataset.mentorId }
+      try {
+        const res = await fetch(`${API_BASE}/mentorship-requests`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ mentorId: btn.dataset.mentorId })
+        });
+        const result = await res.json();
+        if (!res.ok) { alert(result.error || 'Could not send request'); btn.disabled = false; return; }
+        btn.textContent = 'Requested';
+      } catch {
+        alert('Could not reach the server.');
+        btn.disabled = false;
+      }
     });
+  });
+  list.querySelectorAll('[data-action="view-profile"]').forEach((el) => {
+    el.addEventListener('click', () => openMentorProfile(el.dataset.mentorId));
   });
 }
 
 /* --------------------------------------------------------------------
-   Mentorship requests (FR-05, FR-06) — still mock, next to wire up
+   Mentorship requests (FR-05, FR-06) — real
    -------------------------------------------------------------------- */
 
-const MOCK_REQUESTS = [
-  { name: 'Jordan Matthews', date: 'Jul 30, 2026', status: 'pending', note: 'Looking for guidance on transitioning to senior operations roles in aviation.' },
-  { name: 'Lina Shah', date: 'Jun 12, 2026', status: 'accepted', note: 'Ongoing mentorship covering interview prep and operations portfolio review.' }
-];
+let allMyRequests = [];
 
-function renderRequests() {
+async function renderRequests() {
   const list = document.getElementById('requests-list');
   if (!list) return;
+  const token = localStorage.getItem('alumnet_token');
+  if (!token) return;
 
   let activeTab = 'pending';
   const tabs = document.querySelectorAll('.tab');
 
+  async function load() {
+    list.innerHTML = '<p style="color:var(--slate); padding:20px 4px;">Loading...</p>';
+    try {
+      const res = await fetch(`${API_BASE}/mentorship-requests`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      if (!res.ok) { list.innerHTML = `<p style="color:var(--kq-red); padding:20px 4px;">${data.error}</p>`; return; }
+      allMyRequests = data;
+      draw();
+    } catch {
+      list.innerHTML = '<p style="color:var(--kq-red); padding:20px 4px;">Could not reach the server.</p>';
+    }
+  }
+
   function draw() {
-    const filtered = MOCK_REQUESTS.filter((r) => r.status === activeTab);
+    const filtered = allMyRequests.filter((r) => r.status === activeTab);
     list.innerHTML = filtered.length
       ? filtered.map(requestCardHTML).join('')
       : `<p style="color: var(--slate); padding: 20px 4px;">No ${activeTab} requests.</p>`;
 
     list.querySelectorAll('[data-action]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        // TODO: PATCH /api/mentorship-requests/:id with { status: btn.dataset.action }
-        console.log('Request action', btn.dataset.action);
+      btn.addEventListener('click', async () => {
+        btn.closest('.request-card').querySelectorAll('button').forEach((b) => (b.disabled = true));
+        const isWithdraw = btn.dataset.action === 'withdraw';
+
+        try {
+          const res = isWithdraw
+            ? await fetch(`${API_BASE}/mentorship-requests/${btn.dataset.requestId}`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bearer ${token}` }
+            })
+            : await fetch(`${API_BASE}/mentorship-requests/${btn.dataset.requestId}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              body: JSON.stringify({ decision: btn.dataset.action })
+            });
+
+          if (!res.ok) { const err = await res.json(); alert(err.error || 'Action failed'); }
+          load();
+        } catch {
+          alert('Could not reach the server.');
+        }
       });
     });
   }
@@ -484,26 +541,34 @@ function renderRequests() {
     });
   });
 
-  // TODO: replace MOCK_REQUESTS with GET /api/mentorship-requests
-  draw();
+  load();
 }
 
 function requestCardHTML(r) {
   const role = localStorage.getItem('alumnet_role');
   const canDecide = role === 'mentor' && r.status === 'pending';
+  const canWithdraw = role === 'mentee' && r.status === 'pending';
+  const date = new Date(r.requested_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+  let actionHTML;
+  if (canDecide) {
+    actionHTML = `<div style="display:flex; gap:8px;">
+      <button class="btn btn-primary" data-action="accepted" data-request-id="${r.request_id}">Accept</button>
+      <button class="btn btn-secondary" data-action="declined" data-request-id="${r.request_id}">Decline</button>
+    </div>`;
+  } else if (canWithdraw) {
+    actionHTML = `<button class="btn btn-secondary" data-action="withdraw" data-request-id="${r.request_id}">Withdraw</button>`;
+  } else {
+    actionHTML = `<span class="request-status ${r.status}">${r.status}</span>`;
+  }
+
   return `
     <div class="request-card">
       <div>
-        <strong>${r.name}</strong><br>
-        <span style="font-size:0.82rem; color:var(--slate);">Requested on ${r.date}</span>
-        <p class="mentor-blurb" style="margin-top:8px;">${r.note}</p>
+        <strong>${r.other_name}</strong><br>
+        <span style="font-size:0.82rem; color:var(--slate);">${r.other_department || ''} · Requested on ${date}</span>
       </div>
-      ${canDecide
-      ? `<div style="display:flex; gap:8px;">
-             <button class="btn btn-primary" data-action="accepted">Accept</button>
-             <button class="btn btn-secondary" data-action="declined">Decline</button>
-           </div>`
-      : `<span class="request-status ${r.status}">${r.status}</span>`}
+      ${actionHTML}
     </div>`;
 }
 
@@ -552,6 +617,29 @@ async function wireProfileForm() {
       console.error(err);
     }
   });
+}
+
+
+async function openMentorProfile(mentorId) {
+  const token = localStorage.getItem('alumnet_token');
+  const res = await fetch(`${API_BASE}/profile/${mentorId}`, { headers: { Authorization: `Bearer ${token}` } });
+  const data = await res.json();
+  if (!res.ok) { alert(data.error || 'Could not load profile'); return; }
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal-card">
+      <h3>${data.name}</h3>
+      <div class="modal-meta">${data.department || ''}${data.years_of_experience ? ' · ' + data.years_of_experience + ' yrs experience' : ''}</div>
+      <div class="modal-section"><div class="label">Skills</div><div class="value">${data.skills || 'Not provided'}</div></div>
+      <div class="modal-section"><div class="label">Experience</div><div class="value">${data.experience || 'Not provided'}</div></div>
+      <div class="modal-section"><div class="label">Career interests</div><div class="value">${data.career_interests || 'Not provided'}</div></div>
+      <button class="btn btn-secondary btn-block" id="close-modal">Close</button>
+    </div>`;
+  document.body.appendChild(backdrop);
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
+  document.getElementById('close-modal').addEventListener('click', () => backdrop.remove());
 }
 
 /* --------------------------------------------------------------------

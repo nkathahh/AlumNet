@@ -1,7 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const { requireAuth } = require('../middleware/auth.middleware');
+const mentorship = require('../controllers/mentorship.controller');
 
-router.get('/', requireAuth, (req, res) => res.status(501).json({ error: 'Not implemented yet' }));
+router.post('/', requireAuth, mentorship.createRequest);
+router.get('/', requireAuth, mentorship.listMyRequests);
+router.patch('/:id', requireAuth, mentorship.respondToRequest);
+router.delete('/:id', requireAuth, mentorship.withdrawRequest);
 
 module.exports = router;
