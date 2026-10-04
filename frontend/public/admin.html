@@ -18,6 +18,12 @@
             <button id="logout-btn" class="icon-btn" aria-label="Log out" title="Log out">⏻</button>
         </div>
 
+        <aside class="app-sidebar">
+            <div class="app-brand"><span class="mark">KQ</span> AlumNet</div>
+            <nav id="sidebar-nav"></nav>
+            <div class="app-sidebar-foot"></div>
+        </aside>
+
         <main class="app-main" style="max-width: 100%;">
             <div class="app-header">
                 <div>
@@ -28,19 +34,73 @@
 
             <div class="stat-row" id="stat-row"></div>
 
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>Email</th>
-                        <th>Role</th>
-                        <th>Status</th>
-                        <th>Joined</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody id="admin-table-body"></tbody>
-            </table>
+
+            <div id="admin-tab-users">
+                <input type="text" id="admin-user-search" class="search-pill" placeholder="Search by name or email" style="margin-bottom:14px; width:100%; max-width:320px;">
+                <div class="table-card">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th>Status</th>
+                                <th>Joined</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="admin-tab-events" style="display:none;">
+                <form id="create-event-form" class="field-row" style="align-items:end; margin-bottom:20px;">
+                    <div class="field"><label for="eventTitle">Title</label><input type="text" id="eventTitle" required>
+                    </div>
+                    <div class="field"><label for="eventDate">Date</label><input type="datetime-local" id="eventDate"
+                            required></div>
+                    <button type="submit" class="btn btn-primary" style="height:46px;">Add event</button>
+                </form>
+                <div class="field" style="max-width:none;">
+                    <label for="eventDescription">Description</label>
+                    <textarea id="eventDescription" style="margin-bottom:16px;"></textarea>
+                </div>
+                <div class="table-card">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Title</th>
+                                <th>Date</th>
+                                <th>Description</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-events-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="admin-tab-opportunities" style="display:none;">
+                <div id="admin-opportunities-list"></div>
+            </div>
+
+            <div id="admin-tab-logs" style="display:none;">
+                <div class="table-card">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>When</th>
+                                <th>Admin</th>
+                                <th>Action</th>
+                                <th>Target</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-logs-body"></tbody>
+                    </table>
+                </div>
+            </div>
         </main>
     </div>
     <script src="js/main.js"></script>

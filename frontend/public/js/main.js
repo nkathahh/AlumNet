@@ -16,62 +16,13 @@ document.addEventListener('DOMContentLoaded', () => {
   renderAdminTable();
   renderNotifications();
   updateSidebar();
+  wireAdminTabs();
+  renderAdminEvents();
+  wireAdminEventForm();
+  renderAdminOpportunities();
+  renderAdminLogs();
+  wireAdminSearch();
 });
-
-
-function initTheme() {
-  const saved = localStorage.getItem('alumnet_theme') || 'light';
-  document.documentElement.setAttribute('data-theme', saved);
-  const checkbox = document.getElementById('theme-toggle-checkbox');
-  if (checkbox) checkbox.checked = saved === 'dark';
-}
-
-function wireThemeToggle() {
-  const checkbox = document.getElementById('theme-toggle-checkbox');
-  if (!checkbox) return;
-  checkbox.addEventListener('change', () => {
-    const next = checkbox.checked ? 'dark' : 'light';
-    document.documentElement.setAttribute('data-theme', next);
-    localStorage.setItem('alumnet_theme', next);
-  });
-}
-function wireLogout() {
-  const btn = document.getElementById('logout-btn');
-  if (!btn) return;
-  btn.addEventListener('click', () => {
-    localStorage.removeItem('alumnet_token');
-    localStorage.removeItem('alumnet_role');
-    window.location.href = 'login.html';
-  });
-}
-
-function setRequestsSubtitle() {
-  const el = document.getElementById('requests-subtitle');
-  if (!el) return;
-  const role = localStorage.getItem('alumnet_role');
-  el.textContent = role === 'mentor'
-    ? 'Requests from mentees awaiting your decision.'
-    : 'Mentorship requests you have sent to mentors.';
-}
-
-function wireRoleVisibility() {
-  const role = localStorage.getItem('alumnet_role');
-  const postBtn = document.getElementById('post-opportunity-btn');
-  if (postBtn) postBtn.style.display = role === 'mentor' ? 'inline-flex' : 'none';
-}
-
-
-async function updateSidebar() {
-  const el = document.querySelector('.app-sidebar-foot');
-  const token = localStorage.getItem('alumnet_token');
-  if (!el || !token) return;
-  try {
-    const res = await fetch(`${API_BASE}/profile/me`, { headers: { Authorization: `Bearer ${token}` } });
-    if (!res.ok) return;
-    const data = await res.json();
-    el.innerHTML = `${data.name}<br>${data.department || ''}`;
-  } catch {}
-}
 
 const API_BASE = 'http://localhost:4000/api';
 
@@ -112,7 +63,12 @@ const NAV_CONFIG = {
     ]}
   ],
   admin: [
-    { group: 'Admin', links: [{ href: 'admin.html', label: 'Dashboard' }] }
+    { group: 'Platform', links: [
+      { tab: 'users', label: 'User management' },
+      { tab: 'events', label: 'Event management' },
+      { tab: 'opportunities', label: 'Content moderation' },
+      { tab: 'logs', label: 'Activity log' }
+    ]}
   ]
 };
 
@@ -132,12 +88,80 @@ function renderSidebar() {
   const role = localStorage.getItem('alumnet_role');
   const groups = NAV_CONFIG[role] || [];
   const currentPage = location.pathname.split('/').pop();
+
+  if (role === 'admin') {
+    nav.innerHTML = groups.map((g) => `
+      <div class="nav-group">
+        <div class="nav-group-label">${g.group}</div>
+        ${g.links.map((l, i) => `<a class="nav-link ${i === 0 ? 'active' : ''}" href="#" data-admin-tab="${l.tab}">${l.label}</a>`).join('')}
+      </div>`).join('');
+    return;
+  }
+
   nav.innerHTML = groups.map((g) => `
     <div class="nav-group">
       <div class="nav-group-label">${g.group}</div>
       ${g.links.map((l) => `<a class="nav-link ${l.href === currentPage ? 'active' : ''}" href="${l.href}">${l.label}</a>`).join('')}
     </div>`).join('');
 }
+
+function initTheme() {
+  const saved = localStorage.getItem('alumnet_theme') || 'light';
+  document.documentElement.setAttribute('data-theme', saved);
+  const checkbox = document.getElementById('theme-toggle-checkbox');
+  if (checkbox) checkbox.checked = saved === 'dark';
+}
+
+function wireThemeToggle() {
+  const checkbox = document.getElementById('theme-toggle-checkbox');
+  if (!checkbox) return;
+  checkbox.addEventListener('change', () => {
+    const next = checkbox.checked ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('alumnet_theme', next);
+  });
+}
+
+function wireLogout() {
+  const btn = document.getElementById('logout-btn');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    localStorage.removeItem('alumnet_token');
+    localStorage.removeItem('alumnet_role');
+    window.location.href = 'login.html';
+  });
+}
+
+function setRequestsSubtitle() {
+  const el = document.getElementById('requests-subtitle');
+  if (!el) return;
+  const role = localStorage.getItem('alumnet_role');
+  el.textContent = role === 'mentor'
+    ? 'Requests from mentees awaiting your decision.'
+    : 'Mentorship requests you have sent to mentors.';
+}
+
+function wireRoleVisibility() {
+  const role = localStorage.getItem('alumnet_role');
+  const postBtn = document.getElementById('post-opportunity-btn');
+  if (postBtn) postBtn.style.display = role === 'mentor' ? 'inline-flex' : 'none';
+}
+
+async function updateSidebar() {
+  const el = document.querySelector('.app-sidebar-foot');
+  const token = localStorage.getItem('alumnet_token');
+  if (!el || !token) return;
+  try {
+    const res = await fetch(`${API_BASE}/profile/me`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) return;
+    const data = await res.json();
+    el.innerHTML = `${data.name}<br>${data.department || ''}`;
+  } catch {}
+}
+
+/* --------------------------------------------------------------------
+   Signup / Login
+   -------------------------------------------------------------------- */
 
 function wireSignupForm() {
   const form = document.getElementById('signup-form');
@@ -255,14 +279,14 @@ function wireLoginForm() {
   const form = document.getElementById('login-form');
   if (!form) return;
   const toggleBtn = document.getElementById('toggle-password-login');
-if (toggleBtn) {
-  toggleBtn.addEventListener('click', () => {
-    const pwd = document.getElementById('password');
-    const show = pwd.type === 'password';
-    pwd.type = show ? 'text' : 'password';
-    toggleBtn.textContent = show ? 'Hide' : 'Show';
-  });
-}
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', () => {
+      const pwd = document.getElementById('password');
+      const show = pwd.type === 'password';
+      pwd.type = show ? 'text' : 'password';
+      toggleBtn.textContent = show ? 'Hide' : 'Show';
+    });
+  }
   const errorEl = document.getElementById('login-error');
 
   form.addEventListener('submit', async (e) => {
@@ -286,17 +310,15 @@ if (toggleBtn) {
       localStorage.setItem('alumnet_token', result.token);
       localStorage.setItem('alumnet_role', result.role);
       window.location.href = HOME_PAGE[result.role] || 'login.html';
-    } catch (err) {
+    } catch {
       errorEl.textContent = 'Could not reach the server. Is the backend running on port 4000?';
       errorEl.style.display = 'block';
     }
   });
 }
 
-
 /* --------------------------------------------------------------------
-   Mentor recommendations (FR-04) — real call to the ML service via
-   GET /api/recommendations (cosine similarity over sentence embeddings)
+   Mentor recommendations (FR-04) — real, calls the ML service
    -------------------------------------------------------------------- */
 
 async function renderMentorList() {
@@ -361,11 +383,10 @@ function wireMentorCardActions(list) {
   });
 }
 
-
-
 /* --------------------------------------------------------------------
-   Mentorship requests (FR-05, FR-06)
+   Mentorship requests (FR-05, FR-06) — still mock, next to wire up
    -------------------------------------------------------------------- */
+
 const MOCK_REQUESTS = [
   { name: 'Jordan Matthews', date: 'Jul 30, 2026', status: 'pending', note: 'Looking for guidance on transitioning to senior operations roles in aviation.' },
   { name: 'Lina Shah', date: 'Jun 12, 2026', status: 'accepted', note: 'Ongoing mentorship covering interview prep and operations portfolio review.' }
@@ -425,8 +446,9 @@ function requestCardHTML(r) {
 }
 
 /* --------------------------------------------------------------------
-   Profile (FR-03)
+   Profile (FR-03) — real
    -------------------------------------------------------------------- */
+
 async function wireProfileForm() {
   const form = document.getElementById('profile-form');
   if (!form) return;
@@ -471,8 +493,9 @@ async function wireProfileForm() {
 }
 
 /* --------------------------------------------------------------------
-   Events (FR-07, FR-08)
+   Events (FR-07, FR-08) — mentee/mentor view, still mock
    -------------------------------------------------------------------- */
+
 const MOCK_EVENTS = [
   { title: 'Cabin Crew Reunion', date: 'Sep 14, 2026 · Nairobi', desc: 'A reunion for former cabin crew with panels on career transitions and networking.' },
   { title: 'Safety & Training Workshop', date: 'Aug 29, 2026 · Virtual', desc: 'Interactive sessions with veteran trainers on modern safety procedures.' }
@@ -492,8 +515,9 @@ function renderEvents() {
 }
 
 /* --------------------------------------------------------------------
-   Career opportunities (FR-09)
+   Career opportunities (FR-09) — mentee/mentor view, still mock
    -------------------------------------------------------------------- */
+
 const MOCK_OPPORTUNITIES = [
   { title: 'Senior Cabin Services Trainer', tag: 'Aviation', desc: 'Lead training programs for cabin crew and develop updated safety curricula.', by: 'Mercy Wanjiru' },
   { title: 'Ground Operations Coordinator', tag: 'Logistics', desc: 'Coordinate ramp activities and ensure smooth turnaround.', by: 'Samuel Otieno' }
@@ -516,40 +540,218 @@ function renderOpportunities() {
 }
 
 /* --------------------------------------------------------------------
-   Admin dashboard (FR-12)
+   Admin dashboard (FR-12) — real, all four tabs
    -------------------------------------------------------------------- */
-const MOCK_ADMIN_STATS = [
-  { num: '8,412', label: 'Total alumni' },
-  { num: '312', label: 'Active mentorships' },
-  { num: '21', label: 'Pending requests' },
-  { num: '7', label: 'Flagged accounts' }
-];
 
-const MOCK_USERS = [
-  { name: 'Olivia Park', email: 'olivia.park@kenyaairways...', role: 'Mentor', status: 'Active', joined: 'Jan 10, 2025' },
-  { name: 'Ravi Patel', email: 'ravi.patel@kenyaairways...', role: 'Mentee', status: 'Active', joined: 'Mar 4, 2026' },
-  { name: 'Monica Reyes', email: 'monica.reyes@kenyaairwa...', role: 'Mentor', status: 'Flagged', joined: 'Jul 2, 2024' }
-];
+let allAdminUsers = [];
 
-function renderAdminTable() {
+async function renderAdminTable() {
   const statRow = document.getElementById('stat-row');
   const tbody = document.getElementById('admin-table-body');
   if (!statRow || !tbody) return;
+  const token = localStorage.getItem('alumnet_token');
+  if (!token) return;
 
-  // TODO: replace both mock arrays with GET /api/admin/users (FR-12)
-  statRow.innerHTML = MOCK_ADMIN_STATS.map((s) => `
-    <div class="stat-card"><div class="num">${s.num}</div><div class="label">${s.label}</div></div>`).join('');
+  try {
+    const [statsRes, usersRes] = await Promise.all([
+      fetch(`${API_BASE}/admin/stats`, { headers: { Authorization: `Bearer ${token}` } }),
+      fetch(`${API_BASE}/admin/users`, { headers: { Authorization: `Bearer ${token}` } })
+    ]);
+    const stats = await statsRes.json();
+    const users = await usersRes.json();
 
-  tbody.innerHTML = MOCK_USERS.map((u) => `
+    if (!statsRes.ok || !usersRes.ok) {
+      tbody.innerHTML = `<tr><td colspan="6">${stats.error || users.error || 'Could not load admin data.'}</td></tr>`;
+      return;
+    }
+
+    statRow.innerHTML = `
+      <div class="stat-card"><div class="num">${stats.totalAlumni}</div><div class="label">Total alumni</div></div>
+      <div class="stat-card"><div class="num">${stats.activeMentorships}</div><div class="label">Active mentorships</div></div>
+      <div class="stat-card"><div class="num">${stats.pendingRequests}</div><div class="label">Pending requests</div></div>
+      <div class="stat-card"><div class="num">${stats.flaggedAccounts}</div><div class="label">Flagged accounts</div></div>`;
+
+    allAdminUsers = users;
+    tbody.innerHTML = users.map(adminRowHTML).join('');
+    wireAdminActions(tbody, token);
+  } catch {
+    tbody.innerHTML = '<tr><td colspan="6">Could not reach the server.</td></tr>';
+  }
+}
+
+function adminRowHTML(u) {
+  const joined = new Date(u.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  const isSuspended = u.status === 'suspended';
+  return `
     <tr>
-      <td>${u.name}</td><td>${u.email}</td><td>${u.role}</td><td>${u.status}</td><td>${u.joined}</td>
-      <td><button class="btn btn-secondary" data-action="toggle-status">${u.status === 'Flagged' ? 'Reactivate' : 'Suspend'}</button></td>
+      <td>${u.name}</td><td>${u.email}</td><td>${u.role}</td>
+      <td>${isSuspended ? 'Flagged' : 'Active'}</td><td>${joined}</td>
+      <td><button class="btn btn-secondary" data-action="toggle-status" data-user-id="${u.user_id}">
+        ${isSuspended ? 'Reactivate' : 'Suspend'}
+      </button></td>
+    </tr>`;
+}
+
+function wireAdminActions(tbody, token) {
+  tbody.querySelectorAll('[data-action="toggle-status"]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const userId = btn.dataset.userId;
+      btn.disabled = true;
+      try {
+        const res = await fetch(`${API_BASE}/admin/users/${userId}/toggle-status`, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const result = await res.json();
+        if (!res.ok) { alert(result.error || 'Action failed'); btn.disabled = false; return; }
+        renderAdminTable();
+        renderAdminLogs();
+      } catch {
+        alert('Could not reach the server.');
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
+function wireAdminSearch() {
+  const input = document.getElementById('admin-user-search');
+  if (!input) return;
+  input.addEventListener('input', () => {
+    const q = input.value.toLowerCase();
+    const filtered = allAdminUsers.filter((u) => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q));
+    const tbody = document.getElementById('admin-table-body');
+    tbody.innerHTML = filtered.map(adminRowHTML).join('');
+    wireAdminActions(tbody, localStorage.getItem('alumnet_token'));
+  });
+}
+
+function wireAdminTabs() {
+  const tabLinks = document.querySelectorAll('[data-admin-tab]');
+  if (!tabLinks.length) return;
+  tabLinks.forEach((link) => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      tabLinks.forEach((l) => l.classList.remove('active'));
+      link.classList.add('active');
+      ['users', 'events', 'opportunities', 'logs'].forEach((name) => {
+        document.getElementById(`admin-tab-${name}`).style.display = name === link.dataset.adminTab ? 'block' : 'none';
+      });
+    });
+  });
+}
+
+async function renderAdminEvents() {
+  const tbody = document.getElementById('admin-events-body');
+  if (!tbody) return;
+  const token = localStorage.getItem('alumnet_token');
+
+  const res = await fetch(`${API_BASE}/admin/events`, { headers: { Authorization: `Bearer ${token}` } });
+  const events = await res.json();
+  if (!res.ok) { tbody.innerHTML = `<tr><td colspan="4">${events.error}</td></tr>`; return; }
+
+  tbody.innerHTML = events.map((e) => `
+    <tr>
+      <td>${e.title}</td>
+      <td>${new Date(e.event_date).toLocaleString('en-GB')}</td>
+      <td>${e.description || ''}</td>
+      <td><button class="btn btn-secondary" data-delete-event="${e.event_id}">Delete</button></td>
+    </tr>`).join('');
+
+  tbody.querySelectorAll('[data-delete-event]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Delete this event?')) return;
+      await fetch(`${API_BASE}/admin/events/${btn.dataset.deleteEvent}`, {
+        method: 'DELETE', headers: { Authorization: `Bearer ${token}` }
+      });
+      renderAdminEvents();
+      renderAdminLogs();
+    });
+  });
+}
+
+function wireAdminEventForm() {
+  const form = document.getElementById('create-event-form');
+  if (!form) return;
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const token = localStorage.getItem('alumnet_token');
+    const title = document.getElementById('eventTitle').value;
+    const eventDate = document.getElementById('eventDate').value;
+    const description = document.getElementById('eventDescription').value;
+
+    const res = await fetch(`${API_BASE}/admin/events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ title, eventDate, description })
+    });
+    if (res.ok) {
+      form.reset();
+      document.getElementById('eventDescription').value = '';
+      renderAdminEvents();
+      renderAdminLogs();
+    }
+  });
+}
+
+async function renderAdminOpportunities() {
+  const list = document.getElementById('admin-opportunities-list');
+  if (!list) return;
+  const token = localStorage.getItem('alumnet_token');
+
+  const res = await fetch(`${API_BASE}/admin/opportunities/pending`, { headers: { Authorization: `Bearer ${token}` } });
+  const opps = await res.json();
+  if (!res.ok) { list.innerHTML = `<p>${opps.error}</p>`; return; }
+  if (!opps.length) { list.innerHTML = '<p style="color:var(--slate); padding:20px 4px;">Nothing pending review.</p>'; return; }
+
+  list.innerHTML = opps.map((o) => `
+    <div class="opportunity-card">
+      <div>
+        <span class="tag">${o.industry || ''}</span>
+        <h3 style="font-size:1rem; margin:6px 0;">${o.title}</h3>
+        <p class="mentor-blurb">${o.description || ''}</p>
+        <div class="mentor-meta">Posted by ${o.posted_by_name}</div>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn btn-primary" data-review="${o.opportunity_id}" data-decision="approved">Approve</button>
+        <button class="btn btn-secondary" data-review="${o.opportunity_id}" data-decision="rejected">Reject</button>
+      </div>
+    </div>`).join('');
+
+  list.querySelectorAll('[data-review]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      await fetch(`${API_BASE}/admin/opportunities/${btn.dataset.review}/review`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ decision: btn.dataset.decision })
+      });
+      renderAdminOpportunities();
+      renderAdminLogs();
+    });
+  });
+}
+
+async function renderAdminLogs() {
+  const tbody = document.getElementById('admin-logs-body');
+  if (!tbody) return;
+  const token = localStorage.getItem('alumnet_token');
+
+  const res = await fetch(`${API_BASE}/admin/activity-logs`, { headers: { Authorization: `Bearer ${token}` } });
+  const logs = await res.json();
+  if (!res.ok) { tbody.innerHTML = `<tr><td colspan="5">${logs.error}</td></tr>`; return; }
+
+  tbody.innerHTML = logs.map((l) => `
+    <tr>
+      <td>${new Date(l.created_at).toLocaleString('en-GB')}</td>
+      <td>${l.admin_name}</td><td>${l.action_type}</td>
+      <td>${l.target_entity} #${l.target_entity_id}</td><td>${l.description || ''}</td>
     </tr>`).join('');
 }
 
 /* --------------------------------------------------------------------
-   Notifications
+   Notifications — still mock
    -------------------------------------------------------------------- */
+
 const MOCK_NOTIFICATIONS = [
   { message: 'Mark Thuo accepted your mentorship request.', time: '2h ago', unread: true },
   { message: 'Safety & Training Workshop starts in 3 days.', time: '1d ago', unread: false }

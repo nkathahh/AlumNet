@@ -837,4 +837,16 @@ textarea:focus-visible {
   border: 1px solid var(--glass-border);
   border-radius: var(--radius);
   box-shadow: 0 4px 20px rgba(20, 32, 28, 0.06);
+  padding: 18px;
+}
+
+.table-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 20px rgba(20,32,28,0.06);
+  padding: 8px 20px;
+  overflow-x: auto;
 }
