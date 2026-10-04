@@ -1,4 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
+  wireAuthToggleTransition();
   initTheme();
   guardRoute();
   renderSidebar();
@@ -40,37 +41,90 @@ const PAGE_ROLES = {
 
 const NAV_CONFIG = {
   mentee: [
-    { group: 'Network', links: [
-      { href: 'recommendations.html', label: 'Find a mentor' },
-      { href: 'requests.html', label: 'My requests' },
-      { href: 'profile.html', label: 'My profile' }
-    ]},
-    { group: 'Community', links: [
-      { href: 'events.html', label: 'Alumni events' },
-      { href: 'opportunities.html', label: 'Career opportunities' },
-      { href: 'notifications.html', label: 'Notifications' }
-    ]}
+    {
+      group: 'Network', links: [
+        { href: 'recommendations.html', label: 'Find a mentor' },
+        { href: 'requests.html', label: 'My requests' },
+        { href: 'profile.html', label: 'My profile' }
+      ]
+    },
+    {
+      group: 'Community', links: [
+        { href: 'events.html', label: 'Alumni events' },
+        { href: 'opportunities.html', label: 'Career opportunities' },
+        { href: 'notifications.html', label: 'Notifications' }
+      ]
+    }
   ],
   mentor: [
-    { group: 'Mentorship', links: [
-      { href: 'requests.html', label: 'Mentee requests' },
-      { href: 'profile.html', label: 'My profile' }
-    ]},
-    { group: 'Community', links: [
-      { href: 'events.html', label: 'Alumni events' },
-      { href: 'opportunities.html', label: 'Career opportunities' },
-      { href: 'notifications.html', label: 'Notifications' }
-    ]}
+    {
+      group: 'Mentorship', links: [
+        { href: 'requests.html', label: 'Mentee requests' },
+        { href: 'profile.html', label: 'My profile' }
+      ]
+    },
+    {
+      group: 'Community', links: [
+        { href: 'events.html', label: 'Alumni events' },
+        { href: 'opportunities.html', label: 'Career opportunities' },
+        { href: 'notifications.html', label: 'Notifications' }
+      ]
+    }
   ],
   admin: [
-    { group: 'Platform', links: [
-      { tab: 'users', label: 'User management' },
-      { tab: 'events', label: 'Event management' },
-      { tab: 'opportunities', label: 'Content moderation' },
-      { tab: 'logs', label: 'Activity log' }
-    ]}
+    {
+      group: 'Platform', links: [
+        { tab: 'users', label: 'User management' },
+        { tab: 'events', label: 'Event management' },
+        { tab: 'opportunities', label: 'Content moderation' },
+        { tab: 'logs', label: 'Activity log' }
+      ]
+    }
   ]
 };
+
+function renderFlightMap() {
+  const mount = document.getElementById('flight-path-mount');
+  if (!mount) return;
+
+  mount.innerHTML = `
+    <svg class="flight-path-svg" viewBox="0 0 500 800" preserveAspectRatio="none">
+      <path id="flight-path" class="path" d="M 50,620 C 140,420 260,380 180,220 C 120,110 280,70 420,40" />
+      <g>
+        <path d="M 0,-6 L 10,0 L 0,6 L 3,0 Z" fill="#ffffff" opacity="0.85">
+          <animateMotion dur="10s" repeatCount="indefinite" rotate="auto">
+            <mpath href="#flight-path" />
+          </animateMotion>
+        </path>
+      </g>
+      <circle cx="50" cy="620" r="3" fill="var(--kq-red)" />
+      <circle cx="420" cy="40" r="3" fill="var(--kq-red)" />
+    </svg>`;
+}
+
+function navigateWithFade(href) {
+  const panel = document.querySelector('.auth-form-inner');
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const motion = document.querySelector('#flight-path-mount animateMotion');
+  if (motion && !reduced) {
+    motion.setAttribute('dur', '0.4s');
+    motion.beginElement();
+  }
+
+  if (!panel || reduced) { window.location.href = href; return; }
+  panel.classList.add('leaving');
+  setTimeout(() => { window.location.href = href; }, 320);
+}
+
+function wireAuthToggleTransition() {
+  document.querySelectorAll('.auth-toggle a:not(.active)').forEach((link) => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      navigateWithFade(link.getAttribute('href'));
+    });
+  });
+}
 
 function guardRoute() {
   const page = location.pathname.split('/').pop();
@@ -156,7 +210,7 @@ async function updateSidebar() {
     if (!res.ok) return;
     const data = await res.json();
     el.innerHTML = `${data.name}<br>${data.department || ''}`;
-  } catch {}
+  } catch { }
 }
 
 /* --------------------------------------------------------------------
@@ -292,6 +346,9 @@ function wireLoginForm() {
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const data = Object.fromEntries(new FormData(form));
+    const submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Signing you in...';
 
     try {
       const res = await fetch(`${API_BASE}/auth/login`, {
@@ -304,15 +361,20 @@ function wireLoginForm() {
       if (!res.ok) {
         errorEl.textContent = result.error || 'Login failed';
         errorEl.style.display = 'block';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Log in';
         return;
       }
 
       localStorage.setItem('alumnet_token', result.token);
       localStorage.setItem('alumnet_role', result.role);
-      window.location.href = HOME_PAGE[result.role] || 'login.html';
+      submitBtn.textContent = 'Taking off... ✈';
+      navigateWithFade(HOME_PAGE[result.role] || 'login.html');
     } catch {
       errorEl.textContent = 'Could not reach the server. Is the backend running on port 4000?';
       errorEl.style.display = 'block';
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Log in';
     }
   });
 }
@@ -437,11 +499,11 @@ function requestCardHTML(r) {
         <p class="mentor-blurb" style="margin-top:8px;">${r.note}</p>
       </div>
       ${canDecide
-        ? `<div style="display:flex; gap:8px;">
+      ? `<div style="display:flex; gap:8px;">
              <button class="btn btn-primary" data-action="accepted">Accept</button>
              <button class="btn btn-secondary" data-action="declined">Decline</button>
            </div>`
-        : `<span class="request-status ${r.status}">${r.status}</span>`}
+      : `<span class="request-status ${r.status}">${r.status}</span>`}
     </div>`;
 }
 

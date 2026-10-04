@@ -4,41 +4,46 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Create your account — AlumNet</title>
+  <title>Sign up — AlumNet</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 
 <body>
 
   <div class="auth-shell">
-    <aside class="auth-panel">
-      <div class="auth-brand">
-        <span class="mark">KQ</span> AlumNet
+    <div class="auth-visual">
+      <div class="auth-topbar">
+        <label class="theme-switch" title="Toggle dark mode">
+          <input type="checkbox" id="theme-toggle-checkbox">
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+        </label>
       </div>
-      <div class="auth-copy">
-        <h1>Your Kenya Airways network, still on the flight plan.</h1>
-        <p>Find a mentor who's flown the route you're on, share openings within the group and stay looped into what
-          former colleagues are building.</p>
-      </div>
-      <div class="auth-stat-row">
-        <div class="auth-stat">
-          <div class="num">8,400+</div>
-          <div class="label">Alumni profiles</div>
-        </div>
-        <div class="auth-stat">
-          <div class="num">300+</div>
-          <div class="label">Active mentorships</div>
-        </div>
-        <div class="auth-stat">
-          <div class="num">40+</div>
-          <div class="label">Countries reached</div>
-        </div>
-      </div>
-    </aside>
 
-    <div class="auth-form-side">
-      <div class="auth-form-card">
-        <span class="step">Step 1 of 1</span>
+      <div class="cloud" style="width:180px; height:180px; top:15%; left:10%;"></div>
+      <div class="cloud" style="width:120px; height:120px; top:45%; left:55%; animation-duration:65s;"></div>
+      <div class="cloud" style="width:140px; height:140px; top:70%; left:20%; animation-duration:40s;"></div>
+
+      <div id="flight-path-mount"></div>
+      <svg class="aircraft-silhouette" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+        <path
+          d="M482.3 192.4L295.1 192.4L198.2 25.5C193.6 17.6 185.1 12.7 176 12.7C159.8 12.7 147.6 27.5 150.8 43.4L184.9 192.4L95.7 192.4L48.1 125.8C44.8 121.2 39.5 118.4 33.9 118.4C22.8 118.4 14.6 128.7 17 139.6L36.2 234.2L17 328.8C14.6 339.7 22.8 350 33.9 350C39.5 350 44.8 347.2 48.1 342.6L95.7 276L184.9 276L150.8 425C147.6 440.9 159.8 455.7 176 455.7C185.1 455.7 193.6 450.8 198.2 442.9L295.1 276L482.3 276C498.6 276 512 262.6 512 246.3L512 222.1C512 205.8 498.6 192.4 482.3 192.4Z" />
+      </svg>
+
+      <div class="auth-visual-brand"><span class="mark">KQ</span> AlumNet</div>
+
+      <div class="auth-visual-copy">
+        <h1>Your next connection starts here</h1>
+        <p>Join a network of current staff and alumni, matched by shared skills and experience.</p>
+      </div>
+    </div>
+
+    <div class="auth-form-panel">
+      <div class="auth-form-inner">
+        <div class="auth-toggle">
+          <a href="login.html">Log in</a>
+          <a href="signup.html" class="active">Sign up</a>
+        </div>
+
         <h2>Create your alumni account</h2>
         <span class="sub">A few details help AlumNet match you with the right mentors.</span>
 
@@ -55,7 +60,7 @@
           <div id="staff-fields" style="display:none;">
             <div class="field">
               <label for="staffNumber">Staff number</label>
-              <input type="text" id="staffNumber" name="staffNumber" placeholder="KQ10234">
+              <input type="text" id="staffNumber" name="staffNumber" placeholder="KQ48213">
               <p class="field-hint" id="staff-lookup-status"></p>
             </div>
             <div class="field-row">
@@ -78,13 +83,15 @@
             <label for="emailMentee">Kenya Airways email</label>
             <input type="email" id="emailMentee" readonly placeholder="Auto-filled after verification">
           </div>
-          <div id="mentor-email-field" style="display:none;" class="field">
-            <label for="emailMentor">Personal email</label>
-            <input type="email" id="emailMentor" placeholder="you@gmail.com">
-          </div>
-          <div class="field">
-            <label for="mentorYears">Years of experience at Kenya Airways</label>
-            <input type="number" id="mentorYears" min="0" max="50">
+          <div id="mentor-email-field" style="display:none;">
+            <div class="field">
+              <label for="emailMentor">Personal email</label>
+              <input type="email" id="emailMentor" placeholder="you@gmail.com">
+            </div>
+            <div class="field">
+              <label for="mentorYears">Years of experience at Kenya Airways</label>
+              <input type="number" id="mentorYears" min="0" max="50">
+            </div>
           </div>
 
           <div class="field">
@@ -133,7 +140,7 @@
             </select>
           </div>
 
-          <p id="signup-error" style="color:#C8102E; font-size:0.85rem; display:none; margin-bottom:16px;"></p>
+          <p id="signup-error" style="color:var(--kq-red); font-size:0.85rem; display:none; margin-bottom:16px;"></p>
           <button type="submit" class="btn btn-primary btn-block">Sign up</button>
         </form>
 

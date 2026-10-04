@@ -30,13 +30,11 @@
   --radius: 10px;
   --radius-lg: 16px;
 
+  /* Glass */
   --glass-bg: rgba(255, 255, 255, 0.6);
   --glass-border: rgba(255, 255, 255, 0.5);
   --glass-dark: rgba(21, 32, 28, 0.82);
 }
-
-
-
 
 :root[data-theme="dark"] {
   --ink: #EDEFEC;
@@ -48,13 +46,13 @@
   --stone-line: #333D36;
   --wash: #1E2621;
   --glass-bg: rgba(26, 33, 29, 0.6);
-  --glass-border: rgba(255,255,255,0.08);
+  --glass-border: rgba(255, 255, 255, 0.08);
 }
+
 :root[data-theme="dark"] body {
   background: linear-gradient(160deg, #0d1511 0%, #141210 55%, #11130f 100%);
   background-attachment: fixed;
 }
-
 
 * {
   box-sizing: border-box;
@@ -107,7 +105,6 @@ img {
   display: block;
 }
 
-/* --- Focus visibility --- */
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,
@@ -244,46 +241,55 @@ textarea:focus-visible {
 }
 
 /* --------------------------------------------------------------------------
-   Auth layout — angled split hero
+   Auth — Split Screen with Flight Path
    -------------------------------------------------------------------------- */
 
 .auth-shell {
   min-height: 100vh;
-  display: grid;
-  grid-template-columns: 1.05fr 1fr;
+  display: flex;
 }
 
-.auth-panel {
+.auth-visual {
+  flex: 1 1 46%;
   position: relative;
-  background: var(--kq-green);
-  color: #fff;
-  padding: 48px 56px;
+  overflow: hidden;
+  background: #081210;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  overflow: hidden;
-  clip-path: polygon(0 0, 100% 0, 82% 100%, 0% 100%);
+  padding: 44px 48px;
+  min-height: 100vh;
 }
 
-.auth-panel::after {
+.auth-visual::before {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(155deg, rgba(200, 16, 46, 0.35), transparent 55%);
-  pointer-events: none;
+  background: url('../assets/auth-bg.jpeg') center/cover no-repeat;
+  opacity: 0.16;
+  z-index: 0;
+}
+.auth-visual::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(165deg, #0a2e4a 0%, #0d1f1a 55%, #081210 100%);
+  opacity: 0.88;
+  z-index: 0;
 }
 
-.auth-brand {
-  font-family: var(--font-display);
-  font-size: 1.15rem;
-  font-weight: 700;
+.auth-visual-brand {
   display: flex;
   align-items: center;
   gap: 10px;
-  z-index: 1;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: #fff;
+  z-index: 2;
 }
 
-.auth-brand .mark {
+.auth-visual-brand .mark {
   width: 30px;
   height: 30px;
   border-radius: 50%;
@@ -291,77 +297,144 @@ textarea:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: var(--font-display);
-  font-size: 0.85rem;
+  font-size: 0.82rem;
 }
 
-.auth-copy {
-  z-index: 1;
-  max-width: 380px;
+.auth-visual-copy {
+  z-index: 2;
+  max-width: 360px;
 }
 
-.auth-copy h1 {
-  font-size: 2.1rem;
-  margin-bottom: 16px;
+.auth-visual-copy h1 {
+  color: #fff;
+  font-size: 2rem;
+  line-height: 1.2;
+  margin-bottom: 12px;
 }
 
-.auth-copy p {
-  color: rgba(255, 255, 255, 0.82);
-  font-size: 1rem;
+.auth-visual-copy p {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 0.98rem;
   line-height: 1.6;
 }
 
-.auth-stat-row {
-  display: flex;
-  gap: 36px;
+.cloud {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 50%;
+  filter: blur(18px);
+  animation: drift 50s linear infinite;
+}
+
+@keyframes drift {
+  from {
+    transform: translateX(-40px);
+  }
+
+  to {
+    transform: translateX(40px);
+  }
+}
+
+.aircraft-silhouette {
+  position: absolute;
+  bottom: 60px;
+  right: -30px;
+  width: 280px;
+  opacity: 0.14;
   z-index: 1;
-  margin-top: 40px;
+  transform: rotate(-8deg);
+}
+.aircraft-silhouette path { fill: #fff; }
+
+.flight-path-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
 }
 
-.auth-stat .num {
-  font-family: var(--font-display);
-  font-size: 1.6rem;
-  font-weight: 700;
+.flight-path-svg .path {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.3);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 7;
 }
 
-.auth-stat .label {
-  font-size: 0.78rem;
-  color: rgba(255, 255, 255, 0.72);
-  margin-top: 2px;
+.auth-topbar {
+  position: absolute;
+  top: 28px;
+  right: 28px;
+  z-index: 3;
 }
 
-.auth-form-side {
+.auth-form-panel {
+  flex: 1 1 54%;
+  background: var(--paper);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 48px;
+  position: relative;
 }
 
-.auth-form-card {
+.auth-form-inner {
   width: 100%;
   max-width: 400px;
+  animation: form-fade-in 0.6s ease both;
 }
 
-.auth-form-card .step {
-  font-size: 0.78rem;
-  color: var(--slate);
+@keyframes form-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.auth-toggle {
+  display: flex;
+  background: var(--wash);
+  border-radius: 999px;
+  padding: 4px;
+  margin-bottom: 30px;
+}
+
+.auth-toggle a {
+  flex: 1;
+  text-align: center;
+  padding: 9px 0;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.auth-toggle a.active {
+  background: var(--kq-red);
+  color: #fff;
+}
+
+.auth-form-inner h2 {
+  font-size: 1.6rem;
   margin-bottom: 6px;
 }
 
-.auth-form-card h2 {
-  font-size: 1.6rem;
-  margin-bottom: 8px;
-}
-
-.auth-form-card .sub {
+.auth-form-inner .sub {
   color: var(--slate);
   font-size: 0.92rem;
-  margin-bottom: 30px;
+  margin-bottom: 26px;
   display: block;
 }
 
 .auth-switch {
-  margin-top: 22px;
+  margin-top: 18px;
   font-size: 0.9rem;
   color: var(--slate);
   text-align: center;
@@ -374,16 +447,46 @@ textarea:focus-visible {
 
 @media (max-width: 880px) {
   .auth-shell {
-    grid-template-columns: 1fr;
+    flex-direction: column;
   }
 
-  .auth-panel {
+  .auth-visual {
+    min-height: 220px;
+    padding: 28px 24px;
+  }
+
+  .auth-visual-copy h1 {
+    font-size: 1.4rem;
+  }
+
+  .auth-visual-copy p {
     display: none;
   }
 
-  .auth-form-side {
+  .auth-form-panel {
     padding: 32px 24px;
   }
+}
+
+
+.auth-form-inner.leaving {
+  animation: form-fade-out 0.32s ease forwards;
+}
+@keyframes form-fade-out {
+  to { opacity: 0; transform: translateY(-10px) scale(0.98); }
+}
+
+.btn-primary:disabled {
+  opacity: 0.85;
+  cursor: wait;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-form-inner.leaving { animation: none; opacity: 1; transform: none; }
+}
+
+.auth-shell.transitioning #flight-path-mount animateMotion {
+  animation-duration: 0.4s !important;
 }
 
 /* --------------------------------------------------------------------------
@@ -434,7 +537,6 @@ textarea:focus-visible {
 
 .nav-group-label {
   font-size: 0.7rem;
-  text-transform: none;
   color: rgba(255, 255, 255, 0.45);
   margin-bottom: 10px;
   font-weight: 600;
@@ -463,7 +565,12 @@ textarea:focus-visible {
   padding-left: 10px;
 }
 
-.app-sidebar-foot { font-size: 0.85rem; color: rgba(255,255,255,0.65); }
+.app-sidebar-foot {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.65);
+  margin-top: auto;
+}
+
 .topbar-actions {
   position: fixed;
   top: 20px;
@@ -474,39 +581,64 @@ textarea:focus-visible {
   gap: 12px;
 }
 
-.theme-switch { display: inline-flex; cursor: pointer; }
-.theme-switch input { display: none; }
+.theme-switch {
+  display: inline-flex;
+  cursor: pointer;
+}
+
+.theme-switch input {
+  display: none;
+}
+
 .switch-track {
-  width: 44px; height: 24px;
+  width: 44px;
+  height: 24px;
   background: var(--stone-line);
   border-radius: 999px;
   position: relative;
   transition: background 0.2s ease;
   display: inline-block;
 }
+
 .switch-thumb {
-  position: absolute; top: 2px; left: 2px;
-  width: 20px; height: 20px;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   background: #fff;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
   transition: transform 0.2s ease;
 }
-.theme-switch input:checked + .switch-track { background: var(--kq-green); }
-.theme-switch input:checked + .switch-track .switch-thumb { transform: translateX(20px); }
+
+.theme-switch input:checked+.switch-track {
+  background: var(--kq-green);
+}
+
+.theme-switch input:checked+.switch-track .switch-thumb {
+  transform: translateX(20px);
+}
 
 .topbar-actions .icon-btn {
-  width: 36px; height: 36px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   background: var(--glass-bg);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border: 1px solid var(--glass-border);
-  display: flex; align-items: center; justify-content: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
   color: var(--ink);
 }
-.topbar-actions .icon-btn:hover { border-color: var(--kq-red); color: var(--kq-red); }
+
+.topbar-actions .icon-btn:hover {
+  border-color: var(--kq-red);
+  color: var(--kq-red);
+}
 
 .app-main {
   padding: 36px 44px;
@@ -553,18 +685,82 @@ textarea:focus-visible {
   padding: 9px 14px;
   font-size: 0.85rem;
   min-width: 200px;
+  background: var(--panel);
+  color: var(--ink);
 }
 
 /* --------------------------------------------------------------------------
-   Mentor recommendation cards
+   Glass cards — shared by mentor/request/opportunity/notif/event/stat/table
    -------------------------------------------------------------------------- */
+
+.mentor-card,
+.request-card,
+.opportunity-card,
+.notif-item,
+.event-card,
+.stat-card,
+.table-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 20px rgba(20, 32, 28, 0.06);
+}
 
 .mentor-list {
   display: flex;
   flex-direction: column;
 }
 
+.mentor-card {
+  display: grid;
+  grid-template-columns: 52px 1fr auto;
+  gap: 18px;
+  align-items: start;
+  padding: 20px;
+  margin-bottom: 14px;
+}
 
+.request-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 20px;
+  margin-bottom: 14px;
+}
+
+.opportunity-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 20px;
+  margin-bottom: 14px;
+}
+
+.notif-item {
+  display: flex;
+  gap: 12px;
+  padding: 20px;
+  margin-bottom: 14px;
+}
+
+.notif-item.unread {
+  background: rgba(255, 255, 255, 0.78);
+  border-color: var(--kq-green);
+}
+
+.event-card,
+.stat-card {
+  padding: 18px;
+}
+
+.table-card {
+  padding: 8px 20px;
+  overflow-x: auto;
+}
 
 .mentor-avatar {
   width: 52px;
@@ -648,6 +844,7 @@ textarea:focus-visible {
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  color: var(--ink);
 }
 
 .icon-btn:hover {
@@ -659,32 +856,10 @@ textarea:focus-visible {
   color: var(--kq-red);
 }
 
-@media (max-width: 720px) {
-  .app-shell {
-    grid-template-columns: 1fr;
-  }
+/* --------------------------------------------------------------------------
+   Tabs
+   -------------------------------------------------------------------------- */
 
-  .app-sidebar {
-    display: none;
-  }
-
-  .app-main {
-    padding: 24px;
-  }
-
-  .mentor-card {
-    grid-template-columns: 44px 1fr;
-  }
-
-  .mentor-actions {
-    grid-column: 1 / -1;
-    flex-direction: row;
-    justify-content: flex-start;
-    margin-top: 8px;
-  }
-}
-
-/* --- Tabs (Mentorship Requests) --- */
 .tabs {
   display: flex;
   gap: 4px;
@@ -710,7 +885,9 @@ textarea:focus-visible {
   font-weight: 600;
 }
 
-
+/* --------------------------------------------------------------------------
+   Status pills
+   -------------------------------------------------------------------------- */
 
 .request-status {
   font-size: 0.72rem;
@@ -735,7 +912,10 @@ textarea:focus-visible {
   color: var(--ink-soft);
 }
 
-/* --- Admin stats + table --- */
+/* --------------------------------------------------------------------------
+   Admin — stats + table
+   -------------------------------------------------------------------------- */
+
 .stat-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -743,6 +923,17 @@ textarea:focus-visible {
   margin-bottom: 28px;
 }
 
+.stat-card .num {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.stat-card .label {
+  font-size: 0.78rem;
+  color: var(--slate);
+  margin-top: 4px;
+}
 
 .data-table {
   width: 100%;
@@ -764,16 +955,37 @@ textarea:focus-visible {
   vertical-align: middle;
 }
 
-/* --- Events --- */
+/* --------------------------------------------------------------------------
+   Events
+   -------------------------------------------------------------------------- */
+
 .event-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 18px;
 }
 
+.event-card .date {
+  font-size: 0.78rem;
+  color: var(--kq-green);
+  font-weight: 600;
+  margin-bottom: 8px;
+}
 
-/* --- Notifications --- */
+.event-card h3 {
+  font-size: 1rem;
+  margin-bottom: 8px;
+}
 
+.event-card p {
+  font-size: 0.86rem;
+  color: var(--ink-soft);
+  margin-bottom: 16px;
+}
+
+/* --------------------------------------------------------------------------
+   Notifications
+   -------------------------------------------------------------------------- */
 
 .notif-dot {
   width: 8px;
@@ -784,69 +996,31 @@ textarea:focus-visible {
   flex-shrink: 0;
 }
 
-.mentor-card,
-.request-card,
-.opportunity-card,
-.notif-item {
-  background: var(--glass-bg);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius);
-  padding: 20px;
-  margin-bottom: 14px;
-  box-shadow: 0 4px 20px rgba(20, 32, 28, 0.06);
-}
+/* --------------------------------------------------------------------------
+   Responsive
+   -------------------------------------------------------------------------- */
 
-.mentor-card {
-  display: grid;
-  grid-template-columns: 52px 1fr auto;
-  gap: 18px;
-  align-items: start;
-}
+@media (max-width: 720px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
 
-.request-card {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-}
+  .app-sidebar {
+    display: none;
+  }
 
-.opportunity-card {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: flex-start;
-}
+  .app-main {
+    padding: 24px;
+  }
 
-.notif-item {
-  display: flex;
-  gap: 12px;
-}
+  .mentor-card {
+    grid-template-columns: 44px 1fr;
+  }
 
-.notif-item.unread {
-  background: rgba(255, 255, 255, 0.78);
-  border-color: var(--kq-green);
-}
-
-.event-card,
-.stat-card {
-  background: var(--glass-bg);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius);
-  box-shadow: 0 4px 20px rgba(20, 32, 28, 0.06);
-  padding: 18px;
-}
-
-.table-card {
-  background: var(--glass-bg);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius);
-  box-shadow: 0 4px 20px rgba(20,32,28,0.06);
-  padding: 8px 20px;
-  overflow-x: auto;
+  .mentor-actions {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    justify-content: flex-start;
+    margin-top: 8px;
+  }
 }

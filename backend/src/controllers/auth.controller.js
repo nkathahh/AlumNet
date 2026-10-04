@@ -88,6 +88,9 @@ async function login(req, res, next) {
 
     const match = await bcrypt.compare(password, user.password_hash);
     if (!match) return res.status(401).json({ error: 'Invalid email or password' });
+    if (user.status === 'suspended') {
+      return res.status(403).json({ error: 'This account has been suspended. Contact an administrator.' });
+    }
 
     const role = await resolveRole(user.user_id);
     const token = signToken({ userId: user.user_id, role });
