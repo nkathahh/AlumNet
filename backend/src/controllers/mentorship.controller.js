@@ -9,10 +9,16 @@ async function createRequest(req, res, next) {
         if (!mentorId) return res.status(400).json({ error: 'mentorId is required' });
 
         const [[existing]] = await pool.execute(
-            `SELECT request_id FROM mentorship_requests WHERE mentee_id = :userId AND mentor_id = :mentorId AND status = 'pending'`,
+            `SELECT request_id, status FROM mentorship_requests
+            WHERE mentee_id = :userId AND mentor_id = :mentorId AND status IN ('pending','accepted')`,
             { userId, mentorId }
         );
-        if (existing) return res.status(409).json({ error: 'You already have a pending request with this mentor' });
+        if (existing) {
+            const message = existing.status === 'accepted'
+                ? 'This mentor is already mentoring you'
+                : 'You already have a pending request with this mentor';
+            return res.status(409).json({ error: message });
+        }
 
         const [result] = await pool.execute(
             `INSERT INTO mentorship_requests (mentee_id, mentor_id, status) VALUES (:userId, :mentorId, 'pending')`,
@@ -70,6 +76,27 @@ async function respondToRequest(req, res, next) {
     } catch (err) { next(err); }
 }
 
+async function endMentorship(req, res, next) {
+  try {
+    const { userId, role } = req.user;
+    const { id } = req.params;
+    const column = role === 'mentor' ? 'mentor_id' : 'mentee_id';
+
+    const [[request]] = await pool.execute(
+      `SELECT * FROM mentorship_requests WHERE request_id = :id AND ${column} = :userId`,
+      { id, userId }
+    );
+    if (!request) return res.status(404).json({ error: 'Mentorship not found' });
+    if (request.status !== 'accepted') return res.status(400).json({ error: 'Only an active mentorship can be ended' });
+
+    await pool.execute(
+      `UPDATE mentorship_requests SET status = 'ended', ended_by = :userId, ended_at = NOW() WHERE request_id = :id`,
+      { userId, id }
+    );
+    res.json({ request_id: Number(id), status: 'ended' });
+  } catch (err) { next(err); }
+}
+
 async function withdrawRequest(req, res, next) {
   try {
     const { userId, role } = req.user;
@@ -88,4 +115,4 @@ async function withdrawRequest(req, res, next) {
   } catch (err) { next(err); }
 }
 
-module.exports = { createRequest, listMyRequests, respondToRequest, withdrawRequest };
+module.exports = { createRequest, listMyRequests, respondToRequest, withdrawRequest, endMentorship };

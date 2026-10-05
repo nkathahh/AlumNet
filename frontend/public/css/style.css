@@ -911,6 +911,10 @@ textarea:focus-visible {
   background: var(--stone);
   color: var(--ink-soft);
 }
+.request-status.ended {
+  background: var(--stone);
+  color: var(--slate);
+}
 
 /* --------------------------------------------------------------------------
    Admin — stats + table

@@ -508,20 +508,28 @@ async function renderRequests() {
 
     list.querySelectorAll('[data-action]').forEach((btn) => {
       btn.addEventListener('click', async () => {
+        if (btn.dataset.action === 'end' && !confirm('End this mentorship?')) return;
         btn.closest('.request-card').querySelectorAll('button').forEach((b) => (b.disabled = true));
-        const isWithdraw = btn.dataset.action === 'withdraw';
 
         try {
-          const res = isWithdraw
-            ? await fetch(`${API_BASE}/mentorship-requests/${btn.dataset.requestId}`, {
+          let res;
+          if (btn.dataset.action === 'withdraw') {
+            res = await fetch(`${API_BASE}/mentorship-requests/${btn.dataset.requestId}`, {
               method: 'DELETE',
               headers: { Authorization: `Bearer ${token}` }
-            })
-            : await fetch(`${API_BASE}/mentorship-requests/${btn.dataset.requestId}`, {
+            });
+          } else if (btn.dataset.action === 'end') {
+            res = await fetch(`${API_BASE}/mentorship-requests/${btn.dataset.requestId}/end`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token}` }
+            });
+          } else {
+            res = await fetch(`${API_BASE}/mentorship-requests/${btn.dataset.requestId}`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
               body: JSON.stringify({ decision: btn.dataset.action })
             });
+          }
 
           if (!res.ok) { const err = await res.json(); alert(err.error || 'Action failed'); }
           load();
@@ -548,6 +556,7 @@ function requestCardHTML(r) {
   const role = localStorage.getItem('alumnet_role');
   const canDecide = role === 'mentor' && r.status === 'pending';
   const canWithdraw = role === 'mentee' && r.status === 'pending';
+  const canEnd = r.status === 'accepted';
   const date = new Date(r.requested_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
   let actionHTML;
@@ -558,15 +567,17 @@ function requestCardHTML(r) {
     </div>`;
   } else if (canWithdraw) {
     actionHTML = `<button class="btn btn-secondary" data-action="withdraw" data-request-id="${r.request_id}">Withdraw</button>`;
+  } else if (canEnd) {
+    actionHTML = `<button class="btn btn-secondary" data-action="end" data-request-id="${r.request_id}">End mentorship</button>`;
   } else {
-    actionHTML = `<span class="request-status ${r.status}">${r.status}</span>`;
+    actionHTML = `<span class="request-status ${r.status}">${r.status === 'accepted' ? 'active' : r.status}</span>`;
   }
 
   return `
     <div class="request-card">
       <div>
         <strong>${r.other_name}</strong><br>
-        <span style="font-size:0.82rem; color:var(--slate);">${r.other_department || ''} · Requested on ${date}</span>
+        <span style="font-size:0.82rem; color:var(--slate);">${r.other_department || ''} · ${r.status === 'ended' ? 'Ended' : 'Requested'} on ${date}</span>
       </div>
       ${actionHTML}
     </div>`;
