@@ -25,37 +25,101 @@
         </aside>
 
         <main class="app-main">
-            <div class="app-header">
-                <div>
-                    <h1>My profile</h1>
-                    <span class="sub">This is what mentors and mentees see matched against.</span>
+            <div class="profile-header">
+                <div class="profile-avatar" id="profile-avatar"></div>
+                <div class="profile-header-info">
+                    <h1 id="profile-name">Loading...</h1>
+                    <div class="profile-header-meta">
+                        <span class="role-badge" id="profile-role-badge"></span>
+                        <span class="dept" id="profile-dept"></span>
+                        <span class="sep" id="profile-years-sep" style="display:none;">&middot;</span>
+                        <span class="years" id="profile-years" style="display:none;"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="profile-strength" id="profile-strength">
+                <div class="profile-strength-top">
+                    <span class="label">Profile completeness</span>
+                    <span class="pct" id="profile-strength-pct">0%</span>
+                </div>
+                <div class="profile-strength-track">
+                    <div class="profile-strength-fill" id="profile-strength-fill" style="width:0%;"></div>
                 </div>
             </div>
 
             <form id="profile-form" novalidate>
-                <div class="field">
-                    <label for="skills">Skills</label>
-                    <textarea id="skills" name="skills"></textarea>
+                <div class="profile-form-grid">
+                    <div class="profile-card">
+                        <div class="profile-section-label">
+                            <span class="icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                    stroke-linecap="round" stroke-linejoin="round">
+                                    <path
+                                        d="M14.7 6.3a4 4 0 0 1-5.4 5.4L4 17l3 3 5.3-5.3a4 4 0 0 1 5.4-5.4L21 6l-3-3-3.3 3.3z" />
+                                </svg>
+                            </span>
+                            Skills
+                        </div>
+                        <textarea id="skills" name="skills"
+                            placeholder="e.g. Crew scheduling, safety compliance, customer de-escalation"></textarea>
+                    </div>
+
+                    <div class="profile-card">
+                        <div class="profile-section-label">
+                            <span class="icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                    stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="2" y="7" width="20" height="14" rx="2" />
+                                    <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+                                </svg>
+                            </span>
+                            Experience
+                        </div>
+                        <textarea id="experience" name="experience"
+                            placeholder="e.g. Senior Cabin Crew at Kenya Airways for 8 years, flying intercontinental routes"></textarea>
+                    </div>
+
+                    <div class="profile-card">
+                        <div class="profile-section-label">
+                            <span class="icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                    stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <circle cx="12" cy="12" r="6" />
+                                    <circle cx="12" cy="12" r="2" />
+                                </svg>
+                            </span>
+                            Career interests
+                        </div>
+                        <textarea id="interests" name="interests"
+                            placeholder="e.g. Transitioning into safety training and ground operations leadership"></textarea>
+                    </div>
+
+                    <div class="profile-card">
+                        <div class="profile-section-label">
+                            <span class="icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                    stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h1m-1 4h1m4-4h1m-1 4h1M9 21v-4h6v4" />
+                                </svg>
+                            </span>
+                            Industry
+                        </div>
+                        <select id="industry" name="industry">
+                            <option>Aviation</option>
+                            <option>Ground Operations</option>
+                            <option>Logistics</option>
+                            <option>Corporate / Support</option>
+                            <option>Other</option>
+                        </select>
+                    </div>
                 </div>
-                <div class="field">
-                    <label for="experience">Experience</label>
-                    <textarea id="experience" name="experience"></textarea>
+
+                <div class="profile-save-row">
+                    <button type="submit" class="btn btn-primary">Save changes</button>
+                    <span class="save-status" id="save-status">Saved</span>
                 </div>
-                <div class="field">
-                    <label for="interests">Career interests</label>
-                    <textarea id="interests" name="interests"></textarea>
-                </div>
-                <div class="field">
-                    <label for="industry">Industry</label>
-                    <select id="industry" name="industry">
-                        <option>Aviation</option>
-                        <option>Ground Operations</option>
-                        <option>Logistics</option>
-                        <option>Corporate / Support</option>
-                        <option>Other</option>
-                    </select>
-                </div>
-                <button type="submit" class="btn btn-primary">Save changes</button>
             </form>
         </main>
     </div>

@@ -8,6 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
   wireSignupForm();
   wireLoginForm();
   renderMentorList();
+  renderMenteeDashboardHeader()
   renderRequests();
   setRequestsSubtitle();
   wireProfileForm();
@@ -594,15 +595,14 @@ async function wireProfileForm() {
   if (!token) { window.location.href = 'login.html'; return; }
 
   try {
-    const res = await fetch(`${API_BASE}/profile/me`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
+    const res = await fetch(`${API_BASE}/profile/me`, { headers: { Authorization: `Bearer ${token}` } });
     if (res.ok) {
       const data = await res.json();
       form.skills.value = data.skills || '';
       form.experience.value = data.experience || '';
       form.interests.value = data.career_interests || '';
       if (data.industry) form.industry.value = data.industry;
+      renderProfileHeader(data);
     }
   } catch (err) {
     console.error('Could not load profile', err);
@@ -611,6 +611,7 @@ async function wireProfileForm() {
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const data = Object.fromEntries(new FormData(form));
+    const statusEl = document.getElementById('save-status');
     try {
       const res = await fetch(`${API_BASE}/profile/me`, {
         method: 'PUT',
@@ -623,11 +624,48 @@ async function wireProfileForm() {
         })
       });
       if (!res.ok) throw new Error('Save failed');
-      alert('Profile saved.');
+      statusEl.textContent = 'Saved ✓';
+      statusEl.classList.add('visible');
+      setTimeout(() => statusEl.classList.remove('visible'), 2000);
     } catch (err) {
       console.error(err);
+      statusEl.textContent = 'Could not save';
+      statusEl.style.color = 'var(--kq-red)';
+      statusEl.classList.add('visible');
     }
   });
+}
+
+function renderProfileHeader(data) {
+  const nameEl = document.getElementById('profile-name');
+  const avatarEl = document.getElementById('profile-avatar');
+  const badgeEl = document.getElementById('profile-role-badge');
+  const deptEl = document.getElementById('profile-dept');
+  const yearsEl = document.getElementById('profile-years');
+  if (!nameEl) return;
+
+  nameEl.textContent = data.name;
+
+  const initials = (data.name || '').split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
+  avatarEl.textContent = initials;
+  avatarEl.style.background = colorFromName(data.name || '');
+
+  badgeEl.textContent = data.role;
+  badgeEl.className = `role-badge ${data.role}`;
+
+  if (data.department) deptEl.textContent = data.department;
+
+  if (data.role === 'mentor' && data.years_of_experience) {
+    yearsEl.textContent = `${data.years_of_experience} yrs experience`;
+    yearsEl.style.display = 'inline';
+  }
+}
+
+function colorFromName(name) {
+  const palette = ['#045C43', '#C8102E', '#0A7A5A', '#A00C24', '#15201C'];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return palette[Math.abs(hash) % palette.length];
 }
 
 
@@ -927,4 +965,61 @@ function renderNotifications() {
       <span class="notif-dot" style="${n.unread ? '' : 'background:transparent;'}"></span>
       <div><div>${n.message}</div><div class="mentor-meta">${n.time}</div></div>
     </div>`).join('');
+}
+
+
+async function renderMenteeDashboardHeader() {
+  const greetingEl = document.getElementById('dash-greeting');
+  const statsEl = document.getElementById('dash-stats');
+  const nudgeMount = document.getElementById('profile-nudge-mount');
+  if (!greetingEl || !statsEl) return;
+
+  const token = localStorage.getItem('alumnet_token');
+  if (!token) return;
+
+  try {
+    const [profileRes, summaryRes] = await Promise.all([
+      fetch(`${API_BASE}/profile/me`, { headers: { Authorization: `Bearer ${token}` } }),
+      fetch(`${API_BASE}/dashboard/mentee-summary`, { headers: { Authorization: `Bearer ${token}` } })
+    ]);
+    const profile = profileRes.ok ? await profileRes.json() : null;
+    const summary = summaryRes.ok ? await summaryRes.json() : null;
+
+    if (profile?.name) {
+      const firstName = profile.name.split(' ')[0];
+      greetingEl.textContent = `Welcome back, ${firstName}`;
+    }
+
+    if (summary) {
+      statsEl.innerHTML = `
+        <div class="dash-stat-card">
+          <div class="icon">🤝</div>
+          <div class="num">${summary.activeMentorships}</div>
+          <div class="label">Active mentorship${summary.activeMentorships === 1 ? '' : 's'}</div>
+        </div>
+        <div class="dash-stat-card">
+          <div class="icon">⏳</div>
+          <div class="num">${summary.pendingRequests}</div>
+          <div class="label">Pending request${summary.pendingRequests === 1 ? '' : 's'}</div>
+        </div>
+        <div class="dash-stat-card ${summary.profileComplete ? '' : 'alert'}">
+          <div class="icon">${summary.profileComplete ? '✅' : '⚠️'}</div>
+          <div class="num">${summary.profileComplete ? 'Complete' : 'Incomplete'}</div>
+          <div class="label">Profile status</div>
+        </div>`;
+
+      if (!summary.profileComplete && nudgeMount) {
+        nudgeMount.innerHTML = `
+          <div class="profile-nudge">
+            <div>
+              <strong>Your profile is incomplete</strong>
+              <p>Mentor matches are only as good as your profile. Add your skills and experience to get better recommendations.</p>
+            </div>
+            <a href="profile.html" class="btn btn-primary" style="white-space:nowrap;">Complete profile</a>
+          </div>`;
+      }
+    }
+  } catch {
+    // header is non-critical, fail quietly and leave defaults
+  }
 }

@@ -9,6 +9,7 @@ const eventRoutes = require('./routes/events.routes');
 const opportunityRoutes = require('./routes/opportunities.routes');
 const adminRoutes = require('./routes/admin.routes');
 const recommendationRoutes = require('./routes/recommendations.routes');
+const dashboardRoutes = require('./routes/dashboard.routes');
 
 const app = express();
 app.use(cors());
@@ -23,6 +24,7 @@ app.use('/api/events', eventRoutes);
 app.use('/api/opportunities', opportunityRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/recommendations', recommendationRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err);

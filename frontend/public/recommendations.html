@@ -12,12 +12,12 @@
 
   <div class="app-shell">
     <div class="topbar-actions">
-  <label class="theme-switch" title="Toggle dark mode">
-    <input type="checkbox" id="theme-toggle-checkbox">
-    <span class="switch-track"><span class="switch-thumb"></span></span>
-  </label>
-  <button id="logout-btn" class="icon-btn" aria-label="Log out" title="Log out">⏻</button>
-</div>
+      <label class="theme-switch" title="Toggle dark mode">
+        <input type="checkbox" id="theme-toggle-checkbox">
+        <span class="switch-track"><span class="switch-thumb"></span></span>
+      </label>
+      <button id="logout-btn" class="icon-btn" aria-label="Log out" title="Log out">⏻</button>
+    </div>
     <aside class="app-sidebar">
       <div class="app-brand"><span class="mark">KQ</span> AlumNet</div>
       <nav id="sidebar-nav"></nav>
@@ -25,25 +25,21 @@
     </aside>
 
     <main class="app-main">
-      <div class="app-header">
-        <div>
-          <h1>Recommended mentors</h1>
-          <span class="sub">Ranked by how closely their profile matches your skills and career interests.</span>
-        </div>
-        <div class="app-toolbar">
-          <input class="search-pill" type="text" placeholder="Search mentors">
-          <select class="select-pill">
-            <option>All departments</option>
-            <option>Flight Operations</option>
-            <option>Cabin Services</option>
-            <option>Ground Operations</option>
-          </select>
-        </div>
+      <div class="dash-header">
+        <h1 class="greeting" id="dash-greeting">Welcome back</h1>
+        <span class="greeting-sub">Here's where things stand today.</span>
       </div>
 
-      <div class="mentor-list" id="mentor-list">
-        <!-- mentor cards rendered by js/main.js from MOCK_MENTORS -->
+      <div class="dash-stat-row" id="dash-stats"></div>
+
+      <div id="profile-nudge-mount"></div>
+
+      <div class="section-heading">
+        <h2>Recommended mentors</h2>
+        <span class="count">Ranked by profile match</span>
       </div>
+
+      <div class="mentor-list" id="mentor-list"></div>
     </main>
   </div>
 
