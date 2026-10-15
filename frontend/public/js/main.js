@@ -24,6 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderAdminOpportunities();
   renderAdminLogs();
   wireAdminSearch();
+  wireSidebarToggle();
 });
 
 const API_BASE = 'http://localhost:4000/api';
@@ -993,17 +994,32 @@ async function renderMenteeDashboardHeader() {
     if (summary) {
       statsEl.innerHTML = `
         <div class="dash-stat-card">
-          <div class="icon">🤝</div>
+          <div class="icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+          </div>
           <div class="num">${summary.activeMentorships}</div>
           <div class="label">Active mentorship${summary.activeMentorships === 1 ? '' : 's'}</div>
         </div>
         <div class="dash-stat-card">
-          <div class="icon">⏳</div>
+          <div class="icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 6v6l4 2" />
+            </svg>
+          </div>
           <div class="num">${summary.pendingRequests}</div>
           <div class="label">Pending request${summary.pendingRequests === 1 ? '' : 's'}</div>
         </div>
         <div class="dash-stat-card ${summary.profileComplete ? '' : 'alert'}">
-          <div class="icon">${summary.profileComplete ? '✅' : '⚠️'}</div>
+          <div class="icon">
+            ${summary.profileComplete
+              ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>'
+              : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>'}
+          </div>
           <div class="num">${summary.profileComplete ? 'Complete' : 'Incomplete'}</div>
           <div class="label">Profile status</div>
         </div>`;
@@ -1022,4 +1038,27 @@ async function renderMenteeDashboardHeader() {
   } catch {
     // header is non-critical, fail quietly and leave defaults
   }
+}
+function wireSidebarToggle() {
+  const btn = document.getElementById('hamburger-btn');
+  const sidebar = document.querySelector('.app-sidebar');
+  const backdrop = document.getElementById('sidebar-backdrop');
+  if (!btn || !sidebar || !backdrop) return;
+
+  function closeSidebar() {
+    sidebar.classList.remove('open');
+    backdrop.classList.remove('visible');
+    btn.classList.remove('open');
+    btn.setAttribute('aria-expanded', 'false');
+  }
+
+  btn.addEventListener('click', () => {
+    const isOpen = sidebar.classList.toggle('open');
+    backdrop.classList.toggle('visible', isOpen);
+    btn.classList.toggle('open', isOpen);
+    btn.setAttribute('aria-expanded', String(isOpen));
+  });
+
+  backdrop.addEventListener('click', closeSidebar);
+  sidebar.querySelectorAll('a').forEach((link) => link.addEventListener('click', closeSidebar));
 }
