@@ -696,22 +696,72 @@ async function openMentorProfile(mentorId) {
    Events (FR-07, FR-08) — mentee/mentor view, still mock
    -------------------------------------------------------------------- */
 
-const MOCK_EVENTS = [
-  { title: 'Cabin Crew Reunion', date: 'Sep 14, 2026 · Nairobi', desc: 'A reunion for former cabin crew with panels on career transitions and networking.' },
-  { title: 'Safety & Training Workshop', date: 'Aug 29, 2026 · Virtual', desc: 'Interactive sessions with veteran trainers on modern safety procedures.' }
-];
-
-function renderEvents() {
+async function renderEvents() {
   const grid = document.getElementById('event-grid');
   if (!grid) return;
-  // TODO: replace MOCK_EVENTS with GET /api/events
-  grid.innerHTML = MOCK_EVENTS.map((e) => `
+  const token = localStorage.getItem('alumnet_token');
+  if (!token) return;
+
+  grid.innerHTML = '<p style="color:var(--slate); padding:20px 4px;">Loading events...</p>';
+
+  try {
+    const res = await fetch(`${API_BASE}/events`, { headers: { Authorization: `Bearer ${token}` } });
+    const events = await res.json();
+    if (!res.ok) {
+      grid.innerHTML = `<p style="color:var(--kq-red); padding:20px 4px;">${events.error || 'Could not load events.'}</p>`;
+      return;
+    }
+    if (!events.length) {
+      grid.innerHTML = '<p style="color:var(--slate); padding:20px 4px;">No upcoming events yet.</p>';
+      return;
+    }
+
+    grid.innerHTML = events.map(eventCardHTML).join('');
+
+    grid.querySelectorAll('[data-event-action]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        const registering = btn.dataset.eventAction === 'register';
+        try {
+          const r = await fetch(`${API_BASE}/events/${btn.dataset.eventId}/register`, {
+            method: registering ? 'POST' : 'DELETE',
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (!r.ok) {
+            const err = await r.json();
+            alert(err.error || 'Action failed');
+          }
+          renderEvents(); // refresh so the count and button state update
+        } catch {
+          alert('Could not reach the server.');
+          btn.disabled = false;
+        }
+      });
+    });
+  } catch {
+    grid.innerHTML = '<p style="color:var(--kq-red); padding:20px 4px;">Could not reach the server.</p>';
+  }
+}
+
+function eventCardHTML(e) {
+  const d = new Date(e.event_date);
+  const date = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const registered = Number(e.is_registered) === 1;
+  const count = Number(e.attendee_count);
+
+  return `
     <div class="event-card">
-      <div class="date">${e.date}</div>
+      <div class="date">${date} · ${time}</div>
       <h3>${e.title}</h3>
-      <p>${e.desc}</p>
-      <button class="btn btn-primary btn-block" data-action="register">Register</button>
-    </div>`).join('');
+      <p>${e.description || ''}</p>
+      <div class="mentor-meta" style="margin-bottom:12px;">${count} attending</div>
+      <button class="btn ${registered ? 'btn-secondary' : 'btn-primary'} btn-block"
+              data-event-action="${registered ? 'cancel' : 'register'}"
+              data-event-id="${e.event_id}">
+        ${registered ? 'Cancel registration' : 'Register'}
+      </button>
+    </div>`;
 }
 
 /* --------------------------------------------------------------------
