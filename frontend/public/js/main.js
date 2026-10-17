@@ -424,6 +424,20 @@ async function renderMentorList() {
     list.innerHTML = '<p style="color:var(--kq-red); padding:20px 4px;">Could not reach the server.</p>';
   }
 }
+// Three small bars explaining where a match comes from
+function matchBreakdownHTML(b) {
+  if (!b) return '';
+  const rows = [['Skills', b.skills], ['Experience', b.experience], ['Your goals', b.goals]];
+  return `
+    <div class="match-breakdown">
+      ${rows.map(([label, v]) => `
+        <div class="mb-row" title="${v === null ? 'Not enough information on one of the profiles' : label + ' similarity'}">
+          <span class="mb-label">${label}</span>
+          <span class="mb-track"><span class="mb-fill" style="width:${v ?? 0}%"></span></span>
+          <span class="mb-value">${v === null ? 'n/a' : Math.round(v) + '%'}</span>
+        </div>`).join('')}
+    </div>`;
+}
 
 function apiMentorCardHTML(m, alreadyRequested) {
   const initials = m.name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
@@ -436,6 +450,9 @@ function apiMentorCardHTML(m, alreadyRequested) {
           <span class="match-score">${m.score}% match</span>
         </div>
         <div class="mentor-tags">${m.matched_attributes.map((t) => `<span class="tag">${t}</span>`).join('')}</div>
+        <div class="mentor-tags">${m.matched_attributes.map((t) => `<span class="tag">${t}</span>`).join('')}</div>
+        ${matchBreakdownHTML(m.breakdown)}
+        <div class="mentor-meta">${m.department || ''}${m.years_of_experience ? ' · ' + m.years_of_experience + ' yrs experience' : ''}</div>
         <div class="mentor-meta">${m.department || ''}${m.years_of_experience ? ' · ' + m.years_of_experience + ' yrs experience' : ''}</div>
       </div>
       <div class="mentor-actions">

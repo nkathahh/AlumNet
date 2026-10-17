@@ -1,0 +1,37 @@
+run_id,mentee,method,mentor,expected_rank,actual_rank,score
+20261018_011622,Joyce Wafula,TF-IDF baseline,Brian Otieno,1,1,43.3
+20261018_011622,Joyce Wafula,TF-IDF baseline,Catherine Akinyi,2,2,33.0
+20261018_011622,Joyce Wafula,TF-IDF baseline,Milka Njeri,3,3,13.7
+20261018_011622,Joyce Wafula,TF-IDF baseline,Ruth Njoroge,4,4,1.7
+20261018_011622,Joyce Wafula,BGE whole profile (deployed),Brian Otieno,1,2,84.2
+20261018_011622,Joyce Wafula,BGE whole profile (deployed),Catherine Akinyi,2,1,91.2
+20261018_011622,Joyce Wafula,BGE whole profile (deployed),Milka Njeri,3,3,83.7
+20261018_011622,Joyce Wafula,BGE whole profile (deployed),Ruth Njoroge,4,4,77.9
+20261018_011622,Joyce Wafula,BGE field-weighted,Brian Otieno,1,1,81.5
+20261018_011622,Joyce Wafula,BGE field-weighted,Catherine Akinyi,2,2,81.0
+20261018_011622,Joyce Wafula,BGE field-weighted,Milka Njeri,3,3,73.1
+20261018_011622,Joyce Wafula,BGE field-weighted,Ruth Njoroge,4,4,68.5
+20261018_011622,Daniel Mwangi,TF-IDF baseline,Brian Otieno,,4,1.1
+20261018_011622,Daniel Mwangi,TF-IDF baseline,Catherine Akinyi,,3,3.5
+20261018_011622,Daniel Mwangi,TF-IDF baseline,Milka Njeri,,2,4.0
+20261018_011622,Daniel Mwangi,TF-IDF baseline,Ruth Njoroge,,1,41.0
+20261018_011622,Daniel Mwangi,BGE whole profile (deployed),Brian Otieno,,4,64.0
+20261018_011622,Daniel Mwangi,BGE whole profile (deployed),Catherine Akinyi,,3,74.6
+20261018_011622,Daniel Mwangi,BGE whole profile (deployed),Milka Njeri,,2,75.7
+20261018_011622,Daniel Mwangi,BGE whole profile (deployed),Ruth Njoroge,,1,92.0
+20261018_011622,Daniel Mwangi,BGE field-weighted,Brian Otieno,,4,64.2
+20261018_011622,Daniel Mwangi,BGE field-weighted,Catherine Akinyi,,2,67.8
+20261018_011622,Daniel Mwangi,BGE field-weighted,Milka Njeri,,3,65.3
+20261018_011622,Daniel Mwangi,BGE field-weighted,Ruth Njoroge,,1,82.4
+20261018_011622,Peter Kamau,TF-IDF baseline,Brian Otieno,,2,10.0
+20261018_011622,Peter Kamau,TF-IDF baseline,Catherine Akinyi,,1,10.1
+20261018_011622,Peter Kamau,TF-IDF baseline,Milka Njeri,,3,3.1
+20261018_011622,Peter Kamau,TF-IDF baseline,Ruth Njoroge,,4,2.7
+20261018_011622,Peter Kamau,BGE whole profile (deployed),Brian Otieno,,3,79.0
+20261018_011622,Peter Kamau,BGE whole profile (deployed),Catherine Akinyi,,1,84.1
+20261018_011622,Peter Kamau,BGE whole profile (deployed),Milka Njeri,,2,80.6
+20261018_011622,Peter Kamau,BGE whole profile (deployed),Ruth Njoroge,,4,75.2
+20261018_011622,Peter Kamau,BGE field-weighted,Brian Otieno,,2,70.0
+20261018_011622,Peter Kamau,BGE field-weighted,Catherine Akinyi,,1,71.8
+20261018_011622,Peter Kamau,BGE field-weighted,Milka Njeri,,3,66.0
+20261018_011622,Peter Kamau,BGE field-weighted,Ruth Njoroge,,4,60.5

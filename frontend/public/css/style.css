@@ -1376,3 +1376,17 @@ textarea:focus-visible {
 .opp-tags { display: flex; gap: 6px; flex-wrap: wrap; }
 .opp-company { font-size: 0.85rem; color: var(--ink-soft); margin-bottom: 8px; }
 .tag.closing-soon { background: rgba(200, 16, 46, 0.1); color: var(--kq-red); font-weight: 600; }
+
+/* Match breakdown bars on mentor cards */
+.match-breakdown { display: grid; gap: 4px; margin: 6px 0 8px; max-width: 320px; }
+.mb-row {
+  display: grid;
+  grid-template-columns: 78px 1fr 38px;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.74rem;
+  color: var(--slate);
+}
+.mb-track { height: 5px; background: var(--stone); border-radius: 999px; overflow: hidden; }
+.mb-fill { display: block; height: 100%; background: var(--kq-green); border-radius: 999px; }
+.mb-value { text-align: right; font-weight: 600; color: var(--ink-soft); }

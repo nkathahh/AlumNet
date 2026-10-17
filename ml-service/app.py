@@ -23,9 +23,24 @@ def get_connection():
     )
 
 
+def field(row, key):
+    return (row.get(key) or '').strip()
+
+
 def profile_text(row):
-    parts = [row.get('skills') or '', row.get('experience') or '', row.get('career_interests') or '']
-    return '. '.join(p for p in parts if p).strip()
+    """Whole-profile text used for the overall score (the deployed ranking)."""
+    parts = [field(row, 'skills'), field(row, 'experience'), field(row, 'career_interests')]
+    return '. '.join(p for p in parts if p)
+
+
+def background_text(row):
+    """What a mentor has actually done: skills plus experience, without their own interests."""
+    parts = [field(row, 'skills'), field(row, 'experience')]
+    return '. '.join(p for p in parts if p)
+
+
+def pct(a, b):
+    return round(float(cosine_similarity([a], [b])[0][0]) * 100, 1)
 
 
 def matched_attributes(mentee_text, mentor_row):
@@ -70,27 +85,51 @@ def recommend():
         JOIN profiles p ON p.user_id = mt.user_id
         WHERE mt.user_id != %s
     """, (mentee_id,))
-    mentors = cur.fetchall()
+    # Mentors with an empty profile can't be meaningfully compared, so leave them out
+    mentors = [m for m in cur.fetchall() if profile_text(m)]
     cur.close(); conn.close()
 
     if not mentors:
         return jsonify([])
 
     mentee_text = profile_text(mentee)
-    mentor_texts = [profile_text(m) for m in mentors]
+    me_skills = field(mentee, 'skills')
+    me_exp = field(mentee, 'experience')
+    me_goals = field(mentee, 'career_interests')
 
-    mentee_embedding = MODEL.encode([mentee_text])
-    mentor_embeddings = MODEL.encode(mentor_texts)
-    scores = cosine_similarity(mentee_embedding, mentor_embeddings)[0]
+    # Gather every text that needs encoding and encode them in one batch:
+    # 4 for the mentee, then 4 per mentor (whole profile, skills, experience, background)
+    texts = [mentee_text, me_skills, me_exp, me_goals]
+    for m in mentors:
+        texts += [profile_text(m), field(m, 'skills'), field(m, 'experience'), background_text(m)]
+    vectors = MODEL.encode(texts, normalize_embeddings=True)
 
-    results = [{
-        "mentor_id": m["user_id"],
-        "name": m["name"],
-        "department": m["department"],
-        "years_of_experience": m["years_of_experience"],
-        "score": round(float(s) * 100, 1),
-        "matched_attributes": matched_attributes(mentee_text, m)
-    } for m, s in zip(mentors, scores)]
+    v_whole, v_skills, v_exp, v_goals = vectors[0], vectors[1], vectors[2], vectors[3]
+
+    results = []
+    for i, m in enumerate(mentors):
+        base = 4 + 4 * i
+        m_whole, m_skills, m_exp, m_background = vectors[base:base + 4]
+
+        # Field-level explanation. "goals" deliberately compares the mentee's
+        # career interests against what the mentor has DONE (skills + experience),
+        # not against the mentor's own interests. A field is None when either
+        # side left it empty, so the UI can say there isn't enough information.
+        breakdown = {
+            "skills": pct(v_skills, m_skills) if me_skills and field(m, 'skills') else None,
+            "experience": pct(v_exp, m_exp) if me_exp and field(m, 'experience') else None,
+            "goals": pct(v_goals, m_background) if me_goals and background_text(m) else None,
+        }
+
+        results.append({
+            "mentor_id": m["user_id"],
+            "name": m["name"],
+            "department": m["department"],
+            "years_of_experience": m["years_of_experience"],
+            "score": pct(v_whole, m_whole),
+            "breakdown": breakdown,
+            "matched_attributes": matched_attributes(mentee_text, m)
+        })
 
     results.sort(key=lambda r: r["score"], reverse=True)
     return jsonify(results[:10])
