@@ -30,6 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
   wireSidebarToggle();
   wireEventsPage();
   renderAdminPendingEvents();
+  wireOpportunitiesPage();
 });
 
 const API_BASE = 'http://localhost:4000/api';
@@ -991,25 +992,257 @@ async function renderAdminPendingEvents() {
    Career opportunities (FR-09) — mentee/mentor view, still mock
    -------------------------------------------------------------------- */
 
-const MOCK_OPPORTUNITIES = [
-  { title: 'Senior Cabin Services Trainer', tag: 'Aviation', desc: 'Lead training programs for cabin crew and develop updated safety curricula.', by: 'Mercy Wanjiru' },
-  { title: 'Ground Operations Coordinator', tag: 'Logistics', desc: 'Coordinate ramp activities and ensure smooth turnaround.', by: 'Samuel Otieno' }
-];
+let allOpportunities = [];
 
-function renderOpportunities() {
+const OPPORTUNITY_TYPES = {
+  full_time: 'Full-time',
+  part_time: 'Part-time',
+  contract: 'Contract',
+  consultancy: 'Consultancy',
+  internal_transfer: 'Internal transfer',
+  volunteer: 'Volunteer'
+};
+
+function truncate(str, n) {
+  const s = String(str || '');
+  return s.length > n ? s.slice(0, n).trimEnd() + '...' : s;
+}
+
+// "Closes in 3 days" when it's soon, otherwise the plain date
+function closingLabel(dateStr) {
+  if (!dateStr) return { text: '', soon: false };
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const close = new Date(dateStr); close.setHours(0, 0, 0, 0);
+  const days = Math.round((close - today) / 86400000);
+  if (days === 0) return { text: 'Closes today', soon: true };
+  if (days === 1) return { text: 'Closes tomorrow', soon: true };
+  if (days <= 7) return { text: `Closes in ${days} days`, soon: true };
+  return {
+    text: `Closes ${close.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`,
+    soon: false
+  };
+}
+
+async function renderOpportunities() {
   const list = document.getElementById('opportunities-list');
   if (!list) return;
-  // TODO: replace MOCK_OPPORTUNITIES with GET /api/opportunities
-  list.innerHTML = MOCK_OPPORTUNITIES.map((o) => `
+  const token = localStorage.getItem('alumnet_token');
+  if (!token) return;
+
+  list.innerHTML = '<p style="color:var(--slate); padding:20px 4px;">Loading opportunities...</p>';
+  try {
+    const res = await fetch(`${API_BASE}/opportunities`, { headers: { Authorization: `Bearer ${token}` } });
+    const data = await res.json();
+    if (!res.ok) {
+      list.innerHTML = `<p style="color:var(--kq-red); padding:20px 4px;">${escapeHTML(data.error || 'Could not load opportunities.')}</p>`;
+      return;
+    }
+    allOpportunities = data;
+    drawOpportunities();
+  } catch {
+    list.innerHTML = '<p style="color:var(--kq-red); padding:20px 4px;">Could not reach the server.</p>';
+  }
+}
+
+function drawOpportunities() {
+  const list = document.getElementById('opportunities-list');
+  if (!list) return;
+
+  const q = (document.getElementById('opp-search')?.value || '').toLowerCase().trim();
+  const industry = document.getElementById('opp-industry')?.value || '';
+  const type = document.getElementById('opp-type')?.value || '';
+
+  const filtered = allOpportunities.filter((o) => {
+    if (industry && o.industry !== industry) return false;
+    if (type && o.opportunity_type !== type) return false;
+    if (q) {
+      const haystack = `${o.title} ${o.company || ''} ${o.description || ''}`.toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
+    return true;
+  });
+
+  if (!filtered.length) {
+    list.innerHTML = `<p style="color:var(--slate); padding:20px 4px;">${
+      allOpportunities.length ? 'No opportunities match your filters.' : 'No open opportunities right now.'
+    }</p>`;
+    return;
+  }
+
+  list.innerHTML = filtered.map(opportunityCardHTML).join('');
+  list.querySelectorAll('[data-view-opp]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const opp = allOpportunities.find((o) => String(o.opportunity_id) === btn.dataset.viewOpp);
+      if (opp) openOpportunityModal(opp);
+    });
+  });
+}
+
+function opportunityCardHTML(o) {
+  const closing = closingLabel(o.closing_date);
+  return `
     <div class="opportunity-card">
       <div>
-        <span class="tag">${o.tag}</span>
-        <h3 style="font-size:1rem; margin: 6px 0;">${o.title}</h3>
-        <p class="mentor-blurb">${o.desc}</p>
-        <div class="mentor-meta">Posted by ${o.by}</div>
+        <div class="opp-tags">
+          <span class="tag">${escapeHTML(OPPORTUNITY_TYPES[o.opportunity_type] || 'Opportunity')}</span>
+          ${o.industry ? `<span class="tag">${escapeHTML(o.industry)}</span>` : ''}
+          ${closing.soon ? `<span class="tag closing-soon">${closing.text}</span>` : ''}
+        </div>
+        <h3 style="font-size:1rem; margin:8px 0 2px;">${escapeHTML(o.title)}</h3>
+        <div class="opp-company">${escapeHTML(o.company || '')}${o.location ? ' · ' + escapeHTML(o.location) : ''}</div>
+        <p class="mentor-blurb">${escapeHTML(truncate(o.description, 160))}</p>
+        <div class="mentor-meta">Posted by ${escapeHTML(o.posted_by_name)}${!closing.soon && closing.text ? ' · ' + closing.text : ''}</div>
       </div>
-      <button class="btn btn-secondary">View</button>
-    </div>`).join('');
+      <button class="btn btn-secondary" data-view-opp="${o.opportunity_id}">View</button>
+    </div>`;
+}
+
+function openOpportunityModal(o) {
+  const link = (o.apply_link || '').trim();
+  const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(link);
+  const href = isEmail ? `mailto:${link}` : link;
+  const closing = closingLabel(o.closing_date);
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal-card">
+      <h3>${escapeHTML(o.title)}</h3>
+      <div class="modal-meta">${escapeHTML(o.company || '')}${o.location ? ' · ' + escapeHTML(o.location) : ''}</div>
+      <div class="modal-section"><div class="label">Type</div><div class="value">${escapeHTML(OPPORTUNITY_TYPES[o.opportunity_type] || 'Opportunity')}${o.industry ? ' · ' + escapeHTML(o.industry) : ''}</div></div>
+      <div class="modal-section"><div class="label">Description</div><div class="value" style="white-space:pre-line;">${escapeHTML(o.description || '')}</div></div>
+      ${closing.text ? `<div class="modal-section"><div class="label">Closing date</div><div class="value">${closing.text}</div></div>` : ''}
+      <div class="modal-section"><div class="label">Posted by</div><div class="value">${escapeHTML(o.posted_by_name)}${o.posted_by_department ? ', ' + escapeHTML(o.posted_by_department) : ''}</div></div>
+      ${link
+        ? `<a class="btn btn-primary btn-block" href="${escapeHTML(href)}" target="_blank" rel="noopener" style="margin-bottom:10px;">${isEmail ? 'Apply by email' : 'Apply now'}</a>`
+        : '<p class="mentor-meta" style="margin-bottom:10px;">No application link was provided.</p>'}
+      <button class="btn btn-secondary btn-block" id="close-opp-modal">Close</button>
+    </div>`;
+  document.body.appendChild(backdrop);
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
+  backdrop.querySelector('#close-opp-modal').addEventListener('click', () => backdrop.remove());
+}
+
+// Runs once per page load: filters, plus posting for mentors
+function wireOpportunitiesPage() {
+  ['opp-search', 'opp-industry', 'opp-type'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', drawOpportunities);
+  });
+
+  const postBtn = document.getElementById('post-opportunity-btn');
+  if (postBtn && localStorage.getItem('alumnet_role') === 'mentor') {
+    postBtn.addEventListener('click', openPostOpportunityModal);
+    renderMyPosts();
+  }
+}
+
+function openPostOpportunityModal() {
+  const token = localStorage.getItem('alumnet_token');
+  const today = new Date().toLocaleDateString('en-CA');
+  const typeOptions = Object.entries(OPPORTUNITY_TYPES)
+    .map(([value, label]) => `<option value="${value}">${label}</option>`).join('');
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal-card">
+      <h3>Post an opportunity</h3>
+      <div class="modal-meta">Opportunities are reviewed by the admin before they appear to the network.</div>
+      <form id="post-opp-form" novalidate>
+        <div class="field"><label for="poTitle">Role title</label><input type="text" id="poTitle" placeholder="e.g. Cabin Safety Trainer"></div>
+        <div class="field"><label for="poCompany">Company or department</label><input type="text" id="poCompany" placeholder="e.g. KQ Training Academy"></div>
+        <div class="field-row">
+          <div class="field"><label for="poType">Type</label><select id="poType">${typeOptions}</select></div>
+          <div class="field">
+            <label for="poIndustry">Industry</label>
+            <select id="poIndustry">
+              <option>Aviation</option><option>Ground Operations</option><option>Logistics</option>
+              <option>Corporate / Support</option><option>Other</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label for="poLocation">Location</label><input type="text" id="poLocation" placeholder="e.g. Nairobi or Remote"></div>
+          <div class="field"><label for="poClosing">Closing date</label><input type="date" id="poClosing" min="${today}"></div>
+        </div>
+        <div class="field"><label for="poLink">Application link or contact email</label><input type="text" id="poLink" placeholder="https://... or name@example.com"></div>
+        <div class="field"><label for="poDescription">Description</label><textarea id="poDescription" placeholder="What the role involves and who it suits"></textarea></div>
+        <p id="po-error" style="color:var(--kq-red); font-size:0.85rem; display:none; margin-bottom:12px;"></p>
+        <div style="display:flex; gap:10px;">
+          <button type="submit" class="btn btn-primary">Submit for review</button>
+          <button type="button" class="btn btn-secondary" id="po-cancel">Cancel</button>
+        </div>
+      </form>
+    </div>`;
+  document.body.appendChild(backdrop);
+
+  const close = () => backdrop.remove();
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+  backdrop.querySelector('#po-cancel').addEventListener('click', close);
+
+  backdrop.querySelector('#post-opp-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errorEl = backdrop.querySelector('#po-error');
+    errorEl.style.display = 'none';
+
+    const payload = {
+      title: backdrop.querySelector('#poTitle').value,
+      company: backdrop.querySelector('#poCompany').value,
+      opportunityType: backdrop.querySelector('#poType').value,
+      industry: backdrop.querySelector('#poIndustry').value,
+      location: backdrop.querySelector('#poLocation').value,
+      closingDate: backdrop.querySelector('#poClosing').value,
+      applyLink: backdrop.querySelector('#poLink').value,
+      description: backdrop.querySelector('#poDescription').value
+    };
+
+    try {
+      const res = await fetch(`${API_BASE}/opportunities`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload)
+      });
+      const result = await res.json();
+      if (!res.ok) {
+        errorEl.textContent = result.error || 'Could not submit the opportunity';
+        errorEl.style.display = 'block';
+        return;
+      }
+      close();
+      renderMyPosts();
+    } catch {
+      errorEl.textContent = 'Could not reach the server.';
+      errorEl.style.display = 'block';
+    }
+  });
+}
+
+async function renderMyPosts() {
+  const mount = document.getElementById('my-posts');
+  if (!mount) return;
+  const token = localStorage.getItem('alumnet_token');
+
+  try {
+    const res = await fetch(`${API_BASE}/opportunities/mine`, { headers: { Authorization: `Bearer ${token}` } });
+    const rows = await res.json();
+    if (!res.ok || !rows.length) { mount.innerHTML = ''; return; }
+
+    mount.innerHTML = `
+      <div class="section-heading"><h2>Your posts</h2></div>
+      ${rows.map((p) => `
+        <div class="request-card">
+          <div>
+            <strong>${escapeHTML(p.title)}</strong><br>
+            <span style="font-size:0.82rem; color:var(--slate);">
+              ${escapeHTML(p.company || '')}${p.closing_date ? ' · ' + closingLabel(p.closing_date).text : ''}
+            </span>
+          </div>
+          <span class="request-status ${p.approval_status}">${p.approval_status}</span>
+        </div>`).join('')}`;
+  } catch {
+    mount.innerHTML = '';
+  }
 }
 
 /* --------------------------------------------------------------------
@@ -1191,13 +1424,20 @@ async function renderAdminOpportunities() {
   if (!res.ok) { list.innerHTML = `<p>${opps.error}</p>`; return; }
   if (!opps.length) { list.innerHTML = '<p style="color:var(--slate); padding:20px 4px;">Nothing pending review.</p>'; return; }
 
-  list.innerHTML = opps.map((o) => `
+    list.innerHTML = opps.map((o) => `
     <div class="opportunity-card">
       <div>
-        <span class="tag">${o.industry || ''}</span>
-        <h3 style="font-size:1rem; margin:6px 0;">${o.title}</h3>
-        <p class="mentor-blurb">${o.description || ''}</p>
-        <div class="mentor-meta">Posted by ${o.posted_by_name}</div>
+        <div class="opp-tags">
+          <span class="tag">${escapeHTML(OPPORTUNITY_TYPES[o.opportunity_type] || 'Opportunity')}</span>
+          ${o.industry ? `<span class="tag">${escapeHTML(o.industry)}</span>` : ''}
+        </div>
+        <h3 style="font-size:1rem; margin:8px 0 2px;">${escapeHTML(o.title)}</h3>
+        <div class="opp-company">${escapeHTML(o.company || '')}${o.location ? ' · ' + escapeHTML(o.location) : ''}</div>
+        <p class="mentor-blurb">${escapeHTML(o.description || '')}</p>
+        <div class="mentor-meta">
+          Posted by ${escapeHTML(o.posted_by_name)}${o.closing_date ? ' · ' + closingLabel(o.closing_date).text : ''}
+          ${o.apply_link ? ' · Apply: ' + escapeHTML(o.apply_link) : ''}
+        </div>
       </div>
       <div style="display:flex; gap:8px;">
         <button class="btn btn-primary" data-review="${o.opportunity_id}" data-decision="approved">Approve</button>

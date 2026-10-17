@@ -188,6 +188,13 @@ async function reviewOpportunity(req, res, next) {
         if (!['approved', 'rejected'].includes(decision)) {
             return res.status(400).json({ error: "decision must be 'approved' or 'rejected'" });
         }
+
+        const [[opportunity]] = await pool.execute(
+            'SELECT title, posted_by FROM career_opportunities WHERE opportunity_id = :id',
+            { id }
+        );
+        if (!opportunity) return res.status(404).json({ error: 'Opportunity not found' });
+
         await pool.execute(
             'UPDATE career_opportunities SET approval_status = :decision WHERE opportunity_id = :id',
             { decision, id }
@@ -198,6 +205,17 @@ async function reviewOpportunity(req, res, next) {
             { adminId: req.user.userId, id, decision, reviewNotes: reviewNotes || null }
         );
         await logAdminAction(req.user.userId, `${decision}_opportunity`, 'career_opportunities', id, `Opportunity ${id} ${decision}`);
+
+        // Tell the mentor who posted it
+        await createNotification(
+            opportunity.posted_by,
+            `opportunity_${decision}`,
+            decision === 'approved'
+                ? `Your opportunity "${opportunity.title}" was approved and is now visible to the network.`
+                : `Your opportunity "${opportunity.title}" was not approved.`,
+            'opportunities.html'
+        );
+
         res.json({ opportunity_id: Number(id), status: decision });
     } catch (err) { next(err); }
 }

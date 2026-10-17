@@ -1365,3 +1365,14 @@ textarea:focus-visible {
 .notif-item { cursor: pointer; transition: border-color 0.15s ease; }
 .notif-item:hover { border-color: var(--kq-green); }
 :root[data-theme="dark"] .notif-item.unread { background: rgba(4, 92, 67, 0.18); }
+/* Career opportunities */
+.opportunity-filters {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+.opportunity-filters .search-pill { flex: 1; min-width: 220px; }
+.opp-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+.opp-company { font-size: 0.85rem; color: var(--ink-soft); margin-bottom: 8px; }
+.tag.closing-soon { background: rgba(200, 16, 46, 0.1); color: var(--kq-red); font-weight: 600; }

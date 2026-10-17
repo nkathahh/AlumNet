@@ -12,6 +12,7 @@ const recommendationRoutes = require('./routes/recommendations.routes');
 const dashboardRoutes = require('./routes/dashboard.routes');
 const eventsRoutes = require('./routes/events.routes');
 const notificationsRoutes = require('./routes/notifications.routes');
+const opportunitiesRoutes = require('./routes/opportunities.routes');
 
 const app = express();
 app.use(cors());
@@ -29,6 +30,7 @@ app.use('/api/recommendations', recommendationRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/events', eventsRoutes);
 app.use('/api/notifications', notificationsRoutes);
+app.use('/api/opportunities', opportunitiesRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err);

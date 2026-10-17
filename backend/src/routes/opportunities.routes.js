@@ -1,7 +1,10 @@
-const express = require('express');
-const router = express.Router();
+const router = require('express').Router();
 const { requireAuth } = require('../middleware/auth.middleware');
+const opportunities = require('../controllers/opportunities.controller');
 
-router.get('/', requireAuth, (req, res) => res.status(501).json({ error: 'Not implemented yet' }));
+router.use(requireAuth);
+router.get('/', opportunities.listOpportunities);
+router.get('/mine', opportunities.listMyPosts);
+router.post('/', opportunities.createOpportunity);
 
 module.exports = router;
