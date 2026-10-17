@@ -65,6 +65,25 @@
                     </div>
                     <div class="field"><label for="eventDate">Date</label><input type="datetime-local" id="eventDate"
                             required></div>
+                    <div class="field-row">
+                        <div class="field">
+                            <label for="eventMode">Format</label>
+                            <select id="eventMode">
+                                <option value="in_person">In person</option>
+                                <option value="virtual">Virtual</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label for="eventCapacity">Capacity (optional)</label>
+                            <input type="number" id="eventCapacity" min="1">
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label for="eventLocation">Venue or meeting link</label>
+                        <input type="text" id="eventLocation" placeholder="e.g. Pride Centre, Embakasi or https://...">
+                    </div>
+                    <p id="event-form-error"
+                        style="color:var(--kq-red); font-size:0.85rem; display:none; margin-bottom:12px;"></p>
                     <button type="submit" class="btn btn-primary" style="height:46px;">Add event</button>
                 </form>
                 <div class="field" style="max-width:none;">
@@ -88,6 +107,10 @@
 
             <div id="admin-tab-opportunities" style="display:none;">
                 <div id="admin-opportunities-list"></div>
+                <div class="section-heading" style="margin-top:32px;">
+                    <h2>Event proposals</h2>
+                </div>
+                <div id="admin-pending-events"></div>
             </div>
 
             <div id="admin-tab-logs" style="display:none;">

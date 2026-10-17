@@ -18,4 +18,7 @@ router.patch('/opportunities/:id/review', admin.reviewOpportunity);
 
 router.get('/activity-logs', admin.listActivityLogs);
 
+router.get('/events/pending', admin.listPendingEvents);
+router.patch('/events/:id/review', admin.reviewEvent);
+
 module.exports = router;

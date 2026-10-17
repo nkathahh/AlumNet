@@ -25,6 +25,8 @@ document.addEventListener('DOMContentLoaded', () => {
   renderAdminLogs();
   wireAdminSearch();
   wireSidebarToggle();
+  wireEventsPage();
+  renderAdminPendingEvents();
 });
 
 const API_BASE = 'http://localhost:4000/api';
@@ -696,72 +698,291 @@ async function openMentorProfile(mentorId) {
    Events (FR-07, FR-08) — mentee/mentor view, still mock
    -------------------------------------------------------------------- */
 
+let allEvents = [];
+let eventFilter = 'all';
+
 async function renderEvents() {
   const grid = document.getElementById('event-grid');
   if (!grid) return;
   const token = localStorage.getItem('alumnet_token');
   if (!token) return;
 
-  grid.innerHTML = '<p style="color:var(--slate); padding:20px 4px;">Loading events...</p>';
+  if (!allEvents.length) {
+    grid.innerHTML = '<p style="color:var(--slate); padding:20px 4px;">Loading events...</p>';
+  }
 
   try {
     const res = await fetch(`${API_BASE}/events`, { headers: { Authorization: `Bearer ${token}` } });
-    const events = await res.json();
+    const data = await res.json();
     if (!res.ok) {
-      grid.innerHTML = `<p style="color:var(--kq-red); padding:20px 4px;">${events.error || 'Could not load events.'}</p>`;
+      grid.innerHTML = `<p style="color:var(--kq-red); padding:20px 4px;">${data.error || 'Could not load events.'}</p>`;
       return;
     }
-    if (!events.length) {
-      grid.innerHTML = '<p style="color:var(--slate); padding:20px 4px;">No upcoming events yet.</p>';
-      return;
-    }
-
-    grid.innerHTML = events.map(eventCardHTML).join('');
-
-    grid.querySelectorAll('[data-event-action]').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        btn.disabled = true;
-        const registering = btn.dataset.eventAction === 'register';
-        try {
-          const r = await fetch(`${API_BASE}/events/${btn.dataset.eventId}/register`, {
-            method: registering ? 'POST' : 'DELETE',
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          if (!r.ok) {
-            const err = await r.json();
-            alert(err.error || 'Action failed');
-          }
-          renderEvents(); // refresh so the count and button state update
-        } catch {
-          alert('Could not reach the server.');
-          btn.disabled = false;
-        }
-      });
-    });
+    allEvents = data;
+    drawEvents();
   } catch {
     grid.innerHTML = '<p style="color:var(--kq-red); padding:20px 4px;">Could not reach the server.</p>';
   }
+}
+
+function drawEvents() {
+  const grid = document.getElementById('event-grid');
+  if (!grid) return;
+  const token = localStorage.getItem('alumnet_token');
+  const list = eventFilter === 'mine' ? allEvents.filter((e) => e.is_registered) : allEvents;
+
+  if (!list.length) {
+    grid.innerHTML = `<p style="color:var(--slate); padding:20px 4px;">${
+      eventFilter === 'mine' ? "You haven't registered for any upcoming events." : 'No upcoming events yet.'
+    }</p>`;
+    return;
+  }
+
+  grid.innerHTML = list.map(eventCardHTML).join('');
+
+  grid.querySelectorAll('[data-event-action]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      const registering = btn.dataset.eventAction === 'register';
+      try {
+        const r = await fetch(`${API_BASE}/events/${btn.dataset.eventId}/register`, {
+          method: registering ? 'POST' : 'DELETE',
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!r.ok) {
+          const err = await r.json();
+          alert(err.error || 'Action failed');
+        }
+        renderEvents();
+      } catch {
+        alert('Could not reach the server.');
+        btn.disabled = false;
+      }
+    });
+  });
 }
 
 function eventCardHTML(e) {
   const d = new Date(e.event_date);
   const date = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
   const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-  const registered = Number(e.is_registered) === 1;
-  const count = Number(e.attendee_count);
+  const full = e.capacity !== null && e.attendee_count >= e.capacity;
+  const attendance = e.capacity !== null
+    ? `${e.attendee_count} / ${e.capacity} attending`
+    : `${e.attendee_count} attending`;
+  const host = e.is_official ? 'KQ Alumni Office' : (e.organiser_name || 'Alumni member');
+
+  let where;
+  if (e.mode === 'virtual') {
+    where = e.location
+      ? `Virtual · <a href="${e.location}" target="_blank" rel="noopener">Join link</a>`
+      : 'Virtual · link shared after registering';
+  } else {
+    where = e.location || 'Venue to be confirmed';
+  }
+
+  let button;
+  if (e.is_registered) {
+    button = `<button class="btn btn-secondary btn-block" data-event-action="cancel" data-event-id="${e.event_id}">Cancel registration</button>`;
+  } else if (full) {
+    button = '<button class="btn btn-secondary btn-block" disabled>Event full</button>';
+  } else {
+    button = `<button class="btn btn-primary btn-block" data-event-action="register" data-event-id="${e.event_id}">Register</button>`;
+  }
 
   return `
     <div class="event-card">
+      <div class="event-card-top">
+        <span class="event-badge ${e.is_official ? 'official' : 'community'}">${e.is_official ? 'Official' : 'Community'}</span>
+      </div>
       <div class="date">${date} · ${time}</div>
       <h3>${e.title}</h3>
       <p>${e.description || ''}</p>
-      <div class="mentor-meta" style="margin-bottom:12px;">${count} attending</div>
-      <button class="btn ${registered ? 'btn-secondary' : 'btn-primary'} btn-block"
-              data-event-action="${registered ? 'cancel' : 'register'}"
-              data-event-id="${e.event_id}">
-        ${registered ? 'Cancel registration' : 'Register'}
-      </button>
+      <div class="event-meta">
+        <div>${where}</div>
+        <div>Hosted by ${host}</div>
+        <div>${attendance}</div>
+      </div>
+      ${button}
     </div>`;
+}
+
+// Runs once per page load: filter tabs, and the propose button for mentors only
+function wireEventsPage() {
+  const tabs = document.querySelectorAll('[data-event-filter]');
+  tabs.forEach((tab) => {
+    tab.addEventListener('click', () => {
+      tabs.forEach((t) => t.classList.remove('active'));
+      tab.classList.add('active');
+      eventFilter = tab.dataset.eventFilter;
+      drawEvents();
+    });
+  });
+
+  const proposeBtn = document.getElementById('propose-event-btn');
+  if (proposeBtn && localStorage.getItem('alumnet_role') === 'mentor') {
+    proposeBtn.style.display = 'inline-flex';
+    proposeBtn.addEventListener('click', openProposeEventModal);
+    renderMyProposals();
+  }
+}
+
+function openProposeEventModal() {
+  const token = localStorage.getItem('alumnet_token');
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal-card">
+      <h3>Propose an event</h3>
+      <div class="modal-meta">Community events are reviewed by the admin before other members can see them.</div>
+      <form id="propose-event-form" novalidate>
+        <div class="field"><label for="peTitle">Title</label><input type="text" id="peTitle"></div>
+        <div class="field"><label for="peDate">Date and time</label><input type="datetime-local" id="peDate"></div>
+        <div class="field-row">
+          <div class="field">
+            <label for="peMode">Format</label>
+            <select id="peMode">
+              <option value="in_person">In person</option>
+              <option value="virtual">Virtual</option>
+            </select>
+          </div>
+          <div class="field"><label for="peCapacity">Capacity (optional)</label><input type="number" id="peCapacity" min="1"></div>
+        </div>
+        <div class="field">
+          <label for="peLocation" id="peLocationLabel">Venue</label>
+          <input type="text" id="peLocation" placeholder="e.g. Pride Centre, Embakasi">
+        </div>
+        <div class="field"><label for="peDescription">Description</label><textarea id="peDescription"></textarea></div>
+        <p id="pe-error" style="color:var(--kq-red); font-size:0.85rem; display:none; margin-bottom:12px;"></p>
+        <div style="display:flex; gap:10px;">
+          <button type="submit" class="btn btn-primary">Submit for review</button>
+          <button type="button" class="btn btn-secondary" id="pe-cancel">Cancel</button>
+        </div>
+      </form>
+    </div>`;
+  document.body.appendChild(backdrop);
+
+  const close = () => backdrop.remove();
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+  backdrop.querySelector('#pe-cancel').addEventListener('click', close);
+
+  // Relabel the location field depending on the format
+  const modeSel = backdrop.querySelector('#peMode');
+  modeSel.addEventListener('change', () => {
+    const virtual = modeSel.value === 'virtual';
+    backdrop.querySelector('#peLocationLabel').textContent = virtual ? 'Meeting link' : 'Venue';
+    backdrop.querySelector('#peLocation').placeholder = virtual ? 'https://...' : 'e.g. Pride Centre, Embakasi';
+  });
+
+  backdrop.querySelector('#propose-event-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errorEl = backdrop.querySelector('#pe-error');
+    errorEl.style.display = 'none';
+
+    const payload = {
+      title: backdrop.querySelector('#peTitle').value,
+      eventDate: backdrop.querySelector('#peDate').value,
+      mode: modeSel.value,
+      location: backdrop.querySelector('#peLocation').value,
+      capacity: backdrop.querySelector('#peCapacity').value || null,
+      description: backdrop.querySelector('#peDescription').value
+    };
+
+    try {
+      const res = await fetch(`${API_BASE}/events`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload)
+      });
+      const result = await res.json();
+      if (!res.ok) {
+        errorEl.textContent = result.error || 'Could not submit the event';
+        errorEl.style.display = 'block';
+        return;
+      }
+      close();
+      renderMyProposals();
+    } catch {
+      errorEl.textContent = 'Could not reach the server.';
+      errorEl.style.display = 'block';
+    }
+  });
+}
+
+async function renderMyProposals() {
+  const mount = document.getElementById('my-proposals');
+  if (!mount) return;
+  const token = localStorage.getItem('alumnet_token');
+
+  try {
+    const res = await fetch(`${API_BASE}/events/my-proposals`, { headers: { Authorization: `Bearer ${token}` } });
+    const rows = await res.json();
+    if (!res.ok || !rows.length) { mount.innerHTML = ''; return; }
+
+    mount.innerHTML = `
+      <div class="section-heading"><h2>Your proposals</h2></div>
+      ${rows.map((p) => `
+        <div class="request-card">
+          <div>
+            <strong>${p.title}</strong><br>
+            <span style="font-size:0.82rem; color:var(--slate);">
+              ${new Date(p.event_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+            </span>
+          </div>
+          <span class="request-status ${p.status}">${p.status}</span>
+        </div>`).join('')}`;
+  } catch {
+    mount.innerHTML = '';
+  }
+}
+
+async function renderAdminPendingEvents() {
+  const list = document.getElementById('admin-pending-events');
+  if (!list) return;
+  const token = localStorage.getItem('alumnet_token');
+
+  try {
+    const res = await fetch(`${API_BASE}/admin/events/pending`, { headers: { Authorization: `Bearer ${token}` } });
+    const rows = await res.json();
+    if (!res.ok) { list.innerHTML = `<p>${rows.error || 'Could not load proposals.'}</p>`; return; }
+    if (!rows.length) {
+      list.innerHTML = '<p style="color:var(--slate); padding:20px 4px;">No event proposals waiting for review.</p>';
+      return;
+    }
+
+    list.innerHTML = rows.map((e) => `
+      <div class="opportunity-card">
+        <div>
+          <span class="tag">${e.mode === 'virtual' ? 'Virtual' : 'In person'}</span>
+          <h3 style="font-size:1rem; margin:6px 0;">${e.title}</h3>
+          <p class="mentor-blurb">${e.description || ''}</p>
+          <div class="mentor-meta">
+            ${new Date(e.event_date).toLocaleString('en-GB')} · ${e.location || ''}${e.capacity ? ' · capacity ' + e.capacity : ''}
+          </div>
+          <div class="mentor-meta">Proposed by ${e.proposed_by_name}</div>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-primary" data-review-event="${e.event_id}" data-decision="approved">Approve</button>
+          <button class="btn btn-secondary" data-review-event="${e.event_id}" data-decision="rejected">Reject</button>
+        </div>
+      </div>`).join('');
+
+    list.querySelectorAll('[data-review-event]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        await fetch(`${API_BASE}/admin/events/${btn.dataset.reviewEvent}/review`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ decision: btn.dataset.decision })
+        });
+        renderAdminPendingEvents();
+        renderAdminEvents();
+        renderAdminLogs();
+      });
+    });
+  } catch {
+    list.innerHTML = '<p style="color:var(--kq-red); padding:20px 4px;">Could not reach the server.</p>';
+  }
 }
 
 /* --------------------------------------------------------------------

@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { validateEventInput } = require('./events.controller');
 
 async function getStats(req, res, next) {
     try {
@@ -62,16 +63,77 @@ async function listEvents(req, res, next) {
 }
 
 async function createEvent(req, res, next) {
-    try {
-        const { title, description, eventDate } = req.body;
-        if (!title || !eventDate) return res.status(400).json({ error: 'title and eventDate are required' });
-        const [result] = await pool.execute(
-            'INSERT INTO events (title, description, event_date) VALUES (:title, :description, :eventDate)',
-            { title, description: description || null, eventDate }
-        );
-        await logAdminAction(req.user.userId, 'create_event', 'events', result.insertId, `Created event "${title}"`);
-        res.status(201).json({ event_id: result.insertId });
-    } catch (err) { next(err); }
+  try {
+    const error = validateEventInput(req.body);
+    if (error) return res.status(400).json({ error });
+
+    const { title, eventDate, description, mode, location, capacity } = req.body;
+    const [result] = await pool.execute(
+      `INSERT INTO events (title, event_date, description, mode, location, capacity, created_by, status)
+       VALUES (:title, :eventDate, :description, :mode, :location, :capacity, :userId, 'approved')`,
+      {
+        title: title.trim(),
+        eventDate,
+        description: description || null,
+        mode,
+        location: location.trim(),
+        capacity: capacity ? Number(capacity) : null,
+        userId: req.user.userId
+      }
+    );
+
+    await logAdminAction(req.user.userId, 'create_event', 'events', result.insertId, `Created event "${title.trim()}"`);
+
+    res.status(201).json({ eventId: result.insertId });
+  } catch (err) {
+    next(err);
+  }
+}
+
+
+async function listPendingEvents(req, res, next) {
+  try {
+    const [rows] = await pool.execute(
+      `SELECT e.event_id, e.title, e.event_date, e.description, e.mode, e.location, e.capacity,
+              u.name AS proposed_by_name
+       FROM events e
+       JOIN users u ON u.user_id = e.created_by
+       WHERE e.status = 'pending'
+       ORDER BY e.event_date ASC`
+    );
+    res.json(rows);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function reviewEvent(req, res, next) {
+  try {
+    const { decision } = req.body;
+    if (!['approved', 'rejected'].includes(decision)) {
+      return res.status(400).json({ error: 'Decision must be approved or rejected' });
+    }
+    const eventId = req.params.id;
+    const [result] = await pool.execute(
+      `UPDATE events SET status = :decision WHERE event_id = :eventId AND status = 'pending'`,
+      { decision, eventId }
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Event not found or already reviewed' });
+    }
+
+    await logAdminAction(
+      req.user.userId,
+        `${decision}_event`,
+      'events',
+      eventId,
+      `Event proposal ${decision}`
+    );
+
+    res.json({ message: `Event ${decision}` });
+  } catch (err) {
+    next(err);
+  }
 }
 
 async function deleteEvent(req, res, next) {
@@ -138,6 +200,7 @@ async function logAdminAction(adminId, actionType, targetEntity, targetEntityId,
 module.exports = {
   getStats, listUsers, toggleUserStatus,
   listEvents, createEvent, deleteEvent,
+  listPendingEvents, reviewEvent,
   listPendingOpportunities, reviewOpportunity,
   listActivityLogs
 };

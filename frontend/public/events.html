@@ -35,7 +35,15 @@
                     <span class="sub">Register to attend, or check back for what's coming up.</span>
                 </div>
             </div>
+            <div class="events-toolbar">
+                <div class="tabs">
+                    <button class="tab active" data-event-filter="all">All events</button>
+                    <button class="tab" data-event-filter="mine">My events</button>
+                </div>
+                <button class="btn btn-primary" id="propose-event-btn" style="display:none;">Propose an event</button>
+            </div>
             <div class="event-grid" id="event-grid"></div>
+            <div id="my-proposals" style="margin-top:36px;"></div>
         </main>
     </div>
     <script src="js/main.js"></script>

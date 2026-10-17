@@ -1,11 +1,12 @@
 const router = require('express').Router();
-
 const { requireAuth } = require('../middleware/auth.middleware');
-const { listEvents, registerForEvent, cancelRegistration } = require('../controllers/events.controller');
+const events = require('../controllers/events.controller');
 
 router.use(requireAuth);
-router.get('/', listEvents);
-router.post('/:id/register', registerForEvent);
-router.delete('/:id/register', cancelRegistration);
+router.get('/', events.listEvents);
+router.get('/my-proposals', events.listMyProposals);
+router.post('/', events.proposeEvent);
+router.post('/:id/register', events.registerForEvent);
+router.delete('/:id/register', events.cancelRegistration);
 
 module.exports = router;
