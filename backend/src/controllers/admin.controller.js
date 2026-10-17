@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const { validateEventInput } = require('./events.controller');
+const { createNotification, notifyMany } = require('../utils/notify');
 
 async function getStats(req, res, next) {
     try {
@@ -122,13 +123,20 @@ async function reviewEvent(req, res, next) {
       return res.status(404).json({ error: 'Event not found or already reviewed' });
     }
 
-    await logAdminAction(
-      req.user.userId,
-        `${decision}_event`,
-      'events',
-      eventId,
-      `Event proposal ${decision}`
-    );
+    await logAdminAction(req.user.userId, `${decision}_event`, 'events', eventId, `Event proposal ${decision}`);
+
+    // Tell the mentor who proposed it
+    const [[event]] = await pool.execute('SELECT title, created_by FROM events WHERE event_id = :eventId', { eventId });
+    if (event && event.created_by) {
+      await createNotification(
+        event.created_by,
+        `event_${decision}`,
+        decision === 'approved'
+          ? `Your event "${event.title}" was approved and is now live.`
+          : `Your event "${event.title}" was not approved.`,
+        'events.html'
+      );
+    }
 
     res.json({ message: `Event ${decision}` });
   } catch (err) {
@@ -139,12 +147,28 @@ async function reviewEvent(req, res, next) {
 async function deleteEvent(req, res, next) {
     try {
         const { id } = req.params;
+
+        // deleting the event also deletes its registrations
+        const [[event]] = await pool.execute('SELECT title FROM events WHERE event_id = :id', { id });
+        if (!event) return res.status(404).json({ error: 'Event not found' });
+        const [registrants] = await pool.execute(
+            'SELECT user_id FROM event_registrations WHERE event_id = :id',
+            { id }
+        );
+
         await pool.execute('DELETE FROM events WHERE event_id = :id', { id });
         await logAdminAction(req.user.userId, 'delete_event', 'events', id, `Deleted event ${id}`);
+
+        await notifyMany(
+            registrants.map((r) => r.user_id),
+            'event_cancelled',
+            `"${event.title}" has been cancelled by the organisers.`,
+            'events.html'
+        );
+
         res.json({ success: true });
     } catch (err) { next(err); }
 }
-
 async function listPendingOpportunities(req, res, next) {
     try {
         const [rows] = await pool.query(`

@@ -3,6 +3,9 @@ document.addEventListener('DOMContentLoaded', () => {
   initTheme();
   guardRoute();
   renderSidebar();
+  wireMarkAllRead();
+  updateNotifBadge();
+  setInterval(updateNotifBadge, 60000);
   wireThemeToggle();
   wireLogout();
   wireSignupForm();
@@ -732,9 +735,8 @@ function drawEvents() {
   const list = eventFilter === 'mine' ? allEvents.filter((e) => e.is_registered) : allEvents;
 
   if (!list.length) {
-    grid.innerHTML = `<p style="color:var(--slate); padding:20px 4px;">${
-      eventFilter === 'mine' ? "You haven't registered for any upcoming events." : 'No upcoming events yet.'
-    }</p>`;
+    grid.innerHTML = `<p style="color:var(--slate); padding:20px 4px;">${eventFilter === 'mine' ? "You haven't registered for any upcoming events." : 'No upcoming events yet.'
+      }</p>`;
     return;
   }
 
@@ -1126,6 +1128,7 @@ async function renderAdminEvents() {
       <td>${e.title}</td>
       <td>${new Date(e.event_date).toLocaleString('en-GB')}</td>
       <td>${e.description || ''}</td>
+      <td><span class="request-status ${e.status}">${e.status}</span></td>
       <td><button class="btn btn-secondary" data-delete-event="${e.event_id}">Delete</button></td>
     </tr>`).join('');
 
@@ -1147,20 +1150,33 @@ function wireAdminEventForm() {
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const token = localStorage.getItem('alumnet_token');
-    const title = document.getElementById('eventTitle').value;
-    const eventDate = document.getElementById('eventDate').value;
-    const description = document.getElementById('eventDescription').value;
+    const errorEl = document.getElementById('event-form-error');
+    if (errorEl) errorEl.style.display = 'none';
+
+    const payload = {
+      title: document.getElementById('eventTitle').value,
+      eventDate: document.getElementById('eventDate').value,
+      description: document.getElementById('eventDescription').value,
+      mode: document.getElementById('eventMode').value,
+      location: document.getElementById('eventLocation').value,
+      capacity: document.getElementById('eventCapacity').value || null
+    };
 
     const res = await fetch(`${API_BASE}/admin/events`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ title, eventDate, description })
+      body: JSON.stringify(payload)
     });
+
     if (res.ok) {
       form.reset();
       document.getElementById('eventDescription').value = '';
       renderAdminEvents();
       renderAdminLogs();
+    } else if (errorEl) {
+      const err = await res.json();
+      errorEl.textContent = err.error || 'Could not create event';
+      errorEl.style.display = 'block';
     }
   });
 }
@@ -1223,20 +1239,107 @@ async function renderAdminLogs() {
    Notifications — still mock
    -------------------------------------------------------------------- */
 
-const MOCK_NOTIFICATIONS = [
-  { message: 'Mark Thuo accepted your mentorship request.', time: '2h ago', unread: true },
-  { message: 'Safety & Training Workshop starts in 3 days.', time: '1d ago', unread: false }
-];
+// Escapes user-supplied text before it goes into innerHTML
+function escapeHTML(str) {
+  return String(str ?? '').replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
 
-function renderNotifications() {
+function timeAgo(dateStr) {
+  const seconds = Math.floor((Date.now() - new Date(dateStr)) / 1000);
+  if (seconds < 60) return 'Just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+async function renderNotifications() {
   const list = document.getElementById('notif-list');
   if (!list) return;
-  // TODO: replace MOCK_NOTIFICATIONS with GET /api/notifications
-  list.innerHTML = MOCK_NOTIFICATIONS.map((n) => `
-    <div class="notif-item ${n.unread ? 'unread' : ''}">
-      <span class="notif-dot" style="${n.unread ? '' : 'background:transparent;'}"></span>
-      <div><div>${n.message}</div><div class="mentor-meta">${n.time}</div></div>
-    </div>`).join('');
+  const token = localStorage.getItem('alumnet_token');
+  if (!token) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/notifications`, { headers: { Authorization: `Bearer ${token}` } });
+    const rows = await res.json();
+    if (!res.ok) {
+      list.innerHTML = `<p style="color:var(--kq-red); padding:20px 4px;">${rows.error || 'Could not load notifications.'}</p>`;
+      return;
+    }
+    if (!rows.length) {
+      list.innerHTML = '<p style="color:var(--slate); padding:20px 4px;">No notifications yet. Updates on your mentorships and events will appear here.</p>';
+      return;
+    }
+
+    list.innerHTML = rows.map((n) => `
+      <div class="notif-item ${n.is_read ? '' : 'unread'}" data-notif-id="${n.notification_id}" data-link="${escapeHTML(n.link || '')}" role="button" tabindex="0">
+        <span class="notif-dot" style="${n.is_read ? 'background:transparent;' : ''}"></span>
+        <div>
+          <div>${escapeHTML(n.message)}</div>
+          <div class="mentor-meta">${timeAgo(n.created_at)}</div>
+        </div>
+      </div>`).join('');
+
+    list.querySelectorAll('[data-notif-id]').forEach((item) => {
+      item.addEventListener('click', async () => {
+        await fetch(`${API_BASE}/notifications/${item.dataset.notifId}/read`, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (item.dataset.link) {
+          window.location.href = item.dataset.link;
+        } else {
+          renderNotifications();
+          updateNotifBadge();
+        }
+      });
+    });
+  } catch {
+    list.innerHTML = '<p style="color:var(--kq-red); padding:20px 4px;">Could not reach the server.</p>';
+  }
+}
+
+function wireMarkAllRead() {
+  const btn = document.getElementById('mark-all-read-btn');
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    await fetch(`${API_BASE}/notifications/read-all`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${localStorage.getItem('alumnet_token')}` }
+    });
+    btn.disabled = false;
+    renderNotifications();
+    updateNotifBadge();
+  });
+}
+
+// Red unread count on the Notifications link in the sidebar
+async function updateNotifBadge() {
+  const link = document.querySelector('#sidebar-nav a[href="notifications.html"]');
+  const token = localStorage.getItem('alumnet_token');
+  if (!link || !token) return;
+  try {
+    const res = await fetch(`${API_BASE}/notifications/unread-count`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) return;
+    const { count } = await res.json();
+    let badge = link.querySelector('.nav-badge');
+    if (!count) {
+      if (badge) badge.remove();
+      return;
+    }
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'nav-badge';
+      link.appendChild(badge);
+    }
+    badge.textContent = count > 99 ? '99+' : count;
+  } catch { }
 }
 
 
@@ -1288,8 +1391,8 @@ async function renderMenteeDashboardHeader() {
         <div class="dash-stat-card ${summary.profileComplete ? '' : 'alert'}">
           <div class="icon">
             ${summary.profileComplete
-              ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>'
-              : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>'}
+          ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>'
+          : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>'}
           </div>
           <div class="num">${summary.profileComplete ? 'Complete' : 'Incomplete'}</div>
           <div class="label">Profile status</div>

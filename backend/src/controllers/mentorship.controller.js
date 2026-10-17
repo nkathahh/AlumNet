@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { createNotification, getUserName } = require('../utils/notify');
 
 async function createRequest(req, res, next) {
     try {
@@ -24,6 +25,16 @@ async function createRequest(req, res, next) {
             `INSERT INTO mentorship_requests (mentee_id, mentor_id, status) VALUES (:userId, :mentorId, 'pending')`,
             { userId, mentorId }
         );
+
+        // Tell the mentor they have a new request
+        const menteeName = await getUserName(userId);
+        await createNotification(
+            mentorId,
+            'mentorship_request',
+            `${menteeName} sent you a mentorship request.`,
+            'requests.html'
+        );
+
         res.status(201).json({ request_id: result.insertId, status: 'pending' });
     } catch (err) {
         if (err.code === 'ER_NO_REFERENCED_ROW_2') return res.status(404).json({ error: 'Mentor not found' });
@@ -72,6 +83,18 @@ async function respondToRequest(req, res, next) {
             `UPDATE mentorship_requests SET status = :decision WHERE request_id = :id`,
             { decision, id }
         );
+
+        // Tell the mentee the outcome
+        const mentorName = await getUserName(userId);
+        await createNotification(
+            request.mentee_id,
+            `request_${decision}`,
+            decision === 'accepted'
+                ? `${mentorName} accepted your mentorship request.`
+                : `${mentorName} declined your mentorship request.`,
+            'requests.html'
+        );
+
         res.json({ request_id: Number(id), status: decision });
     } catch (err) { next(err); }
 }
@@ -93,6 +116,17 @@ async function endMentorship(req, res, next) {
       `UPDATE mentorship_requests SET status = 'ended', ended_by = :userId, ended_at = NOW() WHERE request_id = :id`,
       { userId, id }
     );
+
+    // Tell the other person in the mentorship
+    const otherUserId = role === 'mentor' ? request.mentee_id : request.mentor_id;
+    const enderName = await getUserName(userId);
+    await createNotification(
+      otherUserId,
+      'mentorship_ended',
+      `${enderName} ended your mentorship.`,
+      'requests.html'
+    );
+
     res.json({ request_id: Number(id), status: 'ended' });
   } catch (err) { next(err); }
 }
@@ -111,6 +145,16 @@ async function withdrawRequest(req, res, next) {
     if (request.status !== 'pending') return res.status(400).json({ error: 'Only a pending request can be withdrawn' });
 
     await pool.execute(`DELETE FROM mentorship_requests WHERE request_id = :id`, { id });
+
+    // Tell the mentor so the request doesn't just silently vanish from their list
+    const menteeName = await getUserName(userId);
+    await createNotification(
+      request.mentor_id,
+      'request_withdrawn',
+      `${menteeName} withdrew their mentorship request.`,
+      'requests.html'
+    );
+
     res.json({ success: true });
   } catch (err) { next(err); }
 }
