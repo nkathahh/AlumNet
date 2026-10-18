@@ -1,0 +1,52 @@
+[
+  {
+    "id": "D01",
+    "name": "Joyce Wafula",
+    "department": "Flight Operations",
+    "phrasing": "standard",
+    "career_switch": false,
+    "skills": "Flight dispatch coordination, route planning software, crew scheduling systems, operational safety reporting.",
+    "experience": "Flight operations officer at Kenya Airways for 3 years, supporting route planning and dispatch for intercontinental flights.",
+    "career_interests": "Moving into a senior flight operations or crew scheduling leadership role, learning more about operational safety audits."
+  },
+  {
+    "id": "D02",
+    "name": "Daniel Mwangi",
+    "department": "Engineering & Maintenance",
+    "phrasing": "standard",
+    "career_switch": false,
+    "skills": "Aircraft systems troubleshooting, maintenance logbook records, inspection checklists.",
+    "experience": "Junior maintenance technician at Kenya Airways for 2 years, assisting on line maintenance checks.",
+    "career_interests": "Becoming a licensed aircraft maintenance engineer and learning technical compliance and quality control."
+  },
+  {
+    "id": "D03",
+    "name": "Peter Kamau",
+    "department": "Flight Operations",
+    "phrasing": "paraphrase",
+    "career_switch": false,
+    "skills": "Building duty rosters for pilots and cabin staff, preparing flight plans, tracking rest-time rules.",
+    "experience": "Two years in the operations control centre at Kenya Airways, handling same-day changes to flight timetables.",
+    "career_interests": "Leading the team that assigns aircrew to flights, and taking part in reviews of operational safety."
+  },
+  {
+    "id": "D04",
+    "name": "Sharon Nduta",
+    "department": "Cabin Services",
+    "phrasing": "standard",
+    "career_switch": true,
+    "skills": "Safety demonstrations, first aid, passenger service on regional routes.",
+    "experience": "Cabin crew member for 4 years, mostly on regional routes with some long-haul flights.",
+    "career_interests": "Becoming a cabin crew instructor and eventually designing training courses."
+  },
+  {
+    "id": "D05",
+    "name": "Moses Kiplagat",
+    "department": "Ground Operations",
+    "phrasing": "paraphrase",
+    "career_switch": false,
+    "skills": "Marshalling aircraft on the apron, directing baggage loading teams, radio contact with ground control.",
+    "experience": "Three years on the ramp at JKIA handling quick turnarounds for narrow-body aircraft.",
+    "career_interests": "Moving up to run the station's day-to-day operations."
+  }
+]

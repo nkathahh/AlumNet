@@ -1,0 +1,182 @@
+[
+  {
+    "id": "M01",
+    "name": "Brian Otieno",
+    "department": "Flight Operations",
+    "years_of_experience": 15,
+    "skills": "Crew scheduling, route planning, operational safety audits, dispatch coordination, regulatory compliance reporting.",
+    "experience": "Former Head of Flight Operations with 15 years experience across intercontinental routes, led the crew scheduling team.",
+    "career_interests": "Mentoring flight operations staff moving into scheduling and safety leadership roles."
+  },
+  {
+    "id": "M02",
+    "name": "Catherine Akinyi",
+    "department": "Flight Operations",
+    "years_of_experience": 9,
+    "skills": "Route planning, flight dispatch, operational reporting, team coordination.",
+    "experience": "Flight operations supervisor, 9 years at Kenya Airways, oversaw dispatch coordination for regional routes.",
+    "career_interests": "Advising on flight operations career progression and dispatch systems."
+  },
+  {
+    "id": "M03",
+    "name": "Milka Njeri",
+    "department": "Flight Operations",
+    "years_of_experience": 5,
+    "skills": "Crew rostering, administrative coordination, scheduling software.",
+    "experience": "Crew rostering coordinator at Kenya Airways for 5 years.",
+    "career_interests": "Open to mentoring on rostering and administrative operations."
+  },
+  {
+    "id": "M04",
+    "name": "Joseph Kiprono",
+    "department": "Flight Operations",
+    "years_of_experience": 22,
+    "skills": "Line training, crew resource management instruction, flight safety investigations, simulator assessment.",
+    "experience": "Retired captain on the long-haul fleet. Spent the last eight years as a line training captain and sat on the flight safety committee.",
+    "career_interests": "Mentoring first officers and staff interested in flight training or safety management."
+  },
+  {
+    "id": "M05",
+    "name": "Ruth Njoroge",
+    "department": "Engineering & Maintenance",
+    "years_of_experience": 11,
+    "skills": "Aircraft maintenance inspection, technical compliance documentation, engineering quality control.",
+    "experience": "Aircraft maintenance engineer at Kenya Airways for 11 years, specializing in technical inspections.",
+    "career_interests": "Mentoring engineers entering aircraft maintenance and technical compliance roles."
+  },
+  {
+    "id": "M06",
+    "name": "Samuel Wekesa",
+    "department": "Engineering & Maintenance",
+    "years_of_experience": 18,
+    "skills": "Engine overhaul planning, borescope inspections, reliability data analysis.",
+    "experience": "Ran the engine shop at the maintenance base for 18 years and set up the fleet reliability programme.",
+    "career_interests": "Guiding young engineers into reliability engineering and maintenance planning."
+  },
+  {
+    "id": "M07",
+    "name": "Grace Wambui",
+    "department": "Engineering & Maintenance",
+    "years_of_experience": 12,
+    "skills": "Avionics troubleshooting, wiring diagram interpretation, test equipment calibration.",
+    "experience": "Avionics supervisor in the hangar for 12 years. Introduced the digital technical log for avionics defects.",
+    "career_interests": "Mentoring technicians working towards avionics licences and digital maintenance records."
+  },
+  {
+    "id": "M08",
+    "name": "Hassan Abdi",
+    "department": "Engineering & Maintenance",
+    "years_of_experience": 20,
+    "skills": "Continuing airworthiness management, regulatory audit preparation, maintenance programme approvals.",
+    "experience": "Quality assurance manager for maintenance. Led audits with the civil aviation regulator for over a decade.",
+    "career_interests": "Helping staff move into quality, compliance and airworthiness roles."
+  },
+  {
+    "id": "M09",
+    "name": "Mercy Wanjiru",
+    "department": "Cabin Services",
+    "years_of_experience": 16,
+    "skills": "Cabin crew training design, safety and emergency procedures instruction, service standards.",
+    "experience": "Senior purser on long-haul routes, then six years as a cabin crew training instructor.",
+    "career_interests": "Supporting crew who want to become instructors or move into training design."
+  },
+  {
+    "id": "M10",
+    "name": "Faith Chebet",
+    "department": "Cabin Services",
+    "years_of_experience": 10,
+    "skills": "In-flight service management, premium cabin service, handling difficult passengers.",
+    "experience": "Business class cabin supervisor for 10 years on Europe and Asia routes.",
+    "career_interests": "Coaching crew on customer experience and leading a team on board."
+  },
+  {
+    "id": "M11",
+    "name": "Kevin Mutua",
+    "department": "Cabin Services",
+    "years_of_experience": 8,
+    "skills": "Crew wellbeing programmes, fatigue awareness, peer support.",
+    "experience": "Cabin crew for 8 years and the crew welfare representative for the last three.",
+    "career_interests": "Mentoring crew on balancing a flying career with life at home, and on moving into people and HR roles."
+  },
+  {
+    "id": "M12",
+    "name": "Lucy Atieno",
+    "department": "Cabin Services",
+    "years_of_experience": 14,
+    "skills": "Inflight catering coordination, galley planning, supplier liaison.",
+    "experience": "Moved from cabin crew into inflight product and catering planning, where she worked for 14 years.",
+    "career_interests": "Advising crew who want to move from flying into product, catering or procurement work."
+  },
+  {
+    "id": "M13",
+    "name": "Dennis Ochieng",
+    "department": "Ground Operations",
+    "years_of_experience": 19,
+    "skills": "Ramp operations, turnaround coordination, load control, ground handling contracts.",
+    "experience": "Station operations manager at JKIA, responsible for aircraft turnarounds and ground handling agreements.",
+    "career_interests": "Mentoring ramp and station staff moving into operations management."
+  },
+  {
+    "id": "M14",
+    "name": "Esther Moraa",
+    "department": "Ground Operations",
+    "years_of_experience": 13,
+    "skills": "Passenger services, check-in and boarding systems, irregular operations recovery.",
+    "experience": "Customer service duty manager at the airport. Handled disruption and rebooking during irregular operations.",
+    "career_interests": "Coaching ground staff on customer service leadership and handling disruptions."
+  },
+  {
+    "id": "M15",
+    "name": "Ibrahim Yusuf",
+    "department": "Ground Operations",
+    "years_of_experience": 17,
+    "skills": "Aviation security screening, threat assessment, security awareness training.",
+    "experience": "Security manager responsible for passenger and baggage screening and compliance with the aviation security programme.",
+    "career_interests": "Guiding staff into aviation security and risk management roles."
+  },
+  {
+    "id": "M16",
+    "name": "Agnes Kerubo",
+    "department": "Ground Operations",
+    "years_of_experience": 9,
+    "skills": "Load sheets, weight and balance calculations, departure control systems.",
+    "experience": "Load controller at the hub for 9 years, preparing load and trim sheets for wide-body and narrow-body flights.",
+    "career_interests": "Teaching load control and weight and balance to new staff."
+  },
+  {
+    "id": "M17",
+    "name": "John Mutiso",
+    "department": "Cargo",
+    "years_of_experience": 21,
+    "skills": "Cargo sales, freight forwarder relationships, perishable exports.",
+    "experience": "Cargo commercial manager who grew fresh produce and flower exports to Europe.",
+    "career_interests": "Mentoring staff interested in cargo commercial and logistics careers."
+  },
+  {
+    "id": "M18",
+    "name": "Rose Nyambura",
+    "department": "Cargo",
+    "years_of_experience": 12,
+    "skills": "Dangerous goods regulations, cargo acceptance checks, shipping documentation.",
+    "experience": "Dangerous goods inspector and trainer at the cargo terminal for 12 years.",
+    "career_interests": "Training staff in dangerous goods compliance and inspection."
+  },
+  {
+    "id": "M19",
+    "name": "Paul Odhiambo",
+    "department": "Cargo",
+    "years_of_experience": 15,
+    "skills": "Warehouse management, cold chain handling, cargo build-up.",
+    "experience": "Cargo terminal supervisor managing warehouse shifts and cold storage for perishables.",
+    "career_interests": "Coaching supervisors on running warehouse teams."
+  },
+  {
+    "id": "M20",
+    "name": "Beatrice Achieng",
+    "department": "Cargo",
+    "years_of_experience": 7,
+    "skills": "Cargo revenue analysis, pricing, data reporting with Excel and Power BI.",
+    "experience": "Cargo revenue analyst for 7 years, producing route profitability and pricing reports.",
+    "career_interests": "Mentoring anyone moving into analytics or revenue management."
+  }
+]

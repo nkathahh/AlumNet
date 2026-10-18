@@ -1,0 +1,102 @@
+[
+  {
+    "id": "T01",
+    "name": "Lilian Wairimu",
+    "department": "Flight Operations",
+    "phrasing": "standard",
+    "career_switch": true,
+    "skills": "Flight planning, weather briefing, NOTAM review.",
+    "experience": "Flight dispatcher in the operations control centre for 2 years.",
+    "career_interests": "Getting into pilot training or becoming a flight safety officer."
+  },
+  {
+    "id": "T02",
+    "name": "Collins Omondi",
+    "department": "Flight Operations",
+    "phrasing": "paraphrase",
+    "career_switch": false,
+    "skills": "Keeping track of how many hours pilots have flown, finding cover when someone calls in sick, using the rostering tool.",
+    "experience": "Crew control assistant for 18 months.",
+    "career_interests": "I would like to manage the crew planning team one day."
+  },
+  {
+    "id": "T03",
+    "name": "Ann Njambi",
+    "department": "Engineering & Maintenance",
+    "phrasing": "standard",
+    "career_switch": true,
+    "skills": "Line maintenance, defect rectification, aircraft technical logs.",
+    "experience": "Licensed aircraft maintenance engineer for 4 years on the regional fleet.",
+    "career_interests": "Moving into quality assurance and regulatory audits."
+  },
+  {
+    "id": "T04",
+    "name": "Felix Rotich",
+    "department": "Engineering & Maintenance",
+    "phrasing": "paraphrase",
+    "career_switch": false,
+    "skills": "Fixing faults in cockpit instruments and radios, reading circuit drawings, using multimeters.",
+    "experience": "Two years as an apprentice in the hangar electrical shop.",
+    "career_interests": "Getting licensed to work on aircraft electronics."
+  },
+  {
+    "id": "T05",
+    "name": "Wanjiku Kamande",
+    "department": "Cabin Services",
+    "phrasing": "standard",
+    "career_switch": false,
+    "skills": "Premium cabin service, wine service, handling passenger complaints.",
+    "experience": "Cabin crew on long-haul routes for 6 years.",
+    "career_interests": "Becoming a cabin supervisor and leading the crew on board."
+  },
+  {
+    "id": "T06",
+    "name": "Nancy Auma",
+    "department": "Cabin Services",
+    "phrasing": "standard",
+    "career_switch": true,
+    "skills": "Cabin service, galley inventory, working with caterers at outstations.",
+    "experience": "Cabin crew for 8 years, often helping to resolve catering shortages.",
+    "career_interests": "Moving off the aircraft into inflight product or procurement work."
+  },
+  {
+    "id": "T07",
+    "name": "Victor Maina",
+    "department": "Ground Operations",
+    "phrasing": "standard",
+    "career_switch": false,
+    "skills": "Check-in, boarding gate control, rebooking passengers.",
+    "experience": "Customer service agent at JKIA for 3 years.",
+    "career_interests": "Becoming a duty manager who handles disruptions."
+  },
+  {
+    "id": "T08",
+    "name": "Halima Said",
+    "department": "Ground Operations",
+    "phrasing": "paraphrase",
+    "career_switch": false,
+    "skills": "Working out how much each aircraft can safely carry, preparing the paperwork pilots sign before departure, spreading passengers and bags evenly.",
+    "experience": "Junior in the departure control office for one year.",
+    "career_interests": "Becoming fully qualified in that area and training others."
+  },
+  {
+    "id": "T09",
+    "name": "Ezekiel Langat",
+    "department": "Cargo",
+    "phrasing": "standard",
+    "career_switch": false,
+    "skills": "Cargo acceptance, air waybills, shipment screening.",
+    "experience": "Cargo agent at the terminal for 2 years.",
+    "career_interests": "Specialising in dangerous goods and becoming an inspector."
+  },
+  {
+    "id": "T10",
+    "name": "Mary Wangari",
+    "department": "Ground Operations",
+    "phrasing": "standard",
+    "career_switch": true,
+    "skills": "Reporting with Excel, tracking on-time performance figures, preparing monthly station reports.",
+    "experience": "Station administration clerk for 3 years.",
+    "career_interests": "Moving into data analysis and revenue or pricing work."
+  }
+]
