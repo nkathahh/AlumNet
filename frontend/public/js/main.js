@@ -446,20 +446,18 @@ function apiMentorCardHTML(m, alreadyRequested) {
       <div class="mentor-avatar">${initials}</div>
       <div>
         <div class="mentor-name-row">
-          <span class="mentor-name" style="cursor:pointer; text-decoration:underline;" data-action="view-profile" data-mentor-id="${m.mentor_id}">${m.name}</span>
+          <span class="mentor-name" style="cursor:pointer; text-decoration:underline;" data-action="view-profile" data-mentor-id="${m.mentor_id}">${escapeHTML(m.name)}</span>
           <span class="match-score">${m.score}% match</span>
         </div>
-        <div class="mentor-tags">${m.matched_attributes.map((t) => `<span class="tag">${t}</span>`).join('')}</div>
-        <div class="mentor-tags">${m.matched_attributes.map((t) => `<span class="tag">${t}</span>`).join('')}</div>
+        <div class="mentor-meta" style="margin:0 0 8px;">
+          ${escapeHTML(m.department || '')}${m.years_of_experience ? ' · ' + m.years_of_experience + ' yrs experience' : ''}
+        </div>
         ${matchBreakdownHTML(m.breakdown)}
-        <div class="mentor-meta">${m.department || ''}${m.years_of_experience ? ' · ' + m.years_of_experience + ' yrs experience' : ''}</div>
-        <div class="mentor-meta">${m.department || ''}${m.years_of_experience ? ' · ' + m.years_of_experience + ' yrs experience' : ''}</div>
       </div>
       <div class="mentor-actions">
         <button class="btn ${alreadyRequested ? 'btn-secondary' : 'btn-primary'}" data-action="request" data-mentor-id="${m.mentor_id}" ${alreadyRequested ? 'disabled' : ''}>
           ${alreadyRequested ? 'Requested' : 'Request'}
         </button>
-        <button class="icon-btn" data-action="bookmark" data-mentor-id="${m.mentor_id}" aria-label="Bookmark mentor">★</button>
       </div>
     </article>`;
 }
