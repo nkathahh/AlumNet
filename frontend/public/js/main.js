@@ -31,11 +31,12 @@ document.addEventListener('DOMContentLoaded', () => {
   wireEventsPage();
   renderAdminPendingEvents();
   wireOpportunitiesPage();
+  renderMentorDashboard();
 });
 
 const API_BASE = 'http://localhost:4000/api';
 
-const HOME_PAGE = { mentee: 'recommendations.html', mentor: 'requests.html', admin: 'admin.html' };
+const HOME_PAGE = { mentee: 'recommendations.html', mentor: 'mentor-dashboard.html', admin: 'admin.html' };
 
 const PAGE_ROLES = {
   'recommendations.html': ['mentee'],
@@ -67,6 +68,7 @@ const NAV_CONFIG = {
   mentor: [
     {
       group: 'Mentorship', links: [
+        { href: 'mentor-dashboard.html', label: 'Dashboard' },
         { href: 'requests.html', label: 'Mentee requests' },
         { href: 'profile.html', label: 'My profile' }
       ]
@@ -1078,9 +1080,8 @@ function drawOpportunities() {
   });
 
   if (!filtered.length) {
-    list.innerHTML = `<p style="color:var(--slate); padding:20px 4px;">${
-      allOpportunities.length ? 'No opportunities match your filters.' : 'No open opportunities right now.'
-    }</p>`;
+    list.innerHTML = `<p style="color:var(--slate); padding:20px 4px;">${allOpportunities.length ? 'No opportunities match your filters.' : 'No open opportunities right now.'
+      }</p>`;
     return;
   }
 
@@ -1129,8 +1130,8 @@ function openOpportunityModal(o) {
       ${closing.text ? `<div class="modal-section"><div class="label">Closing date</div><div class="value">${closing.text}</div></div>` : ''}
       <div class="modal-section"><div class="label">Posted by</div><div class="value">${escapeHTML(o.posted_by_name)}${o.posted_by_department ? ', ' + escapeHTML(o.posted_by_department) : ''}</div></div>
       ${link
-        ? `<a class="btn btn-primary btn-block" href="${escapeHTML(href)}" target="_blank" rel="noopener" style="margin-bottom:10px;">${isEmail ? 'Apply by email' : 'Apply now'}</a>`
-        : '<p class="mentor-meta" style="margin-bottom:10px;">No application link was provided.</p>'}
+      ? `<a class="btn btn-primary btn-block" href="${escapeHTML(href)}" target="_blank" rel="noopener" style="margin-bottom:10px;">${isEmail ? 'Apply by email' : 'Apply now'}</a>`
+      : '<p class="mentor-meta" style="margin-bottom:10px;">No application link was provided.</p>'}
       <button class="btn btn-secondary btn-block" id="close-opp-modal">Close</button>
     </div>`;
   document.body.appendChild(backdrop);
@@ -1439,7 +1440,7 @@ async function renderAdminOpportunities() {
   if (!res.ok) { list.innerHTML = `<p>${opps.error}</p>`; return; }
   if (!opps.length) { list.innerHTML = '<p style="color:var(--slate); padding:20px 4px;">Nothing pending review.</p>'; return; }
 
-    list.innerHTML = opps.map((o) => `
+  list.innerHTML = opps.map((o) => `
     <div class="opportunity-card">
       <div>
         <div class="opp-tags">
@@ -1690,4 +1691,234 @@ function wireSidebarToggle() {
 
   backdrop.addEventListener('click', closeSidebar);
   sidebar.querySelectorAll('a').forEach((link) => link.addEventListener('click', closeSidebar));
+}
+
+/* ===================== Mentor dashboard ===================== */
+
+// Accepts either a plain array or an object that wraps one
+function mdList(x) {
+  if (Array.isArray(x)) return x;
+  if (x && typeof x === 'object') {
+    for (const k of ['data', 'requests', 'events', 'proposals', 'posts', 'items', 'results']) {
+      if (Array.isArray(x[k])) return x[k];
+    }
+  }
+  return [];
+}
+
+function mdInitials(name) {
+  return (name || '?').split(' ').filter(Boolean).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
+}
+
+function mdIcon(paths) {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+}
+
+const MD_ICONS = {
+  inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+  users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+  award: '<circle cx="12" cy="8" r="6"/><path d="M15.48 12.89 17 22l-5-3-5 3 1.52-9.11"/>',
+  calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  dot: '<circle cx="12" cy="12" r="4"/>',
+  spark: '<path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>'
+};
+
+function mdEmpty(icon, title, text, linkHref, linkText) {
+  return `
+    <div class="md-empty">
+      <div class="md-empty-icon">${mdIcon(MD_ICONS[icon])}</div>
+      <div>
+        <div class="md-empty-title">${title}</div>
+        <div class="md-empty-text">${text}</div>
+        ${linkHref ? `<a href="${linkHref}" class="md-link">${linkText}</a>` : ''}
+      </div>
+    </div>`;
+}
+
+function mdDate(value) {
+  const d = new Date(value);
+  return isNaN(d) ? null : d;
+}
+
+async function renderMentorDashboard() {
+  const root = document.getElementById('mentor-dashboard');
+  if (!root) return;
+
+  // Only mentors belong here; send anyone else to their own home page
+  const role = localStorage.getItem('alumnet_role');
+  if (role && role !== 'mentor') {
+    window.location.href = (typeof HOME_PAGE !== 'undefined' && HOME_PAGE[role]) || 'login.html';
+    return;
+  }
+
+  const token = localStorage.getItem('alumnet_token');
+  const auth = { headers: { Authorization: `Bearer ${token}` } };
+  const get = async (path) => {
+    try {
+      const res = await fetch(`${API_BASE}${path}`, auth);
+      return res.ok ? await res.json() : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const [profileRaw, reqRaw, eventsRaw, propRaw, postRaw] = await Promise.all([
+    get('/profile/me'),
+    get('/mentorship-requests'),
+    get('/events'),
+    get('/events/my-proposals'),
+    get('/opportunities/mine')
+  ]);
+
+  const profile = (profileRaw && (profileRaw.profile || profileRaw)) || {};
+  const requests = mdList(reqRaw);
+  const events = mdList(eventsRaw);
+  const proposals = mdList(propRaw);
+  const posts = mdList(postRaw);
+
+  const nameOf = (r) => r.mentee_name || r.name || r.full_name || 'A mentee';
+  const deptOf = (r) => r.mentee_department || r.department || '';
+
+  const pending = requests.filter((r) => r.status === 'pending');
+  const active = requests.filter((r) => r.status === 'accepted');
+  const ended = requests.filter((r) => r.status === 'ended');
+  const registered = events.filter((e) => e.is_registered || e.registered || e.user_registered);
+
+  // ---------- Header ----------
+  const hour = new Date().getHours();
+  const part = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const fullName = profile.name || localStorage.getItem('alumnet_name') || '';
+  const first = fullName.split(' ')[0];
+  document.getElementById('md-date').textContent = new Date().toLocaleDateString('en-GB', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+  });
+  document.getElementById('md-greeting').textContent = first ? `${part}, ${first}` : part;
+  document.getElementById('md-sub').textContent =
+    pending.length ? `You have ${pending.length} mentee request${pending.length === 1 ? '' : 's'} waiting for your response.`
+      : active.length ? `You are mentoring ${active.length} staff member${active.length === 1 ? '' : 's'}. No new requests right now.`
+        : 'Your dashboard will fill up as mentees connect with you.';
+
+  // ---------- Matching nudge ----------
+  if (!profile.skills || !profile.experience) {
+    document.getElementById('md-nudge').innerHTML = `
+      <div class="md-banner">
+        <div class="md-banner-icon">${mdIcon(MD_ICONS.spark)}</div>
+        <div class="md-banner-body">
+          <strong>Mentees can't find you yet</strong>
+          <p>Recommendations are based on your skills and experience. Add them so the right mentees are matched with you.</p>
+        </div>
+        <a href="profile.html" class="btn btn-primary">Complete profile</a>
+      </div>`;
+  }
+
+  // ---------- Stat cards ----------
+  const kpi = (icon, num, label, sub, cls = '') => `
+    <div class="md-kpi ${cls}">
+      <div class="md-kpi-icon">${mdIcon(MD_ICONS[icon])}</div>
+      <div class="md-kpi-num">${num}</div>
+      <div class="md-kpi-label">${label}</div>
+      ${sub ? `<div class="md-kpi-sub">${sub}</div>` : ''}
+    </div>`;
+  document.getElementById('md-kpis').innerHTML =
+    kpi('inbox', pending.length, 'Awaiting your response', pending.length ? 'Action needed' : 'All caught up', pending.length ? 'alert' : '') +
+    kpi('users', active.length, `Active mentee${active.length === 1 ? '' : 's'}`, '') +
+    kpi('award', active.length + ended.length, 'Mentored in total', ended.length ? `${ended.length} completed` : '') +
+    kpi('calendar', registered.length, 'Events you are attending', '');
+
+  // ---------- Pending requests ----------
+  document.getElementById('md-pending').innerHTML = pending.length
+    ? pending.slice(0, 4).map((r) => {
+      const msg = r.message || r.request_message || r.note || '';
+      const when = r.created_at || r.requested_at;
+      return `
+          <div class="md-item">
+            <div class="md-avatar">${mdInitials(nameOf(r))}</div>
+            <div class="md-item-body">
+              <div class="md-item-title">${escapeHTML(nameOf(r))}${deptOf(r) ? `<span class="md-muted"> · ${escapeHTML(deptOf(r))}</span>` : ''}</div>
+              ${msg ? `<div class="md-item-text">${escapeHTML(msg.length > 110 ? msg.slice(0, 110) + '...' : msg)}</div>` : ''}
+              ${when ? `<div class="md-item-meta">Requested ${timeAgo(when)}</div>` : ''}
+            </div>
+            <a href="requests.html" class="btn btn-primary md-btn-sm">Review</a>
+          </div>`;
+    }).join('') + (pending.length > 4 ? `<a href="requests.html" class="md-link md-more">See ${pending.length - 4} more</a>` : '')
+    : mdEmpty('check', "You're all caught up", 'New requests from mentees will appear here.');
+
+  // ---------- Active mentees ----------
+  document.getElementById('md-mentees').innerHTML = active.length
+    ? active.map((r) => {
+      const since = mdDate(r.responded_at || r.updated_at || r.created_at);
+      return `
+          <div class="md-item">
+            <div class="md-avatar md-avatar-soft">${mdInitials(nameOf(r))}</div>
+            <div class="md-item-body">
+              <div class="md-item-title">${escapeHTML(nameOf(r))}</div>
+              <div class="md-item-meta">${escapeHTML(deptOf(r))}${since ? `${deptOf(r) ? ' · ' : ''}Mentoring since ${since.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}</div>
+            </div>
+            <span class="md-pill approved">Active</span>
+          </div>`;
+    }).join('')
+    : mdEmpty('users', 'No active mentees yet', 'When you accept a request, the mentee appears here.');
+
+  // ---------- Profile strength ----------
+  const checks = [
+    ['Department', profile.department],
+    ['Years of experience', profile.years_of_experience],
+    ['Skills', profile.skills],
+    ['Experience summary', profile.experience],
+    ['Career interests', profile.career_interests]
+  ];
+  const done = checks.filter(([, v]) => v !== null && v !== undefined && String(v).trim() !== '').length;
+  const pct = Math.round((done / checks.length) * 100);
+  document.getElementById('md-profile').innerHTML = `
+    <div class="md-progress-row">
+      <span class="md-progress-num">${pct}%</span>
+      <span class="md-muted">${pct === 100 ? 'Complete' : `${checks.length - done} item${checks.length - done === 1 ? '' : 's'} left`}</span>
+    </div>
+    <div class="md-progress"><div style="width:${pct}%"></div></div>
+    <ul class="md-checklist">
+      ${checks.map(([label, v]) => {
+    const ok = v !== null && v !== undefined && String(v).trim() !== '';
+    return `<li class="${ok ? 'ok' : ''}">${mdIcon(ok ? MD_ICONS.check : MD_ICONS.dot)}${label}</li>`;
+  }).join('')}
+    </ul>`;
+
+  // ---------- Upcoming events ----------
+  const byDate = (a, b) => (mdDate(a.event_date || a.date) || 0) - (mdDate(b.event_date || b.date) || 0);
+  const showEvents = (registered.length ? registered : events).slice().sort(byDate).slice(0, 3);
+  document.getElementById('md-events').innerHTML = showEvents.length
+    ? (!registered.length ? '<div class="md-hint">Happening soon</div>' : '') + showEvents.map((e) => {
+      const d = mdDate(e.event_date || e.date);
+      const mode = e.mode === 'virtual' ? 'Virtual' : (e.location || 'In person');
+      return `
+          <a class="md-event" href="events.html">
+            <div class="md-date-block">
+              <span class="m">${d ? d.toLocaleDateString('en-GB', { month: 'short' }) : '--'}</span>
+              <span class="d">${d ? d.getDate() : '--'}</span>
+            </div>
+            <div class="md-item-body">
+              <div class="md-item-title">${escapeHTML(e.title || 'Event')}</div>
+              <div class="md-item-meta">${d ? d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) + ' · ' : ''}${escapeHTML(mode)}</div>
+            </div>
+          </a>`;
+    }).join('')
+    : mdEmpty('calendar', 'No upcoming events', 'Propose a talk or meetup for the community.', 'events.html', 'Propose an event');
+
+  // ---------- Contributions ----------
+  const contribs = [
+    ...proposals.map((p) => ({ title: p.title, status: p.status, kind: 'Event', when: p.created_at || p.event_date })),
+    ...posts.map((p) => ({ title: p.title, status: p.approval_status, kind: 'Opportunity', when: p.created_at }))
+  ].sort((a, b) => (mdDate(b.when) || 0) - (mdDate(a.when) || 0)).slice(0, 5);
+  const statusLabel = { approved: 'Live', pending: 'In review', rejected: 'Not approved' };
+  document.getElementById('md-contrib').innerHTML = contribs.length
+    ? contribs.map((c) => `
+        <div class="md-item md-item-tight">
+          <div class="md-item-body">
+            <div class="md-item-title">${escapeHTML(c.title || 'Untitled')}</div>
+            <div class="md-item-meta">${c.kind}</div>
+          </div>
+          <span class="md-pill ${c.status || 'pending'}">${statusLabel[c.status] || 'In review'}</span>
+        </div>`).join('')
+    : mdEmpty('spark', 'Nothing shared yet', 'Share an event or job opportunity with current staff.', 'opportunities.html', 'Post an opportunity');
 }
