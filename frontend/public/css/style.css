@@ -1394,8 +1394,8 @@ textarea:focus-visible {
 
 /* ===================== Mentor dashboard ===================== */
 .md {
-  --md-surface: #ffffff;
-  --md-border: rgba(15, 23, 42, 0.08);
+  --md-surface: var(--panel);
+  --md-border: var(--stone-line);
   --md-muted: var(--slate, #64748b);
   --md-accent: #c8102e;
   --md-accent-soft: rgba(200, 16, 46, 0.08);
@@ -1405,12 +1405,7 @@ textarea:focus-visible {
   --md-amber-soft: rgba(180, 83, 9, 0.1);
   max-width: 1160px;
   margin: 0 auto;
-  padding: 36px 40px 48px;
-}
-[data-theme="dark"] .md, body.dark .md, body.dark-mode .md {
-  --md-surface: #1e2427;
-  --md-border: rgba(255, 255, 255, 0.08);
-  --md-accent-soft: rgba(232, 72, 94, 0.15);
+  padding: 0px 0px 40px;
 }
 
 /* Header */
@@ -1524,12 +1519,17 @@ textarea:focus-visible {
   .md-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 900px) {
-  .md { padding: 24px 20px 40px; }
+  .md { padding: 0px 0px 32px; }
   .md-top { padding-right: 0; padding-top: 24px; }
 }
 @media (max-width: 520px) {
-  .md { padding: 20px 16px 32px; }
+  .md { padding: 0px 0px 24px; }
   .md-kpis { grid-template-columns: 1fr; gap: 10px; }
   .md-greeting { font-size: 1.5rem; }
   .md-banner { flex-direction: column; align-items: flex-start; }
 }
+
+/* Dashboards use the full width; other pages keep the 920px limit */
+.app-main:has(.md) { max-width: none; }
+
+.md-pill.match { background: var(--md-accent-soft); color: var(--md-accent); }

@@ -11,7 +11,6 @@ document.addEventListener('DOMContentLoaded', () => {
   wireSignupForm();
   wireLoginForm();
   renderMentorList();
-  renderMenteeDashboardHeader()
   renderRequests();
   setRequestsSubtitle();
   wireProfileForm();
@@ -32,13 +31,16 @@ document.addEventListener('DOMContentLoaded', () => {
   renderAdminPendingEvents();
   wireOpportunitiesPage();
   renderMentorDashboard();
+  renderMenteeDashboard();
 });
 
 const API_BASE = 'http://localhost:4000/api';
 
-const HOME_PAGE = { mentee: 'recommendations.html', mentor: 'mentor-dashboard.html', admin: 'admin.html' };
+const HOME_PAGE = { mentee: 'mentee-dashboard.html', mentor: 'mentor-dashboard.html', admin: 'admin.html' };
 
 const PAGE_ROLES = {
+  'mentee-dashboard.html': ['mentee'],
+  'mentor-dashboard.html': ['mentor'],
   'recommendations.html': ['mentee'],
   'requests.html': ['mentee', 'mentor'],
   'profile.html': ['mentee', 'mentor'],
@@ -52,6 +54,7 @@ const NAV_CONFIG = {
   mentee: [
     {
       group: 'Network', links: [
+        { href: 'mentee-dashboard.html', label: 'Dashboard' },
         { href: 'recommendations.html', label: 'Find a mentor' },
         { href: 'requests.html', label: 'My requests' },
         { href: 'profile.html', label: 'My profile' }
@@ -1598,77 +1601,6 @@ async function updateNotifBadge() {
   } catch { }
 }
 
-
-async function renderMenteeDashboardHeader() {
-  const greetingEl = document.getElementById('dash-greeting');
-  const statsEl = document.getElementById('dash-stats');
-  const nudgeMount = document.getElementById('profile-nudge-mount');
-  if (!greetingEl || !statsEl) return;
-
-  const token = localStorage.getItem('alumnet_token');
-  if (!token) return;
-
-  try {
-    const [profileRes, summaryRes] = await Promise.all([
-      fetch(`${API_BASE}/profile/me`, { headers: { Authorization: `Bearer ${token}` } }),
-      fetch(`${API_BASE}/dashboard/mentee-summary`, { headers: { Authorization: `Bearer ${token}` } })
-    ]);
-    const profile = profileRes.ok ? await profileRes.json() : null;
-    const summary = summaryRes.ok ? await summaryRes.json() : null;
-
-    if (profile?.name) {
-      const firstName = profile.name.split(' ')[0];
-      greetingEl.textContent = `Welcome back, ${firstName}`;
-    }
-
-    if (summary) {
-      statsEl.innerHTML = `
-        <div class="dash-stat-card">
-          <div class="icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
-            </svg>
-          </div>
-          <div class="num">${summary.activeMentorships}</div>
-          <div class="label">Active mentorship${summary.activeMentorships === 1 ? '' : 's'}</div>
-        </div>
-        <div class="dash-stat-card">
-          <div class="icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;">
-              <circle cx="12" cy="12" r="10" />
-              <path d="M12 6v6l4 2" />
-            </svg>
-          </div>
-          <div class="num">${summary.pendingRequests}</div>
-          <div class="label">Pending request${summary.pendingRequests === 1 ? '' : 's'}</div>
-        </div>
-        <div class="dash-stat-card ${summary.profileComplete ? '' : 'alert'}">
-          <div class="icon">
-            ${summary.profileComplete
-          ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>'
-          : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>'}
-          </div>
-          <div class="num">${summary.profileComplete ? 'Complete' : 'Incomplete'}</div>
-          <div class="label">Profile status</div>
-        </div>`;
-
-      if (!summary.profileComplete && nudgeMount) {
-        nudgeMount.innerHTML = `
-          <div class="profile-nudge">
-            <div>
-              <strong>Your profile is incomplete</strong>
-              <p>Mentor matches are only as good as your profile. Add your skills and experience to get better recommendations.</p>
-            </div>
-            <a href="profile.html" class="btn btn-primary" style="white-space:nowrap;">Complete profile</a>
-          </div>`;
-      }
-    }
-  } catch {
-    // header is non-critical, fail quietly and leave defaults
-  }
-}
 function wireSidebarToggle() {
   const btn = document.getElementById('hamburger-btn');
   const sidebar = document.querySelector('.app-sidebar');
@@ -1778,8 +1710,8 @@ async function renderMentorDashboard() {
   const proposals = mdList(propRaw);
   const posts = mdList(postRaw);
 
-  const nameOf = (r) => r.mentee_name || r.name || r.full_name || 'A mentee';
-  const deptOf = (r) => r.mentee_department || r.department || '';
+  const nameOf = (r) => r.other_name || r.mentee_name || r.name || 'A mentee';
+  const deptOf = (r) => r.other_department || r.mentee_department || r.department || '';
 
   const pending = requests.filter((r) => r.status === 'pending');
   const active = requests.filter((r) => r.status === 'accepted');
@@ -1921,4 +1853,207 @@ async function renderMentorDashboard() {
           <span class="md-pill ${c.status || 'pending'}">${statusLabel[c.status] || 'In review'}</span>
         </div>`).join('')
     : mdEmpty('spark', 'Nothing shared yet', 'Share an event or job opportunity with current staff.', 'opportunities.html', 'Post an opportunity');
+}
+
+/* ===================== Mentee dashboard ===================== */
+const ME_RECS_PATH = '/recommendations'; 
+
+MD_ICONS.briefcase = '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>';
+MD_ICONS.search = '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>';
+
+async function mdGet(path) {
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('alumnet_token')}` }
+    });
+    return res.ok ? await res.json() : null;
+  } catch {
+    return null;
+  }
+}
+
+function mdFilled(v) {
+  return v !== null && v !== undefined && String(v).trim() !== '';
+}
+
+function mdProfileHTML(profile) {
+  const checks = [
+    ['Department', profile.department],
+    ['Years of experience', profile.years_of_experience],
+    ['Skills', profile.skills],
+    ['Experience summary', profile.experience],
+    ['Career interests', profile.career_interests]
+  ];
+  const done = checks.filter(([, v]) => mdFilled(v)).length;
+  const pct = Math.round((done / checks.length) * 100);
+  return `
+    <div class="md-progress-row">
+      <span class="md-progress-num">${pct}%</span>
+      <span class="md-muted">${pct === 100 ? 'Complete' : `${checks.length - done} item${checks.length - done === 1 ? '' : 's'} left`}</span>
+    </div>
+    <div class="md-progress"><div style="width:${pct}%"></div></div>
+    <ul class="md-checklist">
+      ${checks.map(([label, v]) => `<li class="${mdFilled(v) ? 'ok' : ''}">${mdIcon(mdFilled(v) ? MD_ICONS.check : MD_ICONS.dot)}${label}</li>`).join('')}
+    </ul>`;
+}
+
+function mdEventsHTML(events, registered) {
+  const byDate = (a, b) => (mdDate(a.event_date || a.date) || 0) - (mdDate(b.event_date || b.date) || 0);
+  const list = (registered.length ? registered : events).slice().sort(byDate).slice(0, 3);
+  if (!list.length) return mdEmpty('calendar', 'No upcoming events', 'New alumni events will appear here.', 'events.html', 'Browse events');
+  return (!registered.length ? '<div class="md-hint">Happening soon</div>' : '') + list.map((e) => {
+    const d = mdDate(e.event_date || e.date);
+    const where = e.mode === 'virtual' ? 'Virtual' : (e.location || 'In person');
+    return `
+      <a class="md-event" href="events.html">
+        <div class="md-date-block">
+          <span class="m">${d ? d.toLocaleDateString('en-GB', { month: 'short' }) : '--'}</span>
+          <span class="d">${d ? d.getDate() : '--'}</span>
+        </div>
+        <div class="md-item-body">
+          <div class="md-item-title">${escapeHTML(e.title || 'Event')}</div>
+          <div class="md-item-meta">${d ? d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) + ' · ' : ''}${escapeHTML(where)}</div>
+        </div>
+      </a>`;
+  }).join('');
+}
+
+async function renderMenteeDashboard() {
+  const root = document.getElementById('mentee-dashboard');
+  if (!root) return;
+
+  const role = localStorage.getItem('alumnet_role');
+  if (role && role !== 'mentee') {
+    window.location.href = (typeof HOME_PAGE !== 'undefined' && HOME_PAGE[role]) || 'login.html';
+    return;
+  }
+
+  const [profileRaw, reqRaw, recRaw, eventsRaw, oppRaw] = await Promise.all([
+    mdGet('/profile/me'),
+    mdGet('/mentorship-requests'),
+    mdGet(ME_RECS_PATH),
+    mdGet('/events'),
+    mdGet('/opportunities')
+  ]);
+
+  const profile = (profileRaw && (profileRaw.profile || profileRaw)) || {};
+  const requests = mdList(reqRaw);
+  const recs = mdList(recRaw);
+  const events = mdList(eventsRaw);
+  const opps = mdList(oppRaw);
+
+  const mentorName = (r) => r.other_name || r.mentor_name || r.name || 'Your mentor';
+  const mentorDept = (r) => r.other_department || r.mentor_department || r.department || '';
+  const active = requests.filter((r) => r.status === 'accepted');
+  const pending = requests.filter((r) => r.status === 'pending');
+  const registered = events.filter((e) => e.is_registered || e.registered || e.user_registered);
+  const profileReady = mdFilled(profile.skills) && mdFilled(profile.career_interests);
+
+  // ---------- Header ----------
+  const hour = new Date().getHours();
+  const part = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const first = (profile.name || localStorage.getItem('alumnet_name') || '').split(' ')[0];
+  document.getElementById('me-date').textContent = new Date().toLocaleDateString('en-GB', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+  });
+  document.getElementById('me-greeting').textContent = first ? `${part}, ${first}` : part;
+  document.getElementById('me-sub').textContent =
+    active.length ? `You are being mentored by ${mentorName(active[0])}.`
+    : pending.length ? `You have ${pending.length} request${pending.length === 1 ? '' : 's'} waiting for a mentor to respond.`
+    : 'Start by finding a mentor who matches your career goals.';
+
+  // ---------- Nudge ----------
+  if (!profileReady) {
+    document.getElementById('me-nudge').innerHTML = `
+      <div class="md-banner">
+        <div class="md-banner-icon">${mdIcon(MD_ICONS.spark)}</div>
+        <div class="md-banner-body">
+          <strong>Get better mentor matches</strong>
+          <p>Recommendations are based on your skills, experience and career interests. The more you add, the better your matches.</p>
+        </div>
+        <a href="profile.html" class="btn btn-primary">Complete profile</a>
+      </div>`;
+  }
+
+  // ---------- Stat cards ----------
+  const kpi = (icon, num, label, sub, cls = '') => `
+    <div class="md-kpi ${cls}">
+      <div class="md-kpi-icon">${mdIcon(MD_ICONS[icon])}</div>
+      <div class="md-kpi-num">${num}</div>
+      <div class="md-kpi-label">${label}</div>
+      ${sub ? `<div class="md-kpi-sub">${sub}</div>` : ''}
+    </div>`;
+  document.getElementById('me-kpis').innerHTML =
+    kpi('users', active.length, `Active mentor${active.length === 1 ? '' : 's'}`, active.length ? '' : 'Not matched yet') +
+    kpi('inbox', pending.length, 'Requests awaiting reply', '') +
+    kpi('calendar', registered.length, 'Events you are attending', '') +
+    kpi('briefcase', opps.length, 'Open opportunities', '');
+
+  // ---------- Mentorship ----------
+  const mentorshipItems = [
+    ...active.map((r) => {
+      const since = mdDate(r.responded_at || r.updated_at || r.created_at);
+      return `
+        <div class="md-item">
+          <div class="md-avatar">${mdInitials(mentorName(r))}</div>
+          <div class="md-item-body">
+            <div class="md-item-title">${escapeHTML(mentorName(r))}${mentorDept(r) ? `<span class="md-muted"> · ${escapeHTML(mentorDept(r))}</span>` : ''}</div>
+            <div class="md-item-meta">${since ? `Mentoring you since ${since.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : 'Your mentor'}</div>
+          </div>
+          <span class="md-pill approved">Active</span>
+        </div>`;
+    }),
+    ...pending.map((r) => {
+      const when = r.created_at || r.requested_at;
+      return `
+        <div class="md-item">
+          <div class="md-avatar md-avatar-soft">${mdInitials(mentorName(r))}</div>
+          <div class="md-item-body">
+            <div class="md-item-title">${escapeHTML(mentorName(r))}${mentorDept(r) ? `<span class="md-muted"> · ${escapeHTML(mentorDept(r))}</span>` : ''}</div>
+            <div class="md-item-meta">${when ? `Requested ${timeAgo(when)}` : 'Request sent'}</div>
+          </div>
+          <span class="md-pill pending">Awaiting reply</span>
+        </div>`;
+    })
+  ].slice(0, 4);
+  document.getElementById('me-mentorship').innerHTML = mentorshipItems.length
+    ? mentorshipItems.join('')
+    : mdEmpty('users', 'No mentor yet', 'Send a request to one of your recommended mentors to get started.', 'recommendations.html', 'Find a mentor');
+
+  // ---------- Top matches ----------
+  const top = recs.slice(0, 3);
+  document.getElementById('me-matches').innerHTML = top.length
+    ? top.map((m) => `
+        <div class="md-item">
+          <div class="md-avatar md-avatar-soft">${mdInitials(m.name)}</div>
+          <div class="md-item-body">
+            <div class="md-item-title">${escapeHTML(m.name || 'Mentor')}</div>
+            <div class="md-item-meta">${escapeHTML(m.department || '')}${m.years_of_experience ? ` · ${m.years_of_experience} yrs experience` : ''}</div>
+          </div>
+          ${m.score !== undefined ? `<span class="md-pill match">${m.score}% match</span>` : ''}
+          <a href="recommendations.html" class="btn btn-secondary md-btn-sm">View</a>
+        </div>`).join('')
+    : profileReady
+      ? mdEmpty('search', 'See who matches you', 'Your recommended mentors are ranked by how well they fit your goals.', 'recommendations.html', 'View recommendations')
+      : mdEmpty('search', 'Complete your profile to see matches', 'Add your skills and career interests so we can recommend mentors.', 'profile.html', 'Complete profile');
+
+  // ---------- Right column ----------
+  document.getElementById('me-profile').innerHTML = mdProfileHTML(profile);
+  document.getElementById('me-events').innerHTML = mdEventsHTML(events, registered);
+
+  const latest = opps.slice().sort((a, b) => (mdDate(b.created_at) || 0) - (mdDate(a.created_at) || 0)).slice(0, 3);
+  document.getElementById('me-opps').innerHTML = latest.length
+    ? latest.map((o) => {
+        const type = o.opportunity_type ? o.opportunity_type.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase()) : '';
+        const closes = o.closing_date && typeof closingLabel === 'function' ? closingLabel(o.closing_date) : '';
+        return `
+          <a class="md-event" href="opportunities.html">
+            <div class="md-kpi-icon" style="width:40px;height:40px;">${mdIcon(MD_ICONS.briefcase)}</div>
+            <div class="md-item-body">
+              <div class="md-item-title">${escapeHTML(o.title || 'Opportunity')}</div>
+              <div class="md-item-meta">${escapeHTML([o.company, type].filter(Boolean).join(' · '))}${closes ? ` · ${escapeHTML(closes)}` : ''}</div>
+            </div>
+          </a>`;
+      }).join('')
+    : mdEmpty('briefcase', 'No open opportunities', 'Roles shared by retired staff will appear here.');
 }

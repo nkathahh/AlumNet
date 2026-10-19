@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Dashboard AlumNet</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <div class="app-shell">
+        <button id="hamburger-btn" class="hamburger-btn" aria-label="Open menu" aria-expanded="false">
+            <span></span><span></span><span></span>
+        </button>
+        <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+        <div class="topbar-actions">
+            <label class="theme-switch" title="Toggle dark mode">
+                <input type="checkbox" id="theme-toggle-checkbox">
+                <span class="switch-track"><span class="switch-thumb"></span></span>
+            </label>
+            <button id="logout-btn" class="icon-btn" aria-label="Log out" title="Log out">⏻</button>
+        </div>
+        <aside class="app-sidebar">
+            <div class="app-brand"><span class="mark">KQ</span> AlumNet</div>
+            <nav id="sidebar-nav"></nav>
+            <div class="app-sidebar-foot"></div>
+        </aside>
+        <main class="app-main">
+
+            <div class="md" id="mentee-dashboard">
+                <header class="md-top">
+                    <p class="md-date" id="me-date"></p>
+                    <h1 class="md-greeting" id="me-greeting">Welcome back</h1>
+                    <p class="md-sub" id="me-sub">Loading your overview...</p>
+                    <div class="md-actions">
+                        <a href="recommendations.html" class="btn btn-primary">Find a mentor</a>
+                        <a href="events.html" class="btn btn-secondary">Browse events</a>
+                    </div>
+                </header>
+
+                <div id="me-nudge"></div>
+
+                <section class="md-kpis" id="me-kpis">
+                    <div class="md-kpi md-skel"></div>
+                    <div class="md-kpi md-skel"></div>
+                    <div class="md-kpi md-skel"></div>
+                    <div class="md-kpi md-skel"></div>
+                </section>
+
+                <div class="md-grid">
+                    <div class="md-col">
+                        <section class="md-panel">
+                            <div class="md-panel-head">
+                                <h2>Your mentorship</h2>
+                                <a href="requests.html">My requests</a>
+                            </div>
+                            <div id="me-mentorship">
+                                <div class="md-skel md-skel-row"></div>
+                            </div>
+                        </section>
+
+                        <section class="md-panel">
+                            <div class="md-panel-head">
+                                <h2>Top matches for you</h2>
+                                <a href="recommendations.html">See all</a>
+                            </div>
+                            <div id="me-matches">
+                                <div class="md-skel md-skel-row"></div>
+                                <div class="md-skel md-skel-row"></div>
+                            </div>
+                        </section>
+                    </div>
+
+                    <aside class="md-col">
+                        <section class="md-panel">
+                            <div class="md-panel-head">
+                                <h2>Profile strength</h2>
+                                <a href="profile.html">Edit</a>
+                            </div>
+                            <div id="me-profile">
+                                <div class="md-skel md-skel-row"></div>
+                            </div>
+                        </section>
+
+                        <section class="md-panel">
+                            <div class="md-panel-head">
+                                <h2>Upcoming events</h2>
+                                <a href="events.html">All events</a>
+                            </div>
+                            <div id="me-events">
+                                <div class="md-skel md-skel-row"></div>
+                            </div>
+                        </section>
+
+                        <section class="md-panel">
+                            <div class="md-panel-head">
+                                <h2>Latest opportunities</h2>
+                                <a href="opportunities.html">View all</a>
+                            </div>
+                            <div id="me-opps">
+                                <div class="md-skel md-skel-row"></div>
+                            </div>
+                        </section>
+                    </aside>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="js/main.js"></script>
+</body>
+
+</html>
