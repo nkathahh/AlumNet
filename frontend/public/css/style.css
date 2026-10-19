@@ -1533,3 +1533,27 @@ textarea:focus-visible {
 .app-main:has(.md) { max-width: none; }
 
 .md-pill.match { background: var(--md-accent-soft); color: var(--md-accent); }
+
+/* Admin overview */
+.md-inline-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.md-avatar svg { width: 18px; height: 18px; }
+.md-pill.neutral { background: var(--wash); color: var(--ink-soft); }
+.md-split { display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: var(--md-border); gap: 2px; margin: 4px 0 14px; }
+.md-split span { display: block; height: 100%; }
+.md-split .a, .md-legend i.a { background: var(--kq-green); }
+.md-split .b, .md-legend i.b { background: var(--md-accent); }
+.md-legend { display: grid; gap: 8px; font-size: 0.85rem; }
+.md-legend div { display: flex; align-items: center; gap: 8px; }
+.md-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.md-legend b { margin-left: auto; }
+@media (max-width: 520px) {
+  .md-inline-actions { flex-direction: column; }
+}
+
+/* Admin create-event form */
+.admin-form { padding-top: 14px; }
+.admin-form .field-row { gap: 16px; }
+.admin-form-actions { display: flex; justify-content: flex-end; }
+@media (max-width: 720px) {
+  .admin-form .field-row { grid-template-columns: 1fr; }
+}

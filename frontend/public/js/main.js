@@ -32,6 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
   wireOpportunitiesPage();
   renderMentorDashboard();
   renderMenteeDashboard();
+  renderAdminOverview();
 });
 
 const API_BASE = 'http://localhost:4000/api';
@@ -87,6 +88,7 @@ const NAV_CONFIG = {
   admin: [
     {
       group: 'Platform', links: [
+        { tab: 'overview', label: 'Overview' },
         { tab: 'users', label: 'User management' },
         { tab: 'events', label: 'Event management' },
         { tab: 'opportunities', label: 'Content moderation' },
@@ -1351,19 +1353,36 @@ function wireAdminSearch() {
   });
 }
 
+const ADMIN_TABS = ['overview', 'users', 'events', 'opportunities', 'logs'];
+
+function showAdminTab(name) {
+  ADMIN_TABS.forEach((t) => {
+    const el = document.getElementById(`admin-tab-${t}`);
+    if (el) el.style.display = t === name ? 'block' : 'none';
+  });
+  document.querySelectorAll('[data-admin-tab]').forEach((l) => {
+    l.classList.toggle('active', l.dataset.adminTab === name);
+  });
+  window.scrollTo(0, 0);
+}
+
 function wireAdminTabs() {
   const tabLinks = document.querySelectorAll('[data-admin-tab]');
   if (!tabLinks.length) return;
   tabLinks.forEach((link) => {
     link.addEventListener('click', (e) => {
       e.preventDefault();
-      tabLinks.forEach((l) => l.classList.remove('active'));
-      link.classList.add('active');
-      ['users', 'events', 'opportunities', 'logs'].forEach((name) => {
-        document.getElementById(`admin-tab-${name}`).style.display = name === link.dataset.adminTab ? 'block' : 'none';
-      });
+      showAdminTab(link.dataset.adminTab);
     });
   });
+  // Links inside the overview that jump to another tab
+  document.addEventListener('click', (e) => {
+    const go = e.target.closest('[data-goto-tab]');
+    if (!go) return;
+    e.preventDefault();
+    showAdminTab(go.dataset.gotoTab);
+  });
+  showAdminTab('overview');
 }
 
 async function renderAdminEvents() {
@@ -2056,4 +2075,149 @@ async function renderMenteeDashboard() {
           </a>`;
       }).join('')
     : mdEmpty('briefcase', 'No open opportunities', 'Roles shared by retired staff will appear here.');
+}
+
+/* ===================== Admin overview ===================== */
+MD_ICONS.shield = '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>';
+MD_ICONS.activity = '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>';
+
+function mdHumanise(action) {
+  return String(action || '').replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
+}
+
+async function renderAdminOverview() {
+  const root = document.getElementById('admin-tab-overview');
+  if (!root) return;
+
+  const [statsRaw, usersRaw, eventsRaw, oppsRaw, logsRaw] = await Promise.all([
+    mdGet('/admin/stats'),
+    mdGet('/admin/users'),
+    mdGet('/admin/events/pending'),
+    mdGet('/admin/opportunities/pending'),
+    mdGet('/admin/activity-logs')
+  ]);
+
+  const stats = statsRaw || {};
+  const users = mdList(usersRaw);
+  const pendingEvents = mdList(eventsRaw);
+  const pendingOpps = mdList(oppsRaw);
+  const logs = mdList(logsRaw);
+  const toReview = pendingEvents.length + pendingOpps.length;
+
+  // ---------- Header ----------
+  document.getElementById('ov-date').textContent = new Date().toLocaleDateString('en-GB', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+  });
+  document.getElementById('ov-sub').textContent = toReview
+    ? `${toReview} item${toReview === 1 ? '' : 's'} need${toReview === 1 ? 's' : ''} your review.`
+    : 'Nothing needs your review right now.';
+
+  // ---------- Stat cards ----------
+  const kpi = (icon, num, label, sub, cls = '') => `
+    <div class="md-kpi ${cls}">
+      <div class="md-kpi-icon">${mdIcon(MD_ICONS[icon])}</div>
+      <div class="md-kpi-num">${num ?? 0}</div>
+      <div class="md-kpi-label">${label}</div>
+      ${sub ? `<div class="md-kpi-sub">${sub}</div>` : ''}
+    </div>`;
+  const flagged = stats.flaggedAccounts || 0;
+  document.getElementById('ov-kpis').innerHTML =
+    kpi('users', stats.totalAlumni ?? users.length, 'Total alumni', '') +
+    kpi('award', stats.activeMentorships, 'Active mentorships', `${stats.pendingRequests || 0} requests pending`) +
+    kpi('inbox', toReview, 'Awaiting review', toReview ? 'Action needed' : 'All clear', toReview ? 'alert' : '') +
+    kpi('shield', flagged, 'Flagged accounts', '', flagged ? 'alert' : '');
+
+  // ---------- Needs review ----------
+  const reviewRows = [
+    ...pendingEvents.map((e) => ({
+      kind: 'event', id: e.event_id, title: e.title, label: 'Event',
+      meta: `Proposed by ${e.proposed_by_name || 'a mentor'}${e.event_date ? ' · ' + new Date(e.event_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : ''}`
+    })),
+    ...pendingOpps.map((o) => ({
+      kind: 'opportunity', id: o.opportunity_id, title: o.title, label: 'Opportunity',
+      meta: `Posted by ${o.posted_by_name || 'a mentor'}${o.company ? ' · ' + o.company : ''}`
+    }))
+  ];
+  document.getElementById('ov-review').innerHTML = reviewRows.length
+    ? reviewRows.slice(0, 6).map((r) => `
+        <div class="md-item">
+          <div class="md-avatar md-avatar-soft">${mdIcon(MD_ICONS[r.kind === 'event' ? 'calendar' : 'briefcase'])}</div>
+          <div class="md-item-body">
+            <div class="md-item-title">${escapeHTML(r.title || 'Untitled')}</div>
+            <div class="md-item-meta">${r.label} · ${escapeHTML(r.meta)}</div>
+          </div>
+          <div class="md-inline-actions">
+            <button class="btn btn-primary md-btn-sm" data-ov-review="${r.id}" data-kind="${r.kind}" data-decision="approved">Approve</button>
+            <button class="btn btn-secondary md-btn-sm" data-ov-review="${r.id}" data-kind="${r.kind}" data-decision="rejected">Reject</button>
+          </div>
+        </div>`).join('')
+    : mdEmpty('check', 'All clear', 'Event proposals and opportunity posts from mentors appear here for approval.');
+
+  document.querySelectorAll('[data-ov-review]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      btn.closest('.md-item').querySelectorAll('button').forEach((b) => (b.disabled = true));
+      const path = btn.dataset.kind === 'event'
+        ? `/admin/events/${btn.dataset.ovReview}/review`
+        : `/admin/opportunities/${btn.dataset.ovReview}/review`;
+      try {
+        await fetch(`${API_BASE}${path}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('alumnet_token')}` },
+          body: JSON.stringify({ decision: btn.dataset.decision })
+        });
+      } catch { /* the refresh below shows the real state */ }
+      renderAdminOverview();
+      renderAdminPendingEvents();
+      renderAdminEvents();
+      renderAdminOpportunities();
+      renderAdminLogs();
+    });
+  });
+
+  // ---------- Recent activity ----------
+  document.getElementById('ov-activity').innerHTML = logs.length
+    ? logs.slice(0, 6).map((l) => `
+        <div class="md-item md-item-tight">
+          <div class="md-empty-icon" style="width:32px;height:32px;">${mdIcon(MD_ICONS.activity)}</div>
+          <div class="md-item-body">
+            <div class="md-item-title">${escapeHTML(l.description || mdHumanise(l.action_type))}</div>
+            <div class="md-item-meta">${escapeHTML(l.admin_name || 'Admin')} · ${l.created_at ? timeAgo(l.created_at) : ''}</div>
+          </div>
+        </div>`).join('')
+    : mdEmpty('activity', 'No activity yet', 'Admin actions such as approvals and suspensions are recorded here.');
+
+  // ---------- Community ----------
+  const mentors = users.filter((u) => u.role === 'mentor').length;
+  const mentees = users.filter((u) => u.role === 'mentee').length;
+  const total = mentors + mentees || 1;
+  const monthAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const newThisMonth = users.filter((u) => u.role !== 'admin' && new Date(u.created_at) >= monthAgo).length;
+  document.getElementById('ov-community').innerHTML = `
+    <div class="md-progress-row">
+      <span class="md-progress-num">${mentors + mentees}</span>
+      <span class="md-muted">members · ${newThisMonth} joined in the last 30 days</span>
+    </div>
+    <div class="md-split">
+      <span class="a" style="width:${(mentors / total) * 100}%"></span>
+      <span class="b" style="width:${(mentees / total) * 100}%"></span>
+    </div>
+    <div class="md-legend">
+      <div><i class="a"></i>Mentors (retired staff)<b>${mentors}</b></div>
+      <div><i class="b"></i>Mentees (current staff)<b>${mentees}</b></div>
+    </div>`;
+
+  // ---------- Newest members ----------
+  const newest = users.filter((u) => u.role !== 'admin')
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5);
+  document.getElementById('ov-members').innerHTML = newest.length
+    ? newest.map((u) => `
+        <div class="md-item md-item-tight">
+          <div class="md-avatar md-avatar-soft">${mdInitials(u.name)}</div>
+          <div class="md-item-body">
+            <div class="md-item-title">${escapeHTML(u.name)}</div>
+            <div class="md-item-meta">Joined ${timeAgo(u.created_at)}</div>
+          </div>
+          <span class="md-pill ${u.role === 'mentor' ? 'approved' : 'neutral'}">${u.role === 'mentor' ? 'Mentor' : 'Mentee'}</span>
+        </div>`).join('')
+    : mdEmpty('users', 'No members yet', 'New sign-ups appear here.');
 }

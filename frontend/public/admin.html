@@ -28,18 +28,84 @@
             <div class="app-sidebar-foot"></div>
         </aside>
 
-        <main class="app-main" style="max-width: 100%;">
-            <div class="app-header">
-                <div>
-                    <h1>Admin dashboard</h1>
-                    <span class="sub">Platform activity and account management.</span>
+        <main class="app-main">
+
+            <!-- Kept for the user table code; the overview shows these numbers instead -->
+            <div class="stat-row" id="stat-row" style="display:none;"></div>
+
+            <!-- ================= Overview ================= -->
+            <div id="admin-tab-overview" class="md">
+                <header class="md-top">
+                    <p class="md-date" id="ov-date"></p>
+                    <h1 class="md-greeting">Platform overview</h1>
+                    <p class="md-sub" id="ov-sub">Loading...</p>
+                    <div class="md-actions">
+                        <a href="#" class="btn btn-secondary" data-goto-tab="events">Create an event</a>
+                        <a href="#" class="btn btn-secondary" data-goto-tab="users">Manage users</a>
+                    </div>
+                </header>
+
+                <section class="md-kpis" id="ov-kpis">
+                    <div class="md-kpi md-skel"></div>
+                    <div class="md-kpi md-skel"></div>
+                    <div class="md-kpi md-skel"></div>
+                    <div class="md-kpi md-skel"></div>
+                </section>
+
+                <div class="md-grid">
+                    <div class="md-col">
+                        <section class="md-panel">
+                            <div class="md-panel-head">
+                                <h2>Needs your review</h2>
+                                <a href="#" data-goto-tab="opportunities">Moderation</a>
+                            </div>
+                            <div id="ov-review">
+                                <div class="md-skel md-skel-row"></div>
+                                <div class="md-skel md-skel-row"></div>
+                            </div>
+                        </section>
+
+                        <section class="md-panel">
+                            <div class="md-panel-head">
+                                <h2>Recent activity</h2>
+                                <a href="#" data-goto-tab="logs">Full log</a>
+                            </div>
+                            <div id="ov-activity">
+                                <div class="md-skel md-skel-row"></div>
+                            </div>
+                        </section>
+                    </div>
+
+                    <aside class="md-col">
+                        <section class="md-panel">
+                            <div class="md-panel-head">
+                                <h2>Community</h2>
+                                <a href="#" data-goto-tab="users">Users</a>
+                            </div>
+                            <div id="ov-community">
+                                <div class="md-skel md-skel-row"></div>
+                            </div>
+                        </section>
+
+                        <section class="md-panel">
+                            <div class="md-panel-head">
+                                <h2>Newest members</h2>
+                                <a href="#" data-goto-tab="users">View all</a>
+                            </div>
+                            <div id="ov-members">
+                                <div class="md-skel md-skel-row"></div>
+                            </div>
+                        </section>
+                    </aside>
                 </div>
             </div>
 
-            <div class="stat-row" id="stat-row"></div>
-
-
-            <div id="admin-tab-users">
+            <!-- ================= Users ================= -->
+            <div id="admin-tab-users" class="md" style="display:none;">
+                <header class="md-top">
+                    <h1 class="md-greeting">User management</h1>
+                    <p class="md-sub">Search accounts and suspend or reactivate access.</p>
+                </header>
                 <input type="text" id="admin-user-search" class="search-pill" placeholder="Search by name or email"
                     style="margin-bottom:14px; width:100%; max-width:320px;">
                 <div class="table-card">
@@ -59,53 +125,86 @@
                 </div>
             </div>
 
-            <div id="admin-tab-events" style="display:none;">
-                <form id="create-event-form" class="field-row" style="align-items:end; margin-bottom:20px;">
-                    <div class="field"><label for="eventTitle">Title</label><input type="text" id="eventTitle" required>
+            <!-- ================= Events ================= -->
+            <div id="admin-tab-events" class="md" style="display:none;">
+                <header class="md-top">
+                    <h1 class="md-greeting">Event management</h1>
+                    <p class="md-sub">Create official Kenya Airways alumni events and manage upcoming ones.</p>
+                </header>
+
+                <section class="md-panel" style="margin-bottom:20px;">
+                    <div class="md-panel-head">
+                        <h2>Create an event</h2>
                     </div>
-                    <div class="field"><label for="eventDate">Date</label><input type="datetime-local" id="eventDate"
-                            required></div>
-                    <div class="field-row">
-                        <div class="field">
-                            <label for="eventMode">Format</label>
-                            <select id="eventMode">
-                                <option value="in_person">In person</option>
-                                <option value="virtual">Virtual</option>
-                            </select>
+                    <form id="create-event-form" class="admin-form">
+                        <div class="field-row">
+                            <div class="field">
+                                <label for="eventTitle">Title</label>
+                                <input type="text" id="eventTitle" required>
+                            </div>
+                            <div class="field">
+                                <label for="eventDate">Date and time</label>
+                                <input type="datetime-local" id="eventDate" required>
+                            </div>
+                        </div>
+                        <div class="field-row">
+                            <div class="field">
+                                <label for="eventMode">Format</label>
+                                <select id="eventMode">
+                                    <option value="in_person">In person</option>
+                                    <option value="virtual">Virtual</option>
+                                </select>
+                            </div>
+                            <div class="field">
+                                <label for="eventCapacity">Capacity (optional)</label>
+                                <input type="number" id="eventCapacity" min="1">
+                            </div>
                         </div>
                         <div class="field">
-                            <label for="eventCapacity">Capacity (optional)</label>
-                            <input type="number" id="eventCapacity" min="1">
+                            <label for="eventLocation">Venue or meeting link</label>
+                            <input type="text" id="eventLocation" placeholder="e.g. Pride Centre, Embakasi or https://...">
                         </div>
+                        <div class="field">
+                            <label for="eventDescription">Description</label>
+                            <textarea id="eventDescription"></textarea>
+                        </div>
+                        <p id="event-form-error"
+                            style="color:var(--kq-red); font-size:0.85rem; display:none; margin-bottom:12px;"></p>
+                        <div class="admin-form-actions">
+                            <button type="submit" class="btn btn-primary">Add event</button>
+                        </div>
+                    </form>
+                </section>
+
+                <section class="md-panel">
+                    <div class="md-panel-head">
+                        <h2>All events</h2>
                     </div>
-                    <div class="field">
-                        <label for="eventLocation">Venue or meeting link</label>
-                        <input type="text" id="eventLocation" placeholder="e.g. Pride Centre, Embakasi or https://...">
+                    <div style="overflow-x:auto;">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Title</th>
+                                    <th>Date</th>
+                                    <th>Description</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-events-body"></tbody>
+                        </table>
                     </div>
-                    <p id="event-form-error"
-                        style="color:var(--kq-red); font-size:0.85rem; display:none; margin-bottom:12px;"></p>
-                    <button type="submit" class="btn btn-primary" style="height:46px;">Add event</button>
-                </form>
-                <div class="field" style="max-width:none;">
-                    <label for="eventDescription">Description</label>
-                    <textarea id="eventDescription" style="margin-bottom:16px;"></textarea>
-                </div>
-                <div class="table-card">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Title</th>
-                                <th>Date</th>
-                                <th>Description</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody id="admin-events-body"></tbody>
-                    </table>
-                </div>
+                </section>
             </div>
 
-            <div id="admin-tab-opportunities" style="display:none;">
+            <!-- ================= Moderation ================= -->
+            <div id="admin-tab-opportunities" class="md" style="display:none;">
+                <header class="md-top">
+                    <h1 class="md-greeting">Content moderation</h1>
+                    <p class="md-sub">Approve or reject what mentors submit before it goes live.</p>
+                </header>
+                <div class="section-heading">
+                    <h2>Opportunity posts</h2>
+                </div>
                 <div id="admin-opportunities-list"></div>
                 <div class="section-heading" style="margin-top:32px;">
                     <h2>Event proposals</h2>
@@ -113,7 +212,12 @@
                 <div id="admin-pending-events"></div>
             </div>
 
-            <div id="admin-tab-logs" style="display:none;">
+            <!-- ================= Activity log ================= -->
+            <div id="admin-tab-logs" class="md" style="display:none;">
+                <header class="md-top">
+                    <h1 class="md-greeting">Activity log</h1>
+                    <p class="md-sub">Every admin action, newest first.</p>
+                </header>
                 <div class="table-card">
                     <table class="data-table">
                         <thead>
