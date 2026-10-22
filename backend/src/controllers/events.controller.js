@@ -177,7 +177,7 @@ async function listMyProposals(req, res, next) {
   try {
     const { userId } = req.user;
     const [rows] = await pool.execute(
-      `SELECT event_id, title, event_date, status, auto_approved, rejection_reason, review_note,
+      `SELECT event_id, title, event_date, status, rejection_reason, review_note,
               description, mode, location, capacity
        FROM events WHERE created_by = :userId
        ORDER BY event_date DESC`,

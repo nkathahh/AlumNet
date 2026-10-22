@@ -1903,7 +1903,9 @@ const REJECTION_LABELS = {
   broken_link: 'The application link does not work'
 };
 function postStatusHTML(state, p) {
-  if (state === 'approved') return `<span class="request-status accepted">${p.auto_approved ? 'Live, published automatically' : 'Live'}</span>`;
+  // Posters are not told whether a person or the fast lane approved it, so
+  // nobody can tell they skip review and use that trust to slip a scam through
+  if (state === 'approved') return '<span class="request-status accepted">Live</span>';
   if (state === 'pending') return '<span class="request-status pending">Waiting for review</span>';
   if (state === 'closed') return '<span class="request-status ended">Closed</span>';
   if (state === 'past') return '<span class="request-status ended">Took place</span>';

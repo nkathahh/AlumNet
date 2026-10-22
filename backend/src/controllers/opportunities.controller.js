@@ -124,7 +124,7 @@ async function listMyPosts(req, res, next) {
   try {
     const { userId } = req.user;
     const [rows] = await pool.execute(
-      `SELECT opportunity_id, title, company, approval_status, DATE_FORMAT(closing_date, '%Y-%m-%d') AS closing_date, auto_approved, rejection_reason, review_note,
+      `SELECT opportunity_id, title, company, approval_status, DATE_FORMAT(closing_date, '%Y-%m-%d') AS closing_date, rejection_reason, review_note,
               opportunity_type, industry, location, apply_link, description
        FROM career_opportunities WHERE posted_by = :userId
        ORDER BY created_at DESC`,
