@@ -1,0 +1,2 @@
+# Extra packages for the automated tests (on top of requirements-deploy.txt)
+pytest==8.3.3

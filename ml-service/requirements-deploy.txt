@@ -1,0 +1,8 @@
+# Packages for the online recommendation service (no plotting libraries).
+# PyTorch is installed separately in the Dockerfile as the smaller CPU-only build.
+flask==3.0.3
+sentence-transformers==3.0.1
+scikit-learn==1.5.1
+python-dotenv==1.0.1
+mysql-connector-python==9.0.0
+gunicorn==23.0.0

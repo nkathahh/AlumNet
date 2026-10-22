@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Account settings — AlumNet</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <div class="app-shell">
+        <button id="hamburger-btn" class="hamburger-btn" aria-label="Open menu" aria-expanded="false">
+            <span></span><span></span><span></span>
+        </button>
+        <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+        <div class="topbar-actions">
+            <label class="theme-switch" title="Toggle dark mode">
+                <input type="checkbox" id="theme-toggle-checkbox">
+                <span class="switch-track"><span class="switch-thumb"></span></span>
+            </label>
+            <button id="logout-btn" class="icon-btn" aria-label="Log out" title="Log out">⏻</button>
+        </div>
+
+        <aside class="app-sidebar">
+            <div class="app-brand"><span class="mark">KQ</span> AlumNet</div>
+            <nav id="sidebar-nav"></nav>
+            <div class="app-sidebar-foot"></div>
+        </aside>
+
+        <main class="app-main">
+            <div class="md" id="settings-page">
+                <header class="md-top">
+                    <h1 class="md-greeting">Account settings</h1>
+                    <p class="md-sub">Manage how you sign in and keep your account secure.</p>
+                </header>
+
+                <div class="md-grid">
+                    <div class="md-col">
+                        <section class="md-panel">
+                            <div class="md-panel-head"><h2>Account</h2></div>
+                            <div class="st-body">
+                                <dl class="st-details">
+                                    <div><dt>Name</dt><dd id="st-name">...</dd></div>
+                                    <div><dt>Email</dt><dd id="st-email">...</dd></div>
+                                    <div><dt>Member since</dt><dd id="st-created">...</dd></div>
+                                </dl>
+                                <form id="username-form" novalidate>
+                                    <div class="field">
+                                        <label for="st-username">Username</label>
+                                        <div class="st-inline">
+                                            <input type="text" id="st-username" maxlength="30" autocomplete="username">
+                                            <button type="submit" class="btn btn-secondary md-btn-sm">Save</button>
+                                        </div>
+                                        <p class="field-hint" id="username-msg">You can log in with your username or your email.</p>
+                                    </div>
+                                </form>
+                            </div>
+                        </section>
+
+                        <section class="md-panel">
+                            <div class="md-panel-head"><h2>Change password</h2><span class="md-muted st-small" id="st-pw-changed"></span></div>
+                            <form id="password-form" class="st-body" novalidate>
+                                <div class="field">
+                                    <label for="current-password">Current password</label>
+                                    <input type="password" id="current-password" autocomplete="current-password">
+                                </div>
+                                <div class="field-row">
+                                    <div class="field">
+                                        <label for="new-password">New password</label>
+                                        <input type="password" id="new-password" autocomplete="new-password">
+                                    </div>
+                                    <div class="field">
+                                        <label for="confirm-password">Confirm new password</label>
+                                        <input type="password" id="confirm-password" autocomplete="new-password">
+                                    </div>
+                                </div>
+                                <p class="field-hint" style="margin-top:-12px; margin-bottom:14px;">At least 8 characters, with letters and numbers.</p>
+                                <p class="st-msg" id="password-msg"></p>
+                                <div class="st-actions">
+                                    <a href="forgot-password.html" class="md-link">Forgot your current password?</a>
+                                    <button type="submit" class="btn btn-primary md-btn-sm">Update password</button>
+                                </div>
+                            </form>
+                        </section>
+                    </div>
+
+                    <aside class="md-col">
+                        <section class="md-panel">
+                            <div class="md-panel-head"><h2>Two-factor authentication</h2><span class="md-pill" id="twofa-pill">...</span></div>
+                            <div class="st-body" id="twofa-panel">
+                                <div class="md-skel md-skel-row"></div>
+                            </div>
+                        </section>
+
+                        <section class="md-panel">
+                            <div class="md-panel-head"><h2>Google sign-in</h2><span class="md-pill" id="google-pill">...</span></div>
+                            <div class="st-body" id="google-panel">
+                                <div class="md-skel md-skel-row"></div>
+                            </div>
+                        </section>
+                    </aside>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="js/main.js"></script>
+</body>
+
+</html>

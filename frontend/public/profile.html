@@ -29,102 +29,134 @@
         </aside>
 
         <main class="app-main">
-            <div class="profile-header">
-                <div class="profile-avatar" id="profile-avatar"></div>
-                <div class="profile-header-info">
-                    <h1 id="profile-name">Loading...</h1>
-                    <div class="profile-header-meta">
-                        <span class="role-badge" id="profile-role-badge"></span>
-                        <span class="dept" id="profile-dept"></span>
-                        <span class="sep" id="profile-years-sep" style="display:none;">&middot;</span>
-                        <span class="years" id="profile-years" style="display:none;"></span>
+            <div class="md" id="profile-page">
+                <section class="pf-hero">
+                    <div class="pf-cover"></div>
+                    <div class="pf-hero-body">
+                        <div class="pf-avatar" id="pf-avatar"></div>
+                        <div class="pf-identity">
+                            <div class="pf-name-row">
+                                <h1 id="pf-name">Loading...</h1>
+                                <span class="role-badge" id="pf-role"></span>
+                            </div>
+                            <p class="pf-headline" id="pf-headline"></p>
+                            <div class="pf-meta" id="pf-meta"></div>
+                        </div>
+                        <div class="pf-hero-actions">
+                            <a id="pf-linkedin" class="btn btn-secondary md-btn-sm" target="_blank" rel="noopener noreferrer" style="display:none;">LinkedIn</a>
+                            <button type="button" class="btn btn-primary md-btn-sm" id="pf-edit-btn">Edit profile</button>
+                        </div>
                     </div>
+                </section>
+
+                <div class="md-grid">
+                    <div class="md-col">
+                        <!-- View mode -->
+                        <div id="pf-view" class="md-col">
+                            <section class="md-panel">
+                                <div class="md-panel-head"><h2>About</h2></div>
+                                <div class="pf-text" id="pf-bio"></div>
+                            </section>
+                            <section class="md-panel">
+                                <div class="md-panel-head"><h2>Skills</h2><span class="pf-tag-match">Used for matching</span></div>
+                                <div class="pf-chips" id="pf-skills"></div>
+                            </section>
+                            <section class="md-panel">
+                                <div class="md-panel-head"><h2>Experience</h2><span class="pf-tag-match">Used for matching</span></div>
+                                <div class="pf-text" id="pf-experience"></div>
+                            </section>
+                            <section class="md-panel">
+                                <div class="md-panel-head"><h2>Career interests</h2><span class="pf-tag-match">Used for matching</span></div>
+                                <div class="pf-text" id="pf-interests"></div>
+                            </section>
+                        </div>
+
+                        <!-- Edit mode -->
+                        <form id="profile-form" class="md-panel" style="display:none;" novalidate>
+                            <div class="md-panel-head"><h2>Edit profile</h2></div>
+                            <div class="pf-form">
+                                <div class="field">
+                                    <label for="headline">Headline</label>
+                                    <input type="text" id="headline" name="headline" maxlength="120"
+                                        placeholder="e.g. Senior Cabin Crew | Aspiring Safety Trainer">
+                                    <p class="field-hint"><span id="headline-count">0</span>/120. Shown under your name across AlumNet.</p>
+                                </div>
+                                <div class="field">
+                                    <label for="bio">About</label>
+                                    <textarea id="bio" name="bio" maxlength="2000"
+                                        placeholder="A short introduction: your journey at Kenya Airways and what you can help with or hope to learn."></textarea>
+                                </div>
+                                <div class="field">
+                                    <label for="skills">Skills</label>
+                                    <textarea id="skills" name="skills" maxlength="1000"
+                                        placeholder="e.g. Crew scheduling, safety compliance, customer de-escalation"></textarea>
+                                    <p class="field-hint">Separate skills with commas. These shape your mentor matches.</p>
+                                </div>
+                                <div class="field">
+                                    <label for="experience">Experience</label>
+                                    <textarea id="experience" name="experience" maxlength="3000"
+                                        placeholder="e.g. Senior Cabin Crew at Kenya Airways for 8 years, flying intercontinental routes"></textarea>
+                                </div>
+                                <div class="field">
+                                    <label for="interests">Career interests</label>
+                                    <textarea id="interests" name="interests" maxlength="1000"
+                                        placeholder="e.g. Transitioning into safety training and ground operations leadership"></textarea>
+                                </div>
+                                <div class="field-row">
+                                    <div class="field">
+                                        <label for="industry">Industry</label>
+                                        <select id="industry" name="industry">
+                                            <option>Aviation</option>
+                                            <option>Ground Operations</option>
+                                            <option>Logistics</option>
+                                            <option>Corporate / Support</option>
+                                            <option>Other</option>
+                                        </select>
+                                    </div>
+                                    <div class="field" id="years-field" style="display:none;">
+                                        <label for="years">Years at Kenya Airways</label>
+                                        <input type="number" id="years" name="years" min="0" max="60">
+                                    </div>
+                                </div>
+                                <div class="field-row">
+                                    <div class="field">
+                                        <label for="city">City</label>
+                                        <input type="text" id="city" name="city" maxlength="100">
+                                    </div>
+                                    <div class="field">
+                                        <label for="country">Country</label>
+                                        <input type="text" id="country" name="country" maxlength="100">
+                                    </div>
+                                </div>
+                                <div class="field">
+                                    <label for="linkedin">LinkedIn profile (optional)</label>
+                                    <input type="url" id="linkedin" name="linkedin" placeholder="https://www.linkedin.com/in/your-name">
+                                </div>
+                                <p class="st-msg" id="profile-msg"></p>
+                                <div class="st-actions">
+                                    <button type="button" class="btn-quiet" id="pf-cancel">Cancel</button>
+                                    <button type="submit" class="btn btn-primary md-btn-sm">Save profile</button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+
+                    <aside class="md-col">
+                        <section class="md-panel">
+                            <div class="md-panel-head"><h2>Profile strength</h2></div>
+                            <div id="pf-strength"><div class="md-skel md-skel-row"></div></div>
+                        </section>
+                        <section class="md-panel">
+                            <div class="md-panel-head"><h2>Details</h2></div>
+                            <dl class="st-details" id="pf-details"></dl>
+                        </section>
+                        <section class="md-panel">
+                            <div class="md-panel-head"><h2>Account security</h2><a href="settings.html">Settings</a></div>
+                            <p class="st-text">Change your password, turn on two-factor authentication or link Google sign-in.</p>
+                        </section>
+                    </aside>
                 </div>
             </div>
-
-            <div class="profile-strength" id="profile-strength">
-                <div class="profile-strength-top">
-                    <span class="label">Profile completeness</span>
-                    <span class="pct" id="profile-strength-pct">0%</span>
-                </div>
-                <div class="profile-strength-track">
-                    <div class="profile-strength-fill" id="profile-strength-fill" style="width:0%;"></div>
-                </div>
-            </div>
-
-            <form id="profile-form" novalidate>
-                <div class="profile-form-grid">
-                    <div class="profile-card">
-                        <div class="profile-section-label">
-                            <span class="icon">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                    stroke-linecap="round" stroke-linejoin="round">
-                                    <path
-                                        d="M14.7 6.3a4 4 0 0 1-5.4 5.4L4 17l3 3 5.3-5.3a4 4 0 0 1 5.4-5.4L21 6l-3-3-3.3 3.3z" />
-                                </svg>
-                            </span>
-                            Skills
-                        </div>
-                        <textarea id="skills" name="skills"
-                            placeholder="e.g. Crew scheduling, safety compliance, customer de-escalation"></textarea>
-                    </div>
-
-                    <div class="profile-card">
-                        <div class="profile-section-label">
-                            <span class="icon">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                    stroke-linecap="round" stroke-linejoin="round">
-                                    <rect x="2" y="7" width="20" height="14" rx="2" />
-                                    <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-                                </svg>
-                            </span>
-                            Experience
-                        </div>
-                        <textarea id="experience" name="experience"
-                            placeholder="e.g. Senior Cabin Crew at Kenya Airways for 8 years, flying intercontinental routes"></textarea>
-                    </div>
-
-                    <div class="profile-card">
-                        <div class="profile-section-label">
-                            <span class="icon">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                    stroke-linecap="round" stroke-linejoin="round">
-                                    <circle cx="12" cy="12" r="10" />
-                                    <circle cx="12" cy="12" r="6" />
-                                    <circle cx="12" cy="12" r="2" />
-                                </svg>
-                            </span>
-                            Career interests
-                        </div>
-                        <textarea id="interests" name="interests"
-                            placeholder="e.g. Transitioning into safety training and ground operations leadership"></textarea>
-                    </div>
-
-                    <div class="profile-card">
-                        <div class="profile-section-label">
-                            <span class="icon">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                    stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h1m-1 4h1m4-4h1m-1 4h1M9 21v-4h6v4" />
-                                </svg>
-                            </span>
-                            Industry
-                        </div>
-                        <select id="industry" name="industry">
-                            <option>Aviation</option>
-                            <option>Ground Operations</option>
-                            <option>Logistics</option>
-                            <option>Corporate / Support</option>
-                            <option>Other</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="profile-save-row">
-                    <button type="submit" class="btn btn-primary">Save changes</button>
-                    <span class="save-status" id="save-status">Saved</span>
-                </div>
-            </form>
         </main>
     </div>
     <script src="js/main.js"></script>

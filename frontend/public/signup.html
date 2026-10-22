@@ -95,12 +95,20 @@
           </div>
 
           <div class="field">
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username" autocomplete="username" placeholder="e.g. jwafula"
+              maxlength="30" required>
+            <p class="field-hint" id="username-status">Lowercase letters, numbers, dots or underscores. You can log in with this or your email.</p>
+          </div>
+
+          <div class="field">
             <label for="password">Password</label>
             <div style="position:relative;">
-              <input type="password" id="password" name="password" minlength="8" required>
+              <input type="password" id="password" name="password" minlength="8" autocomplete="new-password" required>
               <button type="button" id="toggle-password" class="btn-quiet"
                 style="position:absolute; right:6px; top:6px; padding:4px 8px;">Show</button>
             </div>
+            <p class="field-hint">At least 8 characters, with letters and numbers.</p>
           </div>
           <div class="field">
             <label for="confirmPassword">Confirm password</label>

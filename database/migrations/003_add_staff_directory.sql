@@ -1,3 +1,14 @@
+-- Creates the staff directory on a fresh database (it was previously only in schema.sql)
+CREATE TABLE IF NOT EXISTS staff_directory (
+  staff_number VARCHAR(20) PRIMARY KEY,
+  id_number VARCHAR(20) NOT NULL UNIQUE,
+  full_name VARCHAR(150) NOT NULL,
+  department VARCHAR(100) NOT NULL,
+  mobile_number VARCHAR(20) NULL,
+  kq_email VARCHAR(190) NULL,
+  employment_status ENUM('active','former') NOT NULL DEFAULT 'active'
+);
+
 
 
 TRUNCATE TABLE staff_directory;
@@ -52,4 +63,4 @@ INSERT INTO staff_directory (staff_number, id_number, full_name, department, mob
 ('KQ18253', '36947201', 'Teresia Atieno', 'Security', '+254778182531', 'teresia.atieno@kenya-airways.com', 'active'),
 ('KQ63079', '24850967', 'Stephen Onyango', 'Commercial & Sales', '+254789630791', NULL, 'former'),
 ('KQ87415', '32601749', 'Hellen Macharia', 'Flight Operations', '+254790874151', 'hellen.macharia@kenya-airways.com', 'active'),
-('KQ25698', '38719524', 'Robert Wekesa', 'Cabin Services', '+254701256981', 'robert.wekesa@kenya-airways.com', 'active');
+('KQ25698', '38719524', 'Robert Wekesa', 'Cabin Services', '+254701256981', 'robert.wekesa@kenya-airways.com', 'active');

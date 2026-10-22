@@ -1,1 +1,206 @@
 # AlumNet
+
+![CI](https://github.com/nkathahh/AlumNet/actions/workflows/ci.yml/badge.svg)
+
+An alumni mentorship portal for Kenya Airways. AlumNet matches current staff (mentees)
+with retired staff (mentors) using semantic text embeddings, and supports mentorship
+requests, alumni events, career opportunities and notifications, with an admin console
+for moderation.
+
+Final-year capstone project, Bachelor of Informatics and Computer Science,
+Strathmore University.
+
+## Features
+
+- **Accounts:** registration validated against the staff directory, login with email or
+  username, Google sign-in for existing accounts, and role-based access (mentee, mentor, admin)
+- **Account security:** password rules, change password, forgot password with single-use
+  emailed links that expire after 30 minutes, two-factor authentication with an authenticator
+  app, and rate limiting on sign-in, code and reset endpoints
+- **Professional profiles:** headline, about, skills, experience, career interests, location,
+  LinkedIn and a profile strength guide; a public profile view for other members
+- **Mentor matching:** mentors ranked by semantic similarity to the mentee's profile, with a
+  breakdown of how skills, experience and goals contribute to each match
+- **Mentorship requests:** send, accept, decline, withdraw and end
+- **Alumni events:** official events from admins and community events proposed by mentors,
+  with registration, capacity limits and admin approval
+- **Career opportunities:** posted by mentors, approved by admins, filterable by type
+- **Notifications:** for requests, approvals, event changes and security changes
+- **Dashboards:** a home page for each role with live stats and action items
+- **Admin console:** overview, user suspension, event management, content moderation and an
+  activity log
+
+## Architecture
+
+| Component | Technology | Local address |
+|---|---|---|
+| Frontend | HTML, CSS, vanilla JavaScript, served by the backend | http://localhost:4000 |
+| Backend API | Node.js, Express, JWT, bcrypt | http://localhost:4000/api |
+| Database | MySQL 8.0 (database `alumnet`) | localhost:3306 |
+| ML service | Python, Flask, sentence-transformers (BAAI/bge-small-en-v1.5) | http://localhost:5000 |
+
+The browser loads the pages from the backend and calls the API on the same server. The
+backend reads and writes MySQL and calls the ML service for recommendations. The ML service
+encodes mentee and mentor profiles and ranks mentors by cosine similarity.
+
+## Project structure
+
+```
+AlumNet/
+├── backend/            Express API and the server for the frontend
+│   ├── scripts/        create-admin.js
+│   └── src/            config, controllers, middleware, routes, utils
+├── frontend/public/    HTML pages, css/style.css, js/main.js, assets
+├── ml-service/         Flask recommendation service and deployment Dockerfile
+│   └── evaluation/     Matching evaluation kit (data, labels, scripts, results)
+├── database/           schema.sql, migrations 001 to 010, sample datasets
+└── DEPLOYMENT.md       Step-by-step guide to putting AlumNet online
+```
+
+## Running locally
+
+### Requirements
+
+- Node.js 18 or later
+- Python 3.10 or later
+- MySQL 8.0
+
+### 1. Database
+
+1. Create the database: `CREATE DATABASE alumnet;`
+2. Run the files in `database/migrations` in order, 001 to 010, in MySQL Workbench.
+
+### 2. Environment variables
+
+Copy `backend/.env.example` to `backend/.env` and `ml-service/.env.example` to
+`ml-service/.env`, then fill in the values. **Never commit `.env` files**; they are listed in
+`.gitignore`. Google sign-in needs `GOOGLE_CLIENT_ID`, and password reset emails need either
+the Gmail settings (`SMTP_USER`, `SMTP_PASS`) or `BREVO_API_KEY`. Without email settings,
+reset links are printed in the backend terminal instead.
+
+### 3. Backend and frontend
+
+```
+cd backend
+npm install
+npm start
+```
+
+### 4. ML service (second terminal)
+
+```
+cd ml-service
+python -m venv venv
+venv\Scripts\activate          (Windows)
+source venv/bin/activate       (macOS or Linux)
+pip install -r requirements.txt
+python app.py
+```
+
+The first run downloads the embedding model (about 130 MB).
+
+### 5. Open the app
+
+Go to **http://localhost:4000**. Opening the HTML files directly from the folder still works
+for most pages, but Google sign-in only works when the app is opened through the server.
+
+To create an admin account: `node scripts/create-admin.js "Full Name" email@example.com password`
+from the `backend` folder.
+
+## Demo accounts
+
+| Role | Name | Login | Password |
+|---|---|---|---|
+| Mentee | Joyce | [email or username] | available on request |
+| Mentor | Brian | [email or username] | available on request |
+| Mentor | Ruth Njoroge | [email or username] | available on request |
+| Admin | Admin | [email] | available on request |
+
+All demo data is synthetic and does not describe real Kenya Airways staff. Set
+`MAIL_DEV_REDIRECT` to your own inbox so test emails to made-up addresses never reach anyone.
+
+## Security design
+
+- Passwords are hashed with bcrypt and must be at least 8 characters with letters and numbers.
+- Sign-in errors do not reveal whether an account exists, and the forgot-password form gives
+  the same reply either way.
+- Reset links are random 256-bit tokens; only their SHA-256 hash is stored. Each link works
+  once, expires after 30 minutes, and a new request cancels older links.
+- Two-factor authentication uses time-based one-time passwords (RFC 6238). After the password
+  step the server issues a 5-minute token that only the code check accepts.
+- Google sign-in verifies Google's signed ID token on the server and only logs in accounts
+  that already exist, so staff-number verification at registration cannot be skipped.
+- Repeated failed attempts on sign-in, codes and resets are rate limited per address.
+- The ML service accepts requests only with a shared API key once it is online.
+- Security changes (password, two-factor) create a notification for the account owner.
+
+## Evaluation
+
+The matching engine is evaluated against two baselines, TF-IDF and same-department matching,
+using synthetic mentors and mentees with blind relevance labels. Method choices are made on a
+development set, and a held-out test set is run once, which the script enforces. See
+`ml-service/evaluation/README.md` for the method and steps.
+
+**Current status:** the evaluation kit and pilot runs are complete. Relevance labelling is in
+progress, and the full development and test results will follow.
+
+## Testing
+
+### Automated tests (GitHub Actions)
+
+Every push and pull request to `main` runs `.github/workflows/ci.yml`. Each job starts an
+empty MySQL 8 database, builds it from `database/migrations` and tests the real code:
+
+- **Backend API tests** (`backend/tests/api.test.js`, 40 tests): registration and staff
+  verification, login by email or username, password rules, change and reset password,
+  single-use reset links, two-factor setup and sign-in, profile updates and privacy, access
+  control and rate limiting.
+- **Recommendation service tests** (`ml-service/tests/test_app.py`): the API key check, input
+  errors and a ranking check with the real BGE model on seeded synthetic profiles.
+
+Results appear as a tick or cross next to each commit on GitHub, and each run keeps the
+test reports as downloadable artifacts.
+
+To run the backend tests locally, create an empty `alumnet_test` database, apply the
+migrations to it, then run this in PowerShell from the `backend` folder (the other database
+settings come from your `.env`):
+
+```
+$env:DB_NAME="alumnet_test"; npm test
+```
+
+The tests refuse to run against any database whose name does not end in `_test`.
+
+### Manual test cases
+
+Functional test cases TC-01 to TC-27 cover the user journeys across all roles. Results and
+screenshots are in Chapter 5 of the project report.
+
+## Known limitations and outstanding defects
+
+- **Evaluation incomplete:** relevance labelling and the final test run are still to be done.
+  Current evidence comes from the pilot runs.
+- **Known ranking error:** for one mentee (Joyce), a mentor with strong skills overlap
+  (Catherine) ranks above the better overall fit (Brian). Field-weighted scoring corrected this
+  in the pilot, but only narrowly, and the full evaluation will test it.
+- **Compressed scores:** BGE similarity scores fall in a narrow range, so displayed match
+  percentages look closer together than the real differences in fit.
+- **No embedding cache:** mentor profiles are re-encoded on every request, so response time
+  grows with the number of mentors.
+- **Sessions after a password change:** existing logins on other devices stay valid until their
+  token expires (7 days).
+- **Two-factor recovery:** there are no backup codes yet; an admin would need to reset 2FA for a
+  user who loses their phone.
+- **Inconsistent output escaping:** newer pages escape user text before display; some older
+  admin tables do not yet.
+- **Duplicate table:** the original `event_participation` table duplicates
+  `event_registrations` and is to be removed.
+- **Notifications:** updated every 60 seconds by polling, not in real time.
+- **Free hosting:** the online version sleeps when idle, so the first visit can take up to a
+  minute.
+
+## AI assistance
+
+AI tools assisted with code, the evaluation design and drafting synthetic profiles. All
+suggestions were reviewed, tested and either accepted or rejected by the author. Relevance
+labels were created by the author without AI, so the model is not judged by another model.

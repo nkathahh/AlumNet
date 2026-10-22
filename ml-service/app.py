@@ -1,5 +1,7 @@
 from flask import Flask, request, jsonify
+import hmac
 import os
+import tempfile
 from dotenv import load_dotenv
 import mysql.connector
 from sentence_transformers import SentenceTransformer
@@ -14,13 +16,43 @@ app = Flask(__name__)
 MODEL = SentenceTransformer('BAAI/bge-small-en-v1.5')
 
 
+def _ssl_options():
+    """Hosted MySQL (for example Aiven) needs an encrypted connection.
+    DB_SSL_CA holds the provider's CA certificate text, so the server is verified."""
+    ca = os.getenv("DB_SSL_CA")
+    if not ca:
+        return {}
+    path = os.path.join(tempfile.gettempdir(), "alumnet-db-ca.pem")
+    if not os.path.exists(path):
+        with open(path, "w") as f:
+            f.write(ca.replace("\\n", "\n"))
+    return {"ssl_ca": path, "ssl_verify_cert": True}
+
+
 def get_connection():
     return mysql.connector.connect(
         host=os.getenv("DB_HOST"),
+        port=int(os.getenv("DB_PORT", 3306)),
         user=os.getenv("DB_USER"),
         password=os.getenv("DB_PASSWORD"),
-        database=os.getenv("DB_NAME")
+        database=os.getenv("DB_NAME"),
+        **_ssl_options()
     )
+
+
+# When ML_API_KEY is set, only callers with the same key (the AlumNet backend)
+# can ask for recommendations. This matters once the service is on the internet.
+API_KEY = os.getenv("ML_API_KEY")
+
+
+@app.before_request
+def check_api_key():
+    if not API_KEY or request.path == "/health":
+        return None
+    supplied = request.headers.get("X-API-Key", "")
+    if not hmac.compare_digest(supplied, API_KEY):
+        return jsonify(error="Unauthorized"), 401
+    return None
 
 
 def field(row, key):
@@ -136,4 +168,4 @@ def recommend():
 
 
 if __name__ == "__main__":
-    app.run(port=int(os.getenv("PORT", 5000)), debug=True)
+    app.run(port=int(os.getenv("PORT", 5000)), debug=os.getenv("FLASK_DEBUG") == "1")

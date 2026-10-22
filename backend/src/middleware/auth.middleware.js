@@ -6,7 +6,11 @@ function requireAuth(req, res, next) {
   if (!token) return res.status(401).json({ error: 'Missing bearer token' });
 
   try {
-    req.user = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    // Special-purpose tokens (such as the 5-minute two-factor token)
+    // are not sessions and must not open the rest of the API
+    if (decoded.purpose) return res.status(401).json({ error: 'Invalid or expired token' });
+    req.user = decoded;
     next();
   } catch {
     res.status(401).json({ error: 'Invalid or expired token' });
