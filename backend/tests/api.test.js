@@ -383,6 +383,191 @@ test('a mentee profile is hidden from mentors she has not contacted', async () =
   assert.equal('email' in mentor.body, false);
 });
 
+/* ---------------- Trust and safety (Module 2) ---------------- */
+
+// Extra members created straight in the database, for tests that need several people
+async function makeMember(name, email, role) {
+  const hash = await bcrypt.hash('Passw0rd1', 4);
+  const [r] = await db.execute(
+    `INSERT INTO users (name, email, password_hash, status, email_verified_at, onboarded_at, privacy_accepted_at)
+     VALUES (:name, :email, :hash, 'active', NOW(), NOW(), NOW())`,
+    { name, email, hash }
+  );
+  await db.execute(`INSERT INTO ${role === 'mentor' ? 'mentors' : 'mentees'} (user_id) VALUES (:id)`, { id: r.insertId });
+  await db.execute('INSERT INTO profiles (user_id) VALUES (:id)', { id: r.insertId });
+  const me = client();
+  const login = await me.call('POST', '/auth/login', { email, password: 'Passw0rd1' });
+  assert.equal(login.status, 200);
+  return { id: r.insertId, me };
+}
+const nextMonth = () => new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
+
+test('the scam check flags fees, WhatsApp and fake Kenya Airways links, and passes a normal post', () => {
+  const { scanPost } = require('../src/utils/scam');
+  const bad = scanPost({
+    title: 'Cabin crew jobs', company: 'Kenya Airways',
+    description: 'Urgently hiring! Pay a registration fee of KSh 2,000 via M-Pesa then WhatsApp 0712 345 678',
+    link: 'https://bit.ly/kq-jobs'
+  });
+  assert.equal(bad.level, 'high');
+  const labels = bad.flags.map((f) => f.label).join(' | ');
+  assert.match(labels, /pay/i);
+  assert.match(labels, /WhatsApp/);
+  assert.match(labels, /bit\.ly/);
+  const good = scanPost({ title: 'Safety analyst', company: 'Jambojet', description: 'Two years in aviation safety.', link: 'https://careers.jambojet.com/safety' });
+  assert.equal(good.level, 'low');
+  assert.equal(good.flags.length, 0);
+});
+
+test('a mentee introduces herself; contact details appear only after the mentor accepts', async () => {
+  const [[g]] = await db.execute('SELECT user_id FROM users WHERE email = :e', { e: GEORGE.email });
+  state.georgeId = g.user_id;
+  const sent = await state.joyce.call('POST', '/mentorship-requests', { mentorId: g.user_id, message: 'I would like guidance on becoming a cabin crew trainer.' });
+  assert.equal(sent.status, 201);
+
+  const seen = await state.george.call('GET', '/mentorship-requests');
+  const req = seen.body.find((r) => r.request_id === sent.body.request_id);
+  assert.equal(req.message, 'I would like guidance on becoming a cabin crew trainer.');
+  assert.equal(req.other_email, null);
+  assert.equal(req.other_verified, true);
+
+  const ok = await state.george.call('PATCH', `/mentorship-requests/${sent.body.request_id}`, { decision: 'accepted' });
+  assert.equal(ok.status, 200);
+  const mine = await state.joyce.call('GET', '/mentorship-requests');
+  assert.equal(mine.body.find((r) => r.request_id === sent.body.request_id).other_email, GEORGE.email);
+  state.requestId = sent.body.request_id;
+});
+
+test('a risky opportunity is flagged for the poster and sorted first for the admin', async () => {
+  const scam = await state.george.call('POST', '/opportunities', {
+    title: 'Ground staff wanted', company: 'Kenya Airways', opportunityType: 'full_time',
+    description: 'Guaranteed job. Pay a processing fee to our M-Pesa till number.',
+    applyLink: 'kqjobs@gmail.com', closingDate: nextMonth()
+  });
+  assert.equal(scam.status, 201);
+  // High-risk posters get a general notice, not the list of rules they tripped
+  assert.equal(scam.body.needsCloserReview, true);
+  assert.equal(scam.body.warnings.length, 0);
+  const fine = await state.george.call('POST', '/opportunities', {
+    title: 'Safety analyst', company: 'Jambojet', opportunityType: 'full_time',
+    description: 'Two years in aviation safety. Apply on the careers page.',
+    applyLink: 'https://careers.jambojet.com/safety', closingDate: nextMonth()
+  });
+  const pending = await state.admin.call('GET', '/admin/opportunities/pending');
+  assert.equal(pending.body[0].opportunity_id, scam.body.opportunityId);
+  assert.equal(pending.body[0].risk_level, 'high');
+  assert.ok(pending.body[0].risk_flags.some((f) => /kenya-airways\.com/.test(f.label)));
+  await state.admin.call('PATCH', `/admin/opportunities/${fine.body.opportunityId}/review`, { decision: 'approved' });
+  state.fineOppId = fine.body.opportunityId;
+});
+
+test('reports: no self-reports, no duplicates, and three reporters hide a post until review', async () => {
+  const own = await state.george.call('POST', '/safety/reports', { targetType: 'opportunity', targetId: state.fineOppId, reason: 'spam' });
+  assert.equal(own.status, 400);
+  const first = await state.joyce.call('POST', '/safety/reports', { targetType: 'opportunity', targetId: state.fineOppId, reason: 'misleading', details: 'This company is not hiring.' });
+  assert.equal(first.status, 201);
+  const again = await state.joyce.call('POST', '/safety/reports', { targetType: 'opportunity', targetId: state.fineOppId, reason: 'misleading' });
+  assert.equal(again.status, 200);
+  assert.match(again.body.message, /already reported/);
+
+  const a = await makeMember('Amina Test', 'amina.test@example.org', 'mentee');
+  const b = await makeMember('Brian Test', 'brian.test@example.org', 'mentee');
+  await a.me.call('POST', '/safety/reports', { targetType: 'opportunity', targetId: state.fineOppId, reason: 'spam' });
+  let visible = await a.me.call('GET', '/opportunities');
+  assert.ok(visible.body.some((o) => o.opportunity_id === state.fineOppId));
+  await b.me.call('POST', '/safety/reports', { targetType: 'opportunity', targetId: state.fineOppId, reason: 'asked_for_money' });
+  visible = await a.me.call('GET', '/opportunities');
+  assert.equal(visible.body.some((o) => o.opportunity_id === state.fineOppId), false);
+
+  const queue = await state.admin.call('GET', '/admin/reports');
+  const group = queue.body.find((g) => g.target_type === 'opportunity' && g.target_id === state.fineOppId);
+  assert.equal(group.reporters, 3);
+  assert.equal(group.target.title, 'Safety analyst');
+});
+
+test('an admin removes a reported post: reporters hear back and the log says what happened', async () => {
+  const noNote = await state.admin.call('POST', '/admin/reports/resolve', { targetType: 'opportunity', targetId: state.fineOppId, action: 'remove_content' });
+  assert.equal(noNote.status, 400);
+  const done = await state.admin.call('POST', '/admin/reports/resolve', { targetType: 'opportunity', targetId: state.fineOppId, action: 'remove_content', note: 'Jambojet confirmed there is no such role' });
+  assert.equal(done.status, 200);
+  assert.equal(done.body.resolved, 3);
+  const [[o]] = await db.execute('SELECT approval_status FROM career_opportunities WHERE opportunity_id = :id', { id: state.fineOppId });
+  assert.equal(o.approval_status, 'rejected');
+  const notes = await state.joyce.call('GET', '/notifications');
+  assert.ok(notes.body.some((n) => /reviewed it/.test(n.message)));
+  const logs = await state.admin.call('GET', '/admin/activity-logs');
+  assert.match(logs.body[0].description, /Removed opportunity "Safety analyst" after 3 reports/);
+});
+
+test('blocking ends the mentorship, hides the profile and stops new requests', async () => {
+  const [[j]] = await db.execute('SELECT user_id FROM users WHERE email = :e', { e: JOYCE.email });
+  const block = await state.george.call('POST', `/safety/blocks/${j.user_id}`);
+  assert.equal(block.status, 200);
+  const [[r]] = await db.execute('SELECT status FROM mentorship_requests WHERE request_id = :id', { id: state.requestId });
+  assert.equal(r.status, 'ended');
+  assert.equal((await state.joyce.call('GET', `/profile/${state.georgeId}`)).status, 404);
+  const retry = await state.joyce.call('POST', '/mentorship-requests', { mentorId: state.georgeId });
+  assert.equal(retry.status, 403);
+  const list = await state.george.call('GET', '/safety/blocks');
+  assert.equal(list.body[0].name, 'Joyce Wafula');
+  await state.george.call('DELETE', `/safety/blocks/${j.user_id}`);
+  assert.equal((await state.joyce.call('GET', `/profile/${state.georgeId}`)).status, 200);
+});
+
+test('a member reported for asking money can be suspended from the reports queue', async () => {
+  const sent = await state.joyce.call('POST', '/safety/reports', { targetType: 'user', targetId: state.georgeId, reason: 'asked_for_money', details: 'Asked me to pay for a CV review.' });
+  assert.equal(sent.status, 201);
+  const done = await state.admin.call('POST', '/admin/reports/resolve', { targetType: 'user', targetId: state.georgeId, action: 'suspend_user', note: 'Confirmed by phone with the mentee' });
+  assert.equal(done.status, 200);
+  assert.equal((await state.george.call('GET', '/auth/account')).status, 401);
+  const stats = await state.admin.call('GET', '/admin/stats');
+  assert.equal(stats.body.openReports, 0);
+});
+
+
+test('the scam check ignores reassurances and job titles, and catches Swahili and disguised words', () => {
+  const { scanPost } = require('../src/utils/scam');
+  const level = (description) => scanPost({ title: 'Role', company: 'Jambojet', description, link: 'https://www.jambojet.com/careers' }).level;
+  assert.equal(level('There is no application fee. We will never ask you to pay.'), 'low');
+  assert.equal(level('Deposit Operations Officer handling customer deposits.'), 'low');
+  assert.equal(level('Product manager for M-Pesa merchant services.'), 'low');
+  assert.equal(level('Lipa ada ya usajili KSh 2000 kisha tutakupigia'), 'high');
+  assert.equal(level('Pay a registr4tion f.e.e of 2k via Em-pesa'), 'high');
+});
+
+test('a request message asking for money warns the mentor and reaches the reports queue', async () => {
+  const carol = await makeMember('Carol Test', 'carol.test@example.org', 'mentee');
+  const peter = await makeMember('Peter Mentor', 'peter.mentor@example.org', 'mentor');
+  state.carol = carol;
+  state.peter = peter;
+  const sent = await carol.me.call('POST', '/mentorship-requests', {
+    mentorId: peter.id, message: 'Hi, please send the KSh 500 booking fee via M-Pesa till number 123456 and WhatsApp me.'
+  });
+  assert.equal(sent.status, 201);
+  const mentorView = await peter.me.call('GET', '/mentorship-requests');
+  assert.ok(mentorView.body[0].message_warnings.length >= 1);
+  const menteeView = await carol.me.call('GET', '/mentorship-requests');
+  assert.equal(menteeView.body[0].message_warnings.length, 0);
+  const queue = await state.admin.call('GET', '/admin/reports');
+  const group = queue.body.find((g) => g.target_type === 'user' && g.target_id === carol.id);
+  assert.equal(group.automatic, true);
+  assert.equal(group.reporters, 0);
+  assert.match(group.reports[0].details, /mentorship request message/);
+});
+
+test('profile text is checked too, without piling up duplicate reports', async () => {
+  await state.peter.me.call('PUT', '/profile/me', { bio: 'Sessions cost KSh 1,000. Pay via M-Pesa before we meet.' });
+  await state.peter.me.call('PUT', '/profile/me', { bio: 'Sessions cost KSh 1,000. Pay via M-Pesa before we meet. WhatsApp me.' });
+  const [rows] = await db.execute("SELECT COUNT(*) AS n FROM reports WHERE source = 'automatic' AND target_type = 'user' AND target_id = :id AND status = 'open'", { id: state.peter.id });
+  assert.equal(rows[0].n, 1);
+  for (const id of [state.carol.id, state.peter.id]) {
+    const r = await state.admin.call('POST', '/admin/reports/resolve', { targetType: 'user', targetId: id, action: 'dismiss' });
+    assert.equal(r.status, 200);
+  }
+  const stats = await state.admin.call('GET', '/admin/stats');
+  assert.equal(stats.body.openReports, 0);
+});
+
 /* ---------------- HR import and retirement ---------------- */
 
 test('an HR import previews changes, then a retired mentee becomes a mentor', async () => {

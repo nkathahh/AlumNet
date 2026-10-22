@@ -140,6 +140,15 @@
                 <div id="admin-verification-list"></div>
             </div>
 
+            <!-- ================= Reports ================= -->
+            <div id="admin-tab-reports" class="md" style="display:none;">
+                <header class="md-top">
+                    <h1 class="md-greeting">Reports</h1>
+                    <p class="md-sub">Profiles and posts members have reported. Money requests, harassment and fake profiles come first, then anything reported by several people. A post reported by three people is hidden until you review it.</p>
+                </header>
+                <div id="admin-reports-list"></div>
+            </div>
+
             <!-- ================= HR records ================= -->
             <div id="admin-tab-hr" class="md" style="display:none;">
                 <header class="md-top">
@@ -235,8 +244,18 @@
             <div id="admin-tab-opportunities" class="md" style="display:none;">
                 <header class="md-top">
                     <h1 class="md-greeting">Content moderation</h1>
-                    <p class="md-sub">Approve or reject what mentors submit before it goes live.</p>
+                    <p class="md-sub">Approve or reject what mentors submit before it goes live. Automatic checks put the riskiest posts first.</p>
                 </header>
+                <div class="mod-filter">
+                    <label for="mod-risk-filter">Show</label>
+                    <select id="mod-risk-filter">
+                        <option value="all">Everything waiting</option>
+                        <option value="high">High risk</option>
+                        <option value="medium">Check first</option>
+                        <option value="low">No warning signs</option>
+                        <option value="reported">Reported by members</option>
+                    </select>
+                </div>
                 <div class="section-heading">
                     <h2>Opportunity posts</h2>
                 </div>

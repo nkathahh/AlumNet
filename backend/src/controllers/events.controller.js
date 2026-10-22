@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { scanPost } = require('../utils/scam');
 
 // Shared by mentor proposals and admin-created events
 function validateEventInput({ title, eventDate, mode, location, capacity }) {
@@ -118,9 +119,10 @@ async function proposeEvent(req, res, next) {
     if (error) return res.status(400).json({ error });
 
     const { title, eventDate, description, mode, location, capacity } = req.body;
+    const scan = scanPost({ title, description, location: mode === 'virtual' ? null : location, link: mode === 'virtual' ? location : null });
     const [result] = await pool.execute(
-      `INSERT INTO events (title, event_date, description, mode, location, capacity, created_by, status)
-       VALUES (:title, :eventDate, :description, :mode, :location, :capacity, :userId, 'pending')`,
+      `INSERT INTO events (title, event_date, description, mode, location, capacity, created_by, status, risk_level, risk_flags)
+       VALUES (:title, :eventDate, :description, :mode, :location, :capacity, :userId, 'pending', :riskLevel, :riskFlags)`,
       {
         title: title.trim(),
         eventDate,
@@ -128,10 +130,15 @@ async function proposeEvent(req, res, next) {
         mode,
         location: location.trim(),
         capacity: capacity ? Number(capacity) : null,
-        userId
+        userId,
+        riskLevel: scan.level,
+        riskFlags: JSON.stringify(scan.flags)
       }
     );
-    res.status(201).json({ eventId: result.insertId, message: 'Submitted for review' });
+    res.status(201).json({ eventId: result.insertId, message: 'Submitted for review',
+      // A high-risk post gets a general notice only, so scammers cannot learn which words to change
+      needsCloserReview: scan.level === 'high',
+      warnings: scan.level === 'high' ? [] : scan.flags.map((f) => f.label) });
   } catch (err) {
     next(err);
   }

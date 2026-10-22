@@ -37,6 +37,10 @@ document.addEventListener('DOMContentLoaded', () => {
   wireResetPasswordForm();
   renderAccountSettings();
   renderAdminVerification();
+  renderAdminReports();
+  wireModerationFilter();
+  renderBlockedList();
+  wireSafetyLinks();
   wireHrImport();
   checkAdminTwoFactor();
   wireOnboarding();
@@ -134,6 +138,7 @@ const NAV_CONFIG = {
       group: 'Platform', links: [
         { tab: 'overview', label: 'Overview' },
         { tab: 'verification', label: 'Verification' },
+        { tab: 'reports', label: 'Reports' },
         { tab: 'users', label: 'User management' },
         { tab: 'hr', label: 'HR records' },
         { tab: 'events', label: 'Event management' },
@@ -775,6 +780,7 @@ function apiMentorCardHTML(m, alreadyRequested) {
       <div>
         <div class="mentor-name-row">
           <span class="mentor-name" style="cursor:pointer; text-decoration:underline;" data-action="view-profile" data-mentor-id="${m.mentor_id}">${escapeHTML(m.name)}</span>
+          ${m.verified ? verifiedBadgeHTML('Verified former KQ staff') : ''}
           <span class="match-score">${m.score}% match</span>
         </div>
         <div class="mentor-meta" style="margin:0 0 8px;">
@@ -783,7 +789,7 @@ function apiMentorCardHTML(m, alreadyRequested) {
         ${matchBreakdownHTML(m.breakdown)}
       </div>
       <div class="mentor-actions">
-        <button class="btn ${alreadyRequested ? 'btn-secondary' : 'btn-primary'}" data-action="request" data-mentor-id="${m.mentor_id}" ${alreadyRequested ? 'disabled' : ''}>
+        <button class="btn ${alreadyRequested ? 'btn-secondary' : 'btn-primary'}" data-action="request" data-mentor-id="${m.mentor_id}" data-mentor-name="${escapeHTML(m.name)}" ${alreadyRequested ? 'disabled' : ''}>
           ${alreadyRequested ? 'Requested' : 'Request'}
         </button>
       </div>
@@ -801,21 +807,12 @@ function wireMentorCardActions(list) {
   });
 
   list.querySelectorAll('[data-action="request"]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      btn.disabled = true;
-      try {
-        const res = await fetch(`${API_BASE}/mentorship-requests`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ mentorId: btn.dataset.mentorId })
-        });
-        const result = await res.json();
-        if (!res.ok) { alert(result.error || 'Could not send request'); btn.disabled = false; return; }
+    btn.addEventListener('click', () => {
+      openRequestDialog(btn.dataset.mentorId, btn.dataset.mentorName, () => {
+        btn.disabled = true;
         btn.textContent = 'Requested';
-      } catch {
-        alert('Could not reach the server.');
-        btn.disabled = false;
-      }
+        btn.classList.replace('btn-primary', 'btn-secondary');
+      });
     });
   });
   list.querySelectorAll('[data-action="view-profile"]').forEach((el) => {
@@ -856,6 +853,16 @@ async function renderRequests() {
     list.innerHTML = filtered.length
       ? filtered.map(requestCardHTML).join('')
       : `<p style="color: var(--slate); padding: 20px 4px;">No ${activeTab} requests.</p>`;
+
+    list.querySelectorAll('[data-profile]').forEach((a) => {
+      a.addEventListener('click', (e) => { e.preventDefault(); openMentorProfile(a.dataset.profile); });
+    });
+    list.querySelectorAll('[data-safety]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (btn.dataset.safety === 'report') openReportDialog('user', btn.dataset.user, btn.dataset.name);
+        else openBlockDialog(btn.dataset.user, btn.dataset.name, load);
+      });
+    });
 
     list.querySelectorAll('[data-action]').forEach((btn) => {
       btn.addEventListener('click', async () => {
@@ -924,11 +931,36 @@ function requestCardHTML(r) {
     actionHTML = `<span class="request-status ${r.status}">${r.status === 'accepted' ? 'active' : r.status}</span>`;
   }
 
+  const contact = r.status === 'accepted' && r.other_email
+    ? `<div class="req-contact">Contact: <a href="mailto:${escapeHTML(r.other_email)}">${escapeHTML(r.other_email)}</a></div>`
+    : (r.status === 'pending' && role === 'mentee' ? '<div class="req-contact md-muted">Contact details are shared if the mentor accepts.</div>' : '');
+  const cautionPhrases = (r.message_warnings || []).map((w) => (
+    /pay/i.test(w) ? 'mentions paying money'
+      : /ID, passport|bank/i.test(w) ? 'asks for ID or bank details'
+        : /WhatsApp|Telegram/i.test(w) ? 'tries to move the chat off AlumNet'
+          : /too good/i.test(w) ? 'makes promises that sound too good'
+            : /pressure|fast/i.test(w) ? 'pushes you to act fast' : null
+  )).filter(Boolean);
+  const caution = cautionPhrases.length
+    ? `<div class="req-caution"><strong>Be careful.</strong> This message ${cautionPhrases.length > 1 ? cautionPhrases.slice(0, -1).join(', ') + ' and ' + cautionPhrases.slice(-1) : cautionPhrases[0]}. Mentoring on AlumNet is free, and the alumni office has been told. Report it if something feels wrong.</div>`
+    : '';
+  const message = r.message
+    ? `<div class="req-message"><span class="md-muted st-small">${role === 'mentor' ? 'Their message' : 'Your message'}</span><br>${escapeHTML(r.message)}</div>${caution}`
+    : (role === 'mentor' && r.status === 'pending' ? '<div class="req-message md-muted st-small">No introduction was included.</div>' : '');
+
   return `
-    <div class="request-card">
-      <div>
-        <strong>${escapeHTML(r.other_name)}</strong><br>
+    <div class="request-card request-card-rich">
+      <div class="req-main">
+        <strong><a href="#" class="req-name" data-profile="${r.other_user_id}">${escapeHTML(r.other_name)}</a></strong>
+        ${r.other_verified ? verifiedBadgeHTML(role === 'mentor' ? 'Verified current KQ staff' : 'Verified former KQ staff') : ''}<br>
+        ${r.other_headline ? `<span class="req-headline">${escapeHTML(r.other_headline)}</span><br>` : ''}
         <span style="font-size:0.82rem; color:var(--slate);">${escapeHTML(r.other_department || '')} · ${r.status === 'ended' ? 'Ended' : 'Requested'} on ${date}</span>
+        ${message}
+        ${contact}
+        <div class="req-safety">
+          <button type="button" class="btn-quiet st-small" data-safety="report" data-user="${r.other_user_id}" data-name="${escapeHTML(r.other_name)}">Report</button>
+          <button type="button" class="btn-quiet st-small" data-safety="block" data-user="${r.other_user_id}" data-name="${escapeHTML(r.other_name)}">Block</button>
+        </div>
       </div>
       ${actionHTML}
     </div>`;
@@ -1177,7 +1209,13 @@ async function openMentorProfile(mentorId) {
       ${skills.length ? `<div class="modal-section"><div class="label">Skills</div><div class="pf-chips">${skills.map((sk) => `<span class="pf-chip">${escapeHTML(sk)}</span>`).join('')}</div></div>` : ''}
       ${section('Experience', data.experience)}
       ${section('Career interests', data.career_interests)}
+      ${data.role === 'mentor' && localStorage.getItem('alumnet_role') === 'mentee'
+        ? '<p class="dlg-safety">Mentoring on AlumNet is free. Contact details are shared once a mentor accepts your request. Never pay anyone or share your ID or bank details.</p>' : ''}
       <div class="pf-modal-actions">
+        ${localStorage.getItem('alumnet_role') !== 'admin' ? `
+          <button class="btn-quiet st-small" id="pf-report">Report</button>
+          <button class="btn-quiet st-small" id="pf-block">Block</button>
+          <span style="flex:1"></span>` : ''}
         ${data.linkedin_url ? `<a class="btn btn-secondary" href="${escapeHTML(data.linkedin_url)}" target="_blank" rel="noopener noreferrer">LinkedIn</a>` : ''}
         <button class="btn btn-primary" id="close-modal">Close</button>
       </div>
@@ -1185,6 +1223,10 @@ async function openMentorProfile(mentorId) {
   document.body.appendChild(backdrop);
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
   document.getElementById('close-modal').addEventListener('click', () => backdrop.remove());
+  const reportBtn = document.getElementById('pf-report');
+  if (reportBtn) reportBtn.onclick = () => { backdrop.remove(); openReportDialog('user', mentorId, data.name); };
+  const blockBtn = document.getElementById('pf-block');
+  if (blockBtn) blockBtn.onclick = () => { backdrop.remove(); openBlockDialog(mentorId, data.name, () => { if (document.getElementById('requests-list')) location.reload(); else renderMentorList(); }); };
 }
 
 /* --------------------------------------------------------------------
@@ -1296,6 +1338,7 @@ function eventCardHTML(e) {
         <div>${attendance}</div>
       </div>
       ${button}
+      ${e.is_official ? '' : `<button type="button" class="btn-quiet st-small event-report" data-report-event="${e.event_id}" data-title="${escapeHTML(e.title)}">Report this event</button>`}
     </div>`;
 }
 
@@ -1394,6 +1437,7 @@ function openProposeEventModal() {
       }
       close();
       renderMyProposals();
+      showPostWarnings(result);
     } catch {
       errorEl.textContent = 'Could not reach the server.';
       errorEl.style.display = 'block';
@@ -1441,8 +1485,11 @@ async function renderAdminPendingEvents() {
       list.innerHTML = '<p style="color:var(--slate); padding:20px 4px;">No event proposals waiting for review.</p>';
       return;
     }
+    const riskFilter = (document.getElementById('mod-risk-filter') || {}).value || 'all';
+    const shown = rows.filter((e) => riskFilter === 'all' || (e.risk_level || 'low') === riskFilter || (riskFilter === 'reported' && e.open_reports));
+    if (!shown.length) { list.innerHTML = '<p style="color:var(--slate); padding:20px 4px;">No proposals match this filter.</p>'; return; }
 
-    list.innerHTML = rows.map((e) => `
+    list.innerHTML = shown.map((e) => `
       <div class="opportunity-card">
         <div>
           <span class="tag">${e.mode === 'virtual' ? 'Virtual' : 'In person'}</span>
@@ -1452,6 +1499,7 @@ async function renderAdminPendingEvents() {
             ${new Date(e.event_date).toLocaleString('en-GB')} · ${escapeHTML(e.location || '')}${e.capacity ? ' · capacity ' + e.capacity : ''}
           </div>
           <div class="mentor-meta">Proposed by ${escapeHTML(e.proposed_by_name)}</div>
+          ${riskBlockHTML(e.risk_level, e.risk_flags, e.open_reports)}
         </div>
         <div style="display:flex; gap:8px;">
           <button class="btn btn-primary" data-review-event="${e.event_id}" data-decision="approved">Approve</button>
@@ -1604,6 +1652,7 @@ function openOpportunityModal(o) {
       ${href
       ? `<a class="btn btn-primary btn-block" href="${escapeHTML(href)}" target="_blank" rel="noopener" style="margin-bottom:10px;">${isEmail ? 'Apply by email' : 'Apply now'}</a>`
       : '<p class="mentor-meta" style="margin-bottom:10px;">No application link was provided.</p>'}
+      <p class="dlg-safety">Genuine employers never ask you to pay to apply. Something wrong with this post? <button type="button" class="btn-quiet st-small" id="opp-report" data-opp="${o.opportunity_id}">Report it</button></p>
       <button class="btn btn-secondary btn-block" id="close-opp-modal">Close</button>
     </div>`;
   document.body.appendChild(backdrop);
@@ -1699,6 +1748,7 @@ function openPostOpportunityModal() {
       }
       close();
       renderMyPosts();
+      showPostWarnings(result);
     } catch {
       errorEl.textContent = 'Could not reach the server.';
       errorEl.style.display = 'block';
@@ -2007,7 +2057,7 @@ async function checkAdminTwoFactor() {
 }
 
 
-const ADMIN_TABS = ['overview', 'verification', 'users', 'hr', 'events', 'opportunities', 'logs'];
+const ADMIN_TABS = ['overview', 'verification', 'reports', 'users', 'hr', 'events', 'opportunities', 'logs'];
 
 function showAdminTab(name) {
   ADMIN_TABS.forEach((t) => {
@@ -2115,11 +2165,14 @@ async function renderAdminOpportunities() {
 
   const res = await fetch(`${API_BASE}/admin/opportunities/pending`, { headers: { Authorization: `Bearer ${token}` } });
   const opps = await res.json();
-  if (!res.ok) { list.innerHTML = `<p>${opps.error}</p>`; return; }
+  if (!res.ok) { list.innerHTML = `<p>${escapeHTML(opps.error)}</p>`; return; }
   if (!opps.length) { list.innerHTML = '<p style="color:var(--slate); padding:20px 4px;">Nothing pending review.</p>'; return; }
 
-  list.innerHTML = opps.map((o) => `
-    <div class="opportunity-card">
+  const riskFilter = (document.getElementById('mod-risk-filter') || {}).value || 'all';
+  const shown = opps.filter((o) => riskFilter === 'all' || (o.risk_level || 'low') === riskFilter || (riskFilter === 'reported' && o.open_reports));
+  if (!shown.length) { list.innerHTML = '<p style="color:var(--slate); padding:20px 4px;">No posts match this filter.</p>'; return; }
+  list.innerHTML = shown.map((o) => `
+    <div class="opportunity-card" data-risk="${o.risk_level || 'low'}">
       <div>
         <div class="opp-tags">
           <span class="tag">${escapeHTML(OPPORTUNITY_TYPES[o.opportunity_type] || 'Opportunity')}</span>
@@ -2132,6 +2185,7 @@ async function renderAdminOpportunities() {
           Posted by ${escapeHTML(o.posted_by_name)}${o.closing_date ? ' · ' + closingLabel(o.closing_date).text : ''}
           ${o.apply_link ? ' · Apply: ' + escapeHTML(o.apply_link) : ''}
         </div>
+        ${riskBlockHTML(o.risk_level, o.risk_flags, o.open_reports)}
       </div>
       <div style="display:flex; gap:8px;">
         <button class="btn btn-primary" data-review="${o.opportunity_id}" data-decision="approved">Approve</button>
@@ -2157,7 +2211,8 @@ const ADMIN_ACTION_LABELS = {
   approve_signup: 'Sign-up approved', reject_signup: 'Sign-up rejected', import_hr: 'HR import',
   create_event: 'Event created', delete_event: 'Event deleted',
   approved_event: 'Event approved', rejected_event: 'Event rejected',
-  approved_opportunity: 'Opportunity approved', rejected_opportunity: 'Opportunity rejected'
+  approved_opportunity: 'Opportunity approved', rejected_opportunity: 'Opportunity rejected',
+  report_dismiss: 'Report dismissed', report_remove_content: 'Post removed', report_suspend_user: 'Suspended after report'
 };
 
 async function renderAdminLogs() {
@@ -2722,13 +2777,14 @@ async function renderAdminOverview() {
   const root = document.getElementById('admin-tab-overview');
   if (!root) return;
 
-  const [statsRaw, usersRaw, eventsRaw, oppsRaw, logsRaw, signupsRaw] = await Promise.all([
+  const [statsRaw, usersRaw, eventsRaw, oppsRaw, logsRaw, signupsRaw, reportsRaw] = await Promise.all([
     mdGet('/admin/stats'),
     mdGet('/admin/users'),
     mdGet('/admin/events/pending'),
     mdGet('/admin/opportunities/pending'),
     mdGet('/admin/activity-logs'),
-    mdGet('/admin/signup-requests')
+    mdGet('/admin/signup-requests'),
+    mdGet('/admin/reports')
   ]);
 
   const stats = statsRaw || {};
@@ -2737,7 +2793,8 @@ async function renderAdminOverview() {
   const pendingOpps = mdList(oppsRaw);
   const logs = mdList(logsRaw);
   const signups = mdList(signupsRaw);
-  const toReview = pendingEvents.length + pendingOpps.length + signups.length;
+  const reports = mdList(reportsRaw);
+  const toReview = pendingEvents.length + pendingOpps.length + signups.length + reports.length;
 
   // ---------- Header ----------
   document.getElementById('ov-date').textContent = new Date().toLocaleDateString('en-GB', {
@@ -2764,6 +2821,10 @@ async function renderAdminOverview() {
 
   // ---------- Needs review ----------
   const reviewRows = [
+    ...reports.map((g) => ({
+      kind: 'report', id: `${g.target_type}-${g.target_id}`, title: g.target.title, label: 'Reported',
+      meta: `${g.reporters ? g.reporters + ' reporter' + (g.reporters === 1 ? '' : 's') : 'Automatic check'} · ${g.reports[0].reason_label}`
+    })),
     ...signups.map((r) => ({
       kind: 'signup', id: r.request_id, title: r.full_name, label: 'Identity check',
       meta: `${r.staff_number} · ${{ low: 'low risk', medium: 'check first', high: 'high risk' }[r.risk_level] || ''}`
@@ -2780,14 +2841,14 @@ async function renderAdminOverview() {
   document.getElementById('ov-review').innerHTML = reviewRows.length
     ? reviewRows.slice(0, 6).map((r) => `
         <div class="md-item">
-          <div class="md-avatar md-avatar-soft">${mdIcon(MD_ICONS[{ event: 'calendar', signup: 'shield' }[r.kind] || 'briefcase'])}</div>
+          <div class="md-avatar md-avatar-soft">${mdIcon(MD_ICONS[{ event: 'calendar', signup: 'shield', report: 'activity' }[r.kind] || 'briefcase'])}</div>
           <div class="md-item-body">
             <div class="md-item-title">${escapeHTML(r.title || 'Untitled')}</div>
             <div class="md-item-meta">${r.label} · ${escapeHTML(r.meta)}</div>
           </div>
           <div class="md-inline-actions">
-            ${r.kind === 'signup'
-              ? '<a href="#verification" class="btn btn-secondary md-btn-sm" data-goto-tab="verification">Review</a>'
+            ${r.kind === 'signup' || r.kind === 'report'
+              ? `<a href="#${r.kind === 'signup' ? 'verification' : 'reports'}" class="btn btn-secondary md-btn-sm" data-goto-tab="${r.kind === 'signup' ? 'verification' : 'reports'}">Review</a>`
               : `<button class="btn btn-primary md-btn-sm" data-ov-review="${r.id}" data-kind="${r.kind}" data-decision="approved">Approve</button>
             <button class="btn btn-secondary md-btn-sm" data-ov-review="${r.id}" data-kind="${r.kind}" data-decision="rejected">Reject</button>`}
           </div>
@@ -3260,4 +3321,299 @@ async function wireOnboarding() {
     window.location.href = home;
   });
   show();
+}
+
+/* --------------------------------------------------------------------
+   Trust and safety: reporting, blocking, safer mentorship requests
+   -------------------------------------------------------------------- */
+
+const REPORT_REASONS = {
+  fake_profile: 'Fake profile or pretending to be someone else',
+  asked_for_money: 'Asked for money or personal details',
+  harassment: 'Harassment or inappropriate behaviour',
+  spam: 'Spam',
+  misleading: 'Misleading or false information',
+  other: 'Something else'
+};
+
+// A small accessible dialog. onConfirm returns an error message to keep it open.
+function openDialog({ title, bodyHTML, confirmText = 'Confirm', danger = false, onOpen, onConfirm }) {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal-card dlg" role="dialog" aria-modal="true" aria-labelledby="dlg-title">
+      <h3 id="dlg-title">${escapeHTML(title)}</h3>
+      <div class="dlg-body">${bodyHTML}</div>
+      <p class="st-msg dlg-msg"></p>
+      <div class="dlg-actions">
+        <button type="button" class="btn btn-secondary" data-dlg="cancel">Cancel</button>
+        <button type="button" class="btn ${danger ? 'btn-danger' : 'btn-primary'}" data-dlg="ok">${escapeHTML(confirmText)}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop);
+  const close = () => { backdrop.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+  backdrop.querySelector('[data-dlg="cancel"]').onclick = close;
+  const ok = backdrop.querySelector('[data-dlg="ok"]');
+  ok.onclick = async () => {
+    ok.disabled = true;
+    const problem = await onConfirm(backdrop);
+    ok.disabled = false;
+    if (problem) setMsg(backdrop.querySelector('.dlg-msg'), problem);
+    else close();
+  };
+  if (onOpen) onOpen(backdrop);
+  const first = backdrop.querySelector('textarea, input, select');
+  (first || ok).focus();
+  return { close };
+}
+
+function toast(message) {
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.setAttribute('role', 'status');
+  el.textContent = message;
+  document.body.appendChild(el);
+  setTimeout(() => el.classList.add('show'), 10);
+  setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); }, 4200);
+}
+
+function openReportDialog(targetType, targetId, label) {
+  const what = { user: 'this member', opportunity: 'this opportunity', event: 'this event' }[targetType];
+  openDialog({
+    title: `Report ${label ? '"' + label + '"' : what}`,
+    confirmText: 'Send report',
+    bodyHTML: `
+      <p class="st-text">The alumni office will review it. ${targetType === 'user' ? 'They are' : 'The poster is'} not told who reported.</p>
+      <div class="dlg-options">
+        ${Object.entries(REPORT_REASONS).map(([k, v], i) => `
+          <label class="check-row" style="margin:0 0 8px;"><input type="radio" name="report-reason" value="${k}" ${i === 0 ? '' : ''}><span>${v}</span></label>`).join('')}
+      </div>
+      <div class="field" style="margin-top:8px;">
+        <label for="report-details">What happened? (optional)</label>
+        <textarea id="report-details" maxlength="500" rows="3" placeholder="For example: asked me to pay KSh 1,000 for a CV review"></textarea>
+      </div>`,
+    onConfirm: async (dlg) => {
+      const picked = dlg.querySelector('input[name="report-reason"]:checked');
+      if (!picked) return 'Choose a reason.';
+      const { ok, data } = await apiSend('POST', '/safety/reports', {
+        targetType, targetId: Number(targetId), reason: picked.value, details: dlg.querySelector('#report-details').value
+      });
+      if (!ok) return data.error || 'Could not send the report.';
+      toast(data.message || 'Report sent.');
+      return null;
+    }
+  });
+}
+
+function openBlockDialog(userId, name, after) {
+  openDialog({
+    title: `Block ${name}?`,
+    confirmText: 'Block',
+    danger: true,
+    bodyHTML: `<p class="st-text">You will not see each other in matches or profiles, and they cannot send you requests. Any request or mentorship between you is closed. They are not told. You can unblock in Account settings.</p>`,
+    onConfirm: async () => {
+      const { ok, data } = await apiSend('POST', `/safety/blocks/${userId}`);
+      if (!ok) return data.error || 'Could not block.';
+      toast(`${name} is blocked.`);
+      if (after) after();
+      return null;
+    }
+  });
+}
+
+// Mentees say who they are and what they want help with
+function openRequestDialog(mentorId, mentorName, onSent) {
+  openDialog({
+    title: `Ask ${mentorName} to mentor you`,
+    confirmText: 'Send request',
+    bodyHTML: `
+      <div class="field">
+        <label for="req-message">Introduce yourself</label>
+        <textarea id="req-message" maxlength="500" rows="5" placeholder="Hi, I work in ... and I would like guidance on ..."></textarea>
+        <p class="field-hint"><span id="req-count">0</span>/500. Mentors are more likely to accept when they know why you chose them.</p>
+      </div>
+      <p class="dlg-safety">Your email is shared only if ${escapeHTML(mentorName.split(' ')[0])} accepts. Mentoring on AlumNet is free: never pay anyone for it.</p>`,
+    onOpen: (dlg) => {
+      const t = dlg.querySelector('#req-message');
+      t.addEventListener('input', () => { dlg.querySelector('#req-count').textContent = t.value.length; });
+    },
+    onConfirm: async (dlg) => {
+      const { ok, data } = await apiSend('POST', '/mentorship-requests', { mentorId: Number(mentorId), message: dlg.querySelector('#req-message').value });
+      if (!ok) return data.error || 'Could not send the request.';
+      toast(`Request sent to ${mentorName}.`);
+      if (onSent) onSent();
+      return null;
+    }
+  });
+}
+
+// Shown to people who post, so honest mistakes can be fixed before review
+function showPostWarnings(result) {
+  const warnings = (result && result.warnings) || [];
+  if (result && result.needsCloserReview) {
+    openDialog({
+      title: 'Submitted for a closer review',
+      confirmText: 'OK',
+      bodyHTML: `<p class="st-text">Your post needs a closer look by the alumni office before it can go live. This usually takes up to two working days. If it is approved, you will get a notification.</p>
+        <p class="st-text">Posts that ask applicants to pay, or for ID or bank details, are never approved.</p>`,
+      onConfirm: async () => null
+    });
+    const c = document.querySelector('.dlg [data-dlg="cancel"]');
+    if (c) c.style.display = 'none';
+    return;
+  }
+  if (!warnings.length) { toast('Submitted. The alumni office will review it shortly.'); return; }
+  openDialog({
+    title: 'Submitted for review',
+    confirmText: 'OK',
+    bodyHTML: `
+      <p class="st-text">Our automatic checks noticed a few things the alumni office will look at closely:</p>
+      <ul class="vr-signals">${warnings.map((w) => `<li class="bad">${escapeHTML(w)}</li>`).join('')}</ul>
+      <p class="st-text">If any of these are a mistake, contact the alumni office. Posts that ask applicants to pay are never approved.</p>`,
+    onConfirm: async () => null
+  });
+  const cancel = document.querySelector('.dlg [data-dlg="cancel"]');
+  if (cancel) cancel.style.display = 'none';
+}
+
+/* ---------- Settings: blocked members ---------- */
+
+async function renderBlockedList() {
+  const mount = document.getElementById('blocked-list');
+  if (!mount) return;
+  const rows = await mdGet('/safety/blocks');
+  if (!rows) { mount.innerHTML = '<p class="st-text">Could not load your blocked list.</p>'; return; }
+  if (!rows.length) { mount.innerHTML = '<p class="st-text">You have not blocked anyone.</p>'; return; }
+  mount.innerHTML = rows.map((b) => `
+    <div class="md-item md-item-tight">
+      <div class="md-avatar md-avatar-soft">${mdInitials(b.name)}</div>
+      <div class="md-item-body">
+        <div class="md-item-title">${escapeHTML(b.name)}</div>
+        <div class="md-item-meta">${escapeHTML(b.department || '')}${b.department ? ' · ' : ''}blocked ${timeAgo(b.created_at)}</div>
+      </div>
+      <button class="btn btn-secondary md-btn-sm" data-unblock="${b.user_id}">Unblock</button>
+    </div>`).join('');
+  mount.querySelectorAll('[data-unblock]').forEach((btn) => {
+    btn.onclick = async () => {
+      btn.disabled = true;
+      await apiSend('DELETE', `/safety/blocks/${btn.dataset.unblock}`);
+      renderBlockedList();
+    };
+  });
+}
+
+/* ---------- Admin: reports queue ---------- */
+
+function riskBlockHTML(level, flags, openReports) {
+  if (!level && !openReports) return '';
+  const text = { low: 'No warning signs', medium: 'Check first', high: 'High risk' }[level] || '';
+  return `
+    <div class="risk-block">
+      ${level ? `<span class="md-pill risk-${level}">${text}</span>` : ''}
+      ${openReports ? `<span class="md-pill risk-high">${openReports} report${openReports === 1 ? '' : 's'}</span>` : ''}
+      ${flags && flags.length ? `<ul class="vr-signals" style="margin:8px 0 0;">${flags.map((f) => `<li class="bad">${escapeHTML(f.label)}</li>`).join('')}</ul>` : ''}
+    </div>`;
+}
+
+async function renderAdminReports() {
+  const list = document.getElementById('admin-reports-list');
+  if (!list) return;
+  const res = await fetch(`${API_BASE}/admin/reports`);
+  const groups = await res.json().catch(() => []);
+  if (!res.ok) { list.innerHTML = `<p class="md-muted">${escapeHTML(groups.error || 'Could not load reports.')}</p>`; return; }
+  updateNavBadge('reports', groups.length);
+  if (!groups.length) { list.innerHTML = mdEmpty('check', 'No open reports', 'When members report a profile or a post, it appears here with the most serious first.'); return; }
+
+  const kindLabel = { user: 'Member', opportunity: 'Opportunity', event: 'Event' };
+  list.innerHTML = groups.map((g) => {
+    const t = g.target;
+    const key = `${g.target_type}-${g.target_id}`;
+    return `
+      <article class="vr-card">
+        <div class="vr-head">
+          <div>
+            <h3>${escapeHTML(t.title)} <span class="md-muted st-small">${kindLabel[g.target_type]}</span></h3>
+            <div class="md-muted st-small">${escapeHTML(t.subtitle)}${t.status && t.status !== 'active' && t.status !== 'approved' ? ' · currently ' + escapeHTML(t.status) : ''}</div>
+          </div>
+          <div class="md-inline-actions">
+            ${g.reporters ? `<span class="md-pill risk-high">${g.reporters} reporter${g.reporters === 1 ? '' : 's'}</span>` : ''}
+            ${g.automatic ? '<span class="md-pill risk-medium">Automatic check</span>' : ''}
+            ${g.past_actioned ? `<span class="md-pill risk-medium">${g.past_actioned} earlier upheld</span>` : ''}
+          </div>
+        </div>
+        ${t.excerpt ? `<p class="mentor-blurb" style="margin:10px 0;">${escapeHTML(t.excerpt)}</p>` : ''}
+        ${t.link ? `<p class="md-muted st-small">Link: ${escapeHTML(t.link)}</p>` : ''}
+        ${t.riskFlags && t.riskFlags.length ? riskBlockHTML(t.riskLevel, t.riskFlags, 0) : ''}
+        <ul class="report-list">
+          ${g.reports.map((r) => `
+            <li><strong>${escapeHTML(r.reason_label)}</strong> <span class="md-muted st-small">from ${escapeHTML(r.reporter_name)}, ${timeAgo(r.created_at)}</span>
+            ${r.details ? `<div class="report-quote">${escapeHTML(r.details)}</div>` : ''}</li>`).join('')}
+        </ul>
+        <div class="field" style="margin-bottom:10px;">
+          <label for="rp-note-${key}">What did you find? (required to act)</label>
+          <input type="text" id="rp-note-${key}" maxlength="255" placeholder="e.g. Asked two mentees for money, confirmed by phone">
+        </div>
+        <p class="st-msg" id="rp-msg-${key}"></p>
+        <div class="md-inline-actions">
+          ${g.target_type !== 'user' ? `<button class="btn btn-primary md-btn-sm" data-rp="${key}" data-action="remove_content">Remove post</button>` : ''}
+          ${t.ownerId ? `<button class="btn btn-danger md-btn-sm" data-rp="${key}" data-action="suspend_user">Suspend ${g.target_type === 'user' ? 'member' : 'poster'}</button>` : ''}
+          <button class="btn btn-secondary md-btn-sm" data-rp="${key}" data-action="dismiss">Dismiss</button>
+        </div>
+      </article>`;
+  }).join('');
+
+  list.querySelectorAll('[data-rp]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const key = btn.dataset.rp;
+      const [targetType, targetId] = key.split('-');
+      const note = document.getElementById(`rp-note-${key}`).value.trim();
+      const msg = document.getElementById(`rp-msg-${key}`);
+      if (btn.dataset.action !== 'dismiss' && !note) { setMsg(msg, 'Add a short note on what you found.'); return; }
+      if (btn.dataset.action === 'suspend_user' && !confirm('Suspend this member? They are logged out at once and their open mentorships close.')) return;
+      btn.closest('.vr-card').querySelectorAll('button').forEach((b) => (b.disabled = true));
+      const { ok, data } = await apiSend('POST', '/admin/reports/resolve', { targetType, targetId: Number(targetId), action: btn.dataset.action, note });
+      if (!ok) {
+        setMsg(msg, data.error);
+        btn.closest('.vr-card').querySelectorAll('button').forEach((b) => (b.disabled = false));
+        return;
+      }
+      renderAdminReports();
+      renderAdminLogs();
+      renderAdminTable();
+      renderAdminOpportunities();
+    });
+  });
+}
+
+function updateNavBadge(tab, count) {
+  document.querySelectorAll(`[data-admin-tab="${tab}"], a[href="admin.html#${tab}"]`).forEach((link) => {
+    let badge = link.querySelector('.nav-badge');
+    if (!count) { if (badge) badge.remove(); return; }
+    if (!badge) { badge = document.createElement('span'); badge.className = 'nav-badge'; link.appendChild(badge); }
+    badge.textContent = count;
+  });
+}
+
+// Report buttons inside cards and modals that are drawn after page load
+function wireSafetyLinks() {
+  document.addEventListener('click', (e) => {
+    const ev = e.target.closest('[data-report-event]');
+    if (ev) { openReportDialog('event', ev.dataset.reportEvent, ev.dataset.title); return; }
+    const opp = e.target.closest('#opp-report');
+    if (opp) {
+      const modal = opp.closest('.modal-backdrop');
+      if (modal) modal.remove();
+      openReportDialog('opportunity', opp.dataset.opp);
+    }
+  });
+}
+
+// Content moderation: show only high-risk, check-first, clean or reported posts
+function wireModerationFilter() {
+  const sel = document.getElementById('mod-risk-filter');
+  if (!sel) return;
+  sel.addEventListener('change', () => { renderAdminOpportunities(); renderAdminPendingEvents(); });
 }

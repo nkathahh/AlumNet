@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { scanPost } = require('../utils/scam');
 
 const OPPORTUNITY_TYPES = ['full_time', 'part_time', 'contract', 'consultancy', 'internal_transfer', 'volunteer'];
 
@@ -53,11 +54,12 @@ async function createOpportunity(req, res, next) {
     if (error) return res.status(400).json({ error });
 
     const { title, company, opportunityType, industry, location, description, applyLink, closingDate } = req.body;
+    const scan = scanPost({ title, description, company, location, link: applyLink });
     const [result] = await pool.execute(
       `INSERT INTO career_opportunities
-         (posted_by, title, description, industry, company, opportunity_type, location, apply_link, closing_date, approval_status)
+         (posted_by, title, description, industry, company, opportunity_type, location, apply_link, closing_date, approval_status, risk_level, risk_flags)
        VALUES
-         (:userId, :title, :description, :industry, :company, :opportunityType, :location, :applyLink, :closingDate, 'pending')`,
+         (:userId, :title, :description, :industry, :company, :opportunityType, :location, :applyLink, :closingDate, 'pending', :riskLevel, :riskFlags)`,
       {
         userId,
         title: title.trim(),
@@ -67,10 +69,16 @@ async function createOpportunity(req, res, next) {
         opportunityType,
         location: location ? location.trim() : null,
         applyLink: applyLink.trim(),
-        closingDate
+        closingDate,
+        riskLevel: scan.level,
+        riskFlags: JSON.stringify(scan.flags)
       }
     );
-    res.status(201).json({ opportunityId: result.insertId, message: 'Submitted for review' });
+    // The poster sees the same warnings the admin will, so honest mistakes can be fixed
+    res.status(201).json({ opportunityId: result.insertId, message: 'Submitted for review',
+      // A high-risk post gets a general notice only, so scammers cannot learn which words to change
+      needsCloserReview: scan.level === 'high',
+      warnings: scan.level === 'high' ? [] : scan.flags.map((f) => f.label) });
   } catch (err) {
     next(err);
   }

@@ -21,7 +21,10 @@ async function getStats(req, res, next) {
         const [[{ flaggedAccounts }]] = await pool.query(
             `SELECT COUNT(*) AS flaggedAccounts FROM users WHERE status = 'suspended'`
         );
-        res.json({ totalAlumni, activeMentorships, pendingRequests, flaggedAccounts });
+        const [[{ openReports }]] = await pool.query(
+            `SELECT COUNT(DISTINCT target_type, target_id) AS openReports FROM reports WHERE status = 'open'`
+        );
+        res.json({ totalAlumni, activeMentorships, pendingRequests, flaggedAccounts, openReports });
     } catch (err) { next(err); }
 }
 
@@ -120,17 +123,25 @@ async function createEvent(req, res, next) {
 }
 
 
+// Scam check results are stored as JSON text
+function withFlags(row) {
+  let flags = [];
+  try { flags = JSON.parse(row.risk_flags || '[]'); } catch { /* keep empty */ }
+  return { ...row, risk_flags: flags, open_reports: Number(row.open_reports || 0) };
+}
+
 async function listPendingEvents(req, res, next) {
   try {
     const [rows] = await pool.execute(
       `SELECT e.event_id, e.title, e.event_date, e.description, e.mode, e.location, e.capacity,
-              u.name AS proposed_by_name
+              e.risk_level, e.risk_flags, u.name AS proposed_by_name,
+              (SELECT COUNT(*) FROM reports r WHERE r.target_type = 'event' AND r.target_id = e.event_id AND r.status = 'open') AS open_reports
        FROM events e
        JOIN users u ON u.user_id = e.created_by
        WHERE e.status = 'pending'
-       ORDER BY e.event_date ASC`
+       ORDER BY FIELD(e.risk_level, 'high', 'medium', 'low') ASC, e.event_date ASC`
     );
-    res.json(rows);
+    res.json(rows.map(withFlags));
   } catch (err) {
     next(err);
   }
@@ -207,12 +218,13 @@ async function deleteEvent(req, res, next) {
 async function listPendingOpportunities(req, res, next) {
     try {
         const [rows] = await pool.query(`
-      SELECT co.*, u.name AS posted_by_name
+      SELECT co.*, u.name AS posted_by_name,
+             (SELECT COUNT(*) FROM reports r WHERE r.target_type = 'opportunity' AND r.target_id = co.opportunity_id AND r.status = 'open') AS open_reports
       FROM career_opportunities co JOIN users u ON u.user_id = co.posted_by
       WHERE co.approval_status = 'pending'
-      ORDER BY co.opportunity_id DESC
+      ORDER BY FIELD(co.risk_level, 'high', 'medium', 'low') ASC, co.opportunity_id DESC
     `);
-        res.json(rows);
+        res.json(rows.map(withFlags));
     } catch (err) { next(err); }
 }
 
@@ -520,6 +532,7 @@ async function applyHrImport(req, res, next) {
 }
 
 module.exports = {
+  logAdminAction,
   getStats, listUsers, toggleUserStatus,
   listSignupRequests, reviewSignupRequest,
   previewHrImport, applyHrImport,

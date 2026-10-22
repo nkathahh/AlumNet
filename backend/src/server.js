@@ -74,6 +74,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/recommendations', recommendationRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/notifications', notificationsRoutes);
+app.use('/api/safety', require('./routes/safety.routes'));
 
 // Unknown API routes return JSON, not an HTML page
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));

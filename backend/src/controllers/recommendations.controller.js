@@ -27,7 +27,14 @@ async function getRecommendations(req, res, next) {
     // The shared key stops anyone else calling the ML service directly once it is online
     const headers = process.env.ML_API_KEY ? { 'X-API-Key': process.env.ML_API_KEY } : {};
     const response = await axios.get(url, { headers, timeout: 30000 });
-    res.json(response.data);
+    // Never suggest someone either person has blocked
+    const [blocked] = await pool.execute(
+      `SELECT blocked_id AS id FROM user_blocks WHERE blocker_id = :userId
+       UNION SELECT blocker_id AS id FROM user_blocks WHERE blocked_id = :userId`,
+      { userId }
+    );
+    const hidden = new Set(blocked.map((b) => b.id));
+    res.json((response.data || []).filter((m) => !hidden.has(m.mentor_id)));
   } catch (err) {
     if (err.response) return res.status(err.response.status).json(err.response.data);
     if (err.code === 'ECONNREFUSED' || err.code === 'ECONNABORTED') {

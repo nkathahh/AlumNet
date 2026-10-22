@@ -111,6 +111,7 @@ def recommend():
 
     cur.execute("""
         SELECT u.user_id, u.name, u.department, mt.years_of_experience,
+               (sd.staff_number IS NOT NULL) AS verified,
                p.skills, p.experience, p.career_interests, p.industry
         FROM mentors mt
         JOIN users u ON u.user_id = mt.user_id
@@ -162,6 +163,7 @@ def recommend():
             "name": m["name"],
             "department": m["department"],
             "years_of_experience": m["years_of_experience"],
+            "verified": bool(m.get("verified")),
             "score": pct(v_whole, m_whole),
             "breakdown": breakdown,
             "matched_attributes": matched_attributes(mentee_text, m)

@@ -1,4 +1,6 @@
 const pool = require('../config/db');
+const { scanText } = require('../utils/scam');
+const { fileAutomaticReport } = require('./safety.controller');
 
 const LINKEDIN_RE = /^https:\/\/(www\.)?linkedin\.com\/in\/[A-Za-z0-9\-_%]+\/?$/;
 
@@ -103,6 +105,9 @@ async function updateMyProfile(req, res, next) {
     } finally {
       connection.release();
     }
+    // Profiles are public to members, so check what was written in them
+    const written = [values.headline, values.bio, values.experience].filter(Boolean).join('\n');
+    if (written) await fileAutomaticReport('user', userId, scanText(written), 'their profile');
     res.json({ success: true });
   } catch (err) {
     next(err);
@@ -131,6 +136,16 @@ async function getPublicProfile(req, res, next) {
       { id }
     );
     if (!profile) return res.status(404).json({ error: 'Profile not found' });
+
+    // Someone who blocked you, or whom you blocked, is not shown
+    if (viewerRole !== 'admin' && Number(id) !== viewerId) {
+      const [[blocked]] = await pool.execute(
+        `SELECT 1 AS hit FROM user_blocks WHERE (blocker_id = :id AND blocked_id = :viewerId)
+         OR (blocker_id = :viewerId AND blocked_id = :id) LIMIT 1`,
+        { id, viewerId }
+      );
+      if (blocked) return res.status(404).json({ error: 'Profile not found' });
+    }
 
     if (profile.role === 'mentee' && viewerRole !== 'admin' && Number(id) !== viewerId) {
       const [[link]] = await pool.execute(

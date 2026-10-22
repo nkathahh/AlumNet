@@ -25,6 +25,16 @@ Strathmore University.
 - **Privacy:** privacy notice and consent at sign-up, download my data, delete my account,
   automatic clean-up of old sign-up records, and mentee profiles visible only to mentors they
   have contacted
+- **Trust and safety:** verified badges on profiles and match cards, mentees introduce
+  themselves when asking for mentorship, contact details are shared only after a mentor
+  accepts, members can report profiles, opportunities and events and block someone, and a post
+  reported by three people is hidden until reviewed. Opportunities and events get automatic scam
+  checks (fees, M-Pesa, WhatsApp, ID or bank requests, fake Kenya Airways links, shortened links,
+  common Swahili phrases and simple disguises like "f.e.e"). Reassurances such as "there is no
+  fee" are not flagged. The same checks read mentorship request messages and profile text; a
+  high-risk result warns the mentor and files a report from "Automatic check". High-risk posters
+  are told only that their post needs a closer review, so scammers cannot learn the rules. Mentees can have at most
+  five requests waiting and cannot re-ask a mentor who declined within 30 days.
 - **Admin tools:** identity verification queue, HR records import with a preview of changes,
   a user table with role, department, last activity and 2FA, suspensions with a reason, and a
   readable activity log ("Approved sign-up for Daniel Gitonga (KQ27651) as mentor")
@@ -167,11 +177,12 @@ progress, and the full development and test results will follow.
 Every push and pull request to `main` runs `.github/workflows/ci.yml`. Each job starts an
 empty MySQL 8 database, builds it from `database/migrations` and tests the real code:
 
-- **Backend API tests** (`backend/tests/api.test.js`, 31 tests): sign-up by HR email match,
+- **Backend API tests** (`backend/tests/api.test.js`, 41 tests): sign-up by HR email match,
   the alumni office review path with risk signals, impostor detection, roles from HR, HttpOnly
   session cookies, CSRF protection, log out everywhere, suspension, single-use reset links,
   two-factor with backup codes, admin 2FA requirement, HR import with retirement conversion,
-  profile privacy, data export and deletion, security headers and rate limiting.
+  profile privacy, data export and deletion, scam checks, reports and auto-hiding, blocking,
+  contact sharing after acceptance, security headers and rate limiting.
 - **Recommendation service tests** (`ml-service/tests/test_app.py`): the API key check, input
   errors and a ranking check with the real BGE model on seeded synthetic profiles.
 
