@@ -1,5 +1,7 @@
 from flask import Flask, request, jsonify
+import hashlib
 import hmac
+import json
 import os
 import tempfile
 from dotenv import load_dotenv
@@ -13,7 +15,11 @@ app = Flask(__name__)
 
 # Loaded once at startup, not per request, this is what keeps recommendation
 # calls under NFR-01's 3-second target instead of reloading the model each time.
-MODEL = SentenceTransformer('BAAI/bge-small-en-v1.5')
+MODEL_NAME = 'BAAI/bge-small-en-v1.5'
+MODEL = SentenceTransformer(MODEL_NAME)
+
+# BGE models find passages better when a search query starts with this instruction
+QUERY_PREFIX = 'Represent this sentence for searching relevant passages: '
 
 
 def _ssl_options():
@@ -86,9 +92,136 @@ def matched_attributes(mentee_text, mentor_row):
     return matches[:3]
 
 
+def search_text(row):
+    """Everything a mentee might search for: headline, about, skills, experience, department."""
+    parts = [field(row, 'headline'), field(row, 'bio'), field(row, 'skills'), field(row, 'experience'), field(row, 'department')]
+    return '. '.join(p for p in parts if p)
+
+
+def encode_cached(conn, items):
+    """
+    items: list of (user_id, kind, text). Returns a dict {(user_id, kind): vector}.
+
+    A profile is only re-encoded when its text changes. The text is hashed with
+    the model name, so switching models also refreshes every vector. If the
+    cache table is missing or read-only, it falls back to encoding everything.
+    """
+    result = {}
+    wanted = {}
+    for user_id, kind, text in items:
+        if not text:
+            continue
+        digest = hashlib.sha256(f"{MODEL_NAME}|{text}".encode('utf-8')).hexdigest()
+        wanted[(user_id, kind)] = (text, digest)
+
+    cached = {}
+    try:
+        if wanted:
+            cur = conn.cursor(dictionary=True)
+            ids = sorted({u for u, _ in wanted})
+            marks = ','.join(['%s'] * len(ids))
+            cur.execute(f"SELECT user_id, kind, text_hash, vector FROM profile_embeddings WHERE user_id IN ({marks})", ids)
+            for row in cur.fetchall():
+                cached[(row['user_id'], row['kind'])] = (row['text_hash'], row['vector'])
+            cur.close()
+    except Exception:
+        cached = {}
+
+    missing = []
+    for key, (text, digest) in wanted.items():
+        hit = cached.get(key)
+        if hit and hit[0] == digest:
+            result[key] = json.loads(hit[1])
+        else:
+            missing.append((key, text, digest))
+
+    if missing:
+        vectors = MODEL.encode([m[1] for m in missing], normalize_embeddings=True)
+        rows = []
+        for (key, _text, digest), vec in zip(missing, vectors):
+            values = [round(float(x), 6) for x in vec]
+            result[key] = values
+            rows.append((key[0], key[1], digest, json.dumps(values)))
+        try:
+            cur = conn.cursor()
+            cur.executemany(
+                """INSERT INTO profile_embeddings (user_id, kind, text_hash, vector) VALUES (%s, %s, %s, %s)
+                   ON DUPLICATE KEY UPDATE text_hash = VALUES(text_hash), vector = VALUES(vector)""",
+                rows
+            )
+            conn.commit()
+            cur.close()
+        except Exception:
+            pass
+    app.config['LAST_ENCODED'] = len(missing)
+    return result
+
+
+def eligible_mentors(cur, exclude_id=None, ids=None):
+    """Active former staff with a profile. ids limits the list to mentors the backend already filtered."""
+    sql = """
+        SELECT u.user_id, u.name, u.department, mt.years_of_experience,
+               (sd.staff_number IS NOT NULL) AS verified,
+               p.skills, p.experience, p.career_interests, p.industry, p.headline, p.bio
+        FROM mentors mt
+        JOIN users u ON u.user_id = mt.user_id
+        JOIN profiles p ON p.user_id = mt.user_id
+        LEFT JOIN staff_directory sd ON sd.staff_number = u.staff_number
+        WHERE u.status = 'active'
+          -- Only people HR lists as former staff (or older accounts not linked to HR)
+          AND (sd.staff_number IS NULL OR (sd.employment_status = 'former' AND sd.alumni_eligible = 1))
+    """
+    params = []
+    if exclude_id is not None:
+        sql += " AND mt.user_id != %s"
+        params.append(exclude_id)
+    if ids:
+        sql += f" AND mt.user_id IN ({','.join(['%s'] * len(ids))})"
+        params += list(ids)
+    cur.execute(sql, params)
+    return cur.fetchall()
+
+
 @app.get("/health")
 def health():
     return jsonify(status="ok")
+
+
+@app.get("/search")
+def search():
+    """
+    Search mentors by meaning, not just exact words: "help moving into
+    management" finds a mentor whose profile says "led a team of 40".
+    Optional ids=1,2,3 limits the search to mentors the backend has already
+    filtered (department, experience and so on).
+    """
+    q = (request.args.get('q') or '').strip()
+    if not q:
+        return jsonify(error="q is required"), 400
+    if len(q) > 200:
+        return jsonify(error="Keep the search under 200 characters"), 400
+    ids = [int(x) for x in (request.args.get('ids') or '').split(',') if x.strip().isdigit()]
+
+    conn = get_connection()
+    cur = conn.cursor(dictionary=True)
+    mentors = [m for m in eligible_mentors(cur, ids=ids or None) if search_text(m)]
+    cur.close()
+    if not mentors:
+        conn.close()
+        return jsonify([])
+
+    vectors = encode_cached(conn, [(m['user_id'], 'search', search_text(m)) for m in mentors])
+    conn.close()
+    query_vec = MODEL.encode([QUERY_PREFIX + q], normalize_embeddings=True)[0]
+
+    results = []
+    for m in mentors:
+        vec = vectors.get((m['user_id'], 'search'))
+        if vec is None:
+            continue
+        results.append({"mentor_id": m['user_id'], "score": pct(query_vec, vec)})
+    results.sort(key=lambda r: r['score'], reverse=True)
+    return jsonify(results)
 
 
 @app.get("/recommend")
@@ -109,24 +242,12 @@ def recommend():
         cur.close(); conn.close()
         return jsonify(error="Mentee profile not found"), 404
 
-    cur.execute("""
-        SELECT u.user_id, u.name, u.department, mt.years_of_experience,
-               (sd.staff_number IS NOT NULL) AS verified,
-               p.skills, p.experience, p.career_interests, p.industry
-        FROM mentors mt
-        JOIN users u ON u.user_id = mt.user_id
-        JOIN profiles p ON p.user_id = mt.user_id
-        LEFT JOIN staff_directory sd ON sd.staff_number = u.staff_number
-        WHERE mt.user_id != %s
-          AND u.status = 'active'
-          -- Only people HR lists as former staff (or older accounts not linked to HR)
-          AND (sd.staff_number IS NULL OR (sd.employment_status = 'former' AND sd.alumni_eligible = 1))
-    """, (mentee_id,))
     # Mentors with an empty profile can't be meaningfully compared, so leave them out
-    mentors = [m for m in cur.fetchall() if profile_text(m)]
-    cur.close(); conn.close()
+    mentors = [m for m in eligible_mentors(cur, exclude_id=mentee_id) if profile_text(m)]
+    cur.close()
 
     if not mentors:
+        conn.close()
         return jsonify([])
 
     mentee_text = profile_text(mentee)
@@ -134,28 +255,33 @@ def recommend():
     me_exp = field(mentee, 'experience')
     me_goals = field(mentee, 'career_interests')
 
-    # Gather every text that needs encoding and encode them in one batch:
-    # 4 for the mentee, then 4 per mentor (whole profile, skills, experience, background)
-    texts = [mentee_text, me_skills, me_exp, me_goals]
+    # Mentee texts change often and are cheap, so they are encoded fresh.
+    # Mentor vectors come from the cache and are only re-encoded when a profile changes.
+    v_whole, v_skills, v_exp, v_goals = MODEL.encode([mentee_text or ' ', me_skills or ' ', me_exp or ' ', me_goals or ' '], normalize_embeddings=True)
+    items = []
     for m in mentors:
-        texts += [profile_text(m), field(m, 'skills'), field(m, 'experience'), background_text(m)]
-    vectors = MODEL.encode(texts, normalize_embeddings=True)
-
-    v_whole, v_skills, v_exp, v_goals = vectors[0], vectors[1], vectors[2], vectors[3]
+        uid = m['user_id']
+        items += [(uid, 'whole', profile_text(m)), (uid, 'skills', field(m, 'skills')),
+                  (uid, 'experience', field(m, 'experience')), (uid, 'background', background_text(m))]
+    cache = encode_cached(conn, items)
+    conn.close()
 
     results = []
-    for i, m in enumerate(mentors):
-        base = 4 + 4 * i
-        m_whole, m_skills, m_exp, m_background = vectors[base:base + 4]
+    for m in mentors:
+        uid = m['user_id']
+        m_whole = cache.get((uid, 'whole'))
+        m_skills = cache.get((uid, 'skills'))
+        m_exp = cache.get((uid, 'experience'))
+        m_background = cache.get((uid, 'background'))
 
         # Field-level explanation. "goals" deliberately compares the mentee's
         # career interests against what the mentor has DONE (skills + experience),
         # not against the mentor's own interests. A field is None when either
         # side left it empty, so the UI can say there isn't enough information.
         breakdown = {
-            "skills": pct(v_skills, m_skills) if me_skills and field(m, 'skills') else None,
-            "experience": pct(v_exp, m_exp) if me_exp and field(m, 'experience') else None,
-            "goals": pct(v_goals, m_background) if me_goals and background_text(m) else None,
+            "skills": pct(v_skills, m_skills) if me_skills and m_skills is not None else None,
+            "experience": pct(v_exp, m_exp) if me_exp and m_exp is not None else None,
+            "goals": pct(v_goals, m_background) if me_goals and m_background is not None else None,
         }
 
         results.append({
@@ -170,7 +296,8 @@ def recommend():
         })
 
     results.sort(key=lambda r: r["score"], reverse=True)
-    return jsonify(results[:10])
+    # The backend removes mentors who are full or not taking mentees, so send a few extra
+    return jsonify(results[:25])
 
 
 if __name__ == "__main__":

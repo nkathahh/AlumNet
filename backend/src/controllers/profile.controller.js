@@ -12,9 +12,11 @@ async function getMyProfile(req, res, next) {
     const { userId, role } = req.user;
     const [[profile]] = await pool.execute(
       `SELECT p.skills, p.experience, p.career_interests, p.industry, p.headline, p.bio, p.linkedin_url,
+              p.gender, p.gender_in_search,
               u.name, u.email, u.department, u.city, u.country, u.created_at, u.onboarded_at, u.staff_number,
               sd.employment_status,
-              mt.years_of_experience
+              mt.years_of_experience, mt.accepting_mentees, mt.max_mentees, mt.meeting_mode, mt.availability_note,
+              (SELECT COUNT(*) FROM mentorship_requests r WHERE r.mentor_id = u.user_id AND r.status = 'accepted') AS active_mentees
        FROM users u
        LEFT JOIN profiles p ON p.user_id = u.user_id
        LEFT JOIN mentors mt ON mt.user_id = u.user_id
@@ -25,7 +27,15 @@ async function getMyProfile(req, res, next) {
     if (!profile) return res.status(404).json({ error: 'Profile not found' });
     const { staff_number: staffNumber, employment_status: employmentStatus, ...rest } = profile;
     // "Verified" means the account is linked to an HR record
-    res.json({ ...rest, role, verified: Boolean(staffNumber && employmentStatus), employment_status: employmentStatus || null });
+    res.json({
+      ...rest,
+      role,
+      gender_in_search: Boolean(rest.gender_in_search),
+      accepting_mentees: rest.accepting_mentees === null || rest.accepting_mentees === undefined ? null : Boolean(rest.accepting_mentees),
+      active_mentees: Number(rest.active_mentees || 0),
+      verified: Boolean(staffNumber && employmentStatus),
+      employment_status: employmentStatus || null
+    });
   } catch (err) {
     next(err);
   }
@@ -63,6 +73,36 @@ async function updateMyProfile(req, res, next) {
       return res.status(400).json({ error: 'Enter a LinkedIn profile link like https://www.linkedin.com/in/your-name' });
     }
 
+    // Optional gender, used in mentor filters only if the person agrees
+    let gender;
+    if (body.gender !== undefined) {
+      gender = body.gender === '' || body.gender === null ? null : String(body.gender);
+      if (gender !== null && !['female', 'male', 'another'].includes(gender)) {
+        return res.status(400).json({ error: 'Choose a gender option or leave it blank' });
+      }
+    }
+    const genderInSearch = body.genderInSearch === undefined ? undefined : (body.genderInSearch === true ? 1 : 0);
+
+    // Mentor availability: whether they take mentees, how many, and how they meet
+    const mentorSets = {};
+    if (role === 'mentor') {
+      if (body.acceptingMentees !== undefined) mentorSets.accepting_mentees = body.acceptingMentees === true ? 1 : 0;
+      if (body.maxMentees !== undefined) {
+        const n = Number(body.maxMentees);
+        if (!Number.isInteger(n) || n < 1 || n > 10) return res.status(400).json({ error: 'Mentees at a time must be between 1 and 10' });
+        mentorSets.max_mentees = n;
+      }
+      if (body.meetingMode !== undefined) {
+        if (!['in_person', 'virtual', 'either'].includes(body.meetingMode)) return res.status(400).json({ error: 'Choose how you prefer to meet' });
+        mentorSets.meeting_mode = body.meetingMode;
+      }
+      if (body.availabilityNote !== undefined) {
+        const note = clean(body.availabilityNote);
+        if (note && note.length > 150) return res.status(400).json({ error: 'Keep your availability note under 150 characters' });
+        mentorSets.availability_note = note;
+      }
+    }
+
     let years;
     if (body.yearsOfExperience !== undefined && role === 'mentor') {
       years = body.yearsOfExperience === '' || body.yearsOfExperience === null ? null : Number(body.yearsOfExperience);
@@ -94,6 +134,22 @@ async function updateMyProfile(req, res, next) {
       if (years !== undefined) {
         await connection.execute('UPDATE mentors SET years_of_experience = :years WHERE user_id = :userId', { years, userId });
       }
+      const mentorKeys = Object.keys(mentorSets);
+      if (mentorKeys.length) {
+        await connection.execute(
+          `UPDATE mentors SET ${mentorKeys.map((k) => `${k} = :${k}`).join(', ')} WHERE user_id = :userId`,
+          { ...mentorSets, userId }
+        );
+      }
+      if (gender !== undefined || genderInSearch !== undefined) {
+        await connection.execute('INSERT IGNORE INTO profiles (user_id) VALUES (:userId)', { userId });
+        const g = [];
+        if (gender !== undefined) g.push('gender = :gender');
+        if (genderInSearch !== undefined) g.push('gender_in_search = :genderInSearch');
+        // Clearing the gender also withdraws it from search
+        if (gender === null) g.push('gender_in_search = 0');
+        await connection.execute(`UPDATE profiles SET ${g.join(', ')} WHERE user_id = :userId`, { gender: gender ?? null, genderInSearch: genderInSearch ?? 0, userId });
+      }
       // The welcome wizard marks the account as onboarded (also when skipped)
       if (body.completeOnboarding === true) {
         await connection.execute('UPDATE users SET onboarded_at = COALESCE(onboarded_at, NOW()) WHERE user_id = :userId', { userId });
@@ -124,7 +180,10 @@ async function getPublicProfile(req, res, next) {
     const [[profile]] = await pool.execute(
       `SELECT u.user_id, u.name, u.department, u.city, u.country,
               p.headline, p.bio, p.linkedin_url, p.skills, p.experience, p.career_interests, p.industry,
-              mt.years_of_experience, sd.employment_status,
+              mt.years_of_experience, mt.accepting_mentees, mt.max_mentees, mt.meeting_mode, mt.availability_note,
+              IF(p.gender_in_search = 1, p.gender, NULL) AS gender,
+              (SELECT COUNT(*) FROM mentorship_requests r WHERE r.mentor_id = u.user_id AND r.status = 'accepted') AS active_mentees,
+              sd.employment_status,
               CASE WHEN sd.employment_status = 'former' THEN 'mentor'
                    WHEN sd.employment_status = 'active' THEN 'mentee'
                    WHEN mt.user_id IS NOT NULL THEN 'mentor' ELSE 'mentee' END AS role
@@ -156,8 +215,12 @@ async function getPublicProfile(req, res, next) {
     }
 
     const { employment_status: status, ...rest } = profile;
+    const isMentor = rest.role === 'mentor';
     res.json({
       ...rest,
+      accepting_mentees: isMentor ? Boolean(rest.accepting_mentees) : undefined,
+      active_mentees: isMentor ? Number(rest.active_mentees) : undefined,
+      slots_left: isMentor ? Math.max(0, Number(rest.max_mentees || 0) - Number(rest.active_mentees)) : undefined,
       verified: Boolean(status),
       verified_label: status === 'former' ? 'Verified former KQ staff' : status === 'active' ? 'Verified current KQ staff' : null
     });

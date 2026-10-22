@@ -725,6 +725,116 @@ test('the accuracy panel compares the automatic checks with admin decisions', as
   await state.admin.call('PUT', '/admin/moderation/settings', { autoApprove: false });
 });
 
+/* ---------------- Discovery (Module 3) ---------------- */
+
+test('mentors set availability and an optional gender, with checks on the values', async () => {
+  const bad = await state.peter.me.call('PUT', '/profile/me', { maxMentees: 11 });
+  assert.equal(bad.status, 400);
+  const badGender = await state.peter.me.call('PUT', '/profile/me', { gender: 'robot' });
+  assert.equal(badGender.status, 400);
+  const ok = await state.peter.me.call('PUT', '/profile/me', {
+    headline: 'Retired cargo operations manager', skills: 'Cargo handling, dangerous goods, team leadership',
+    experience: 'Ran the JKIA cargo centre for 12 years', yearsOfExperience: 30,
+    maxMentees: 2, meetingMode: 'virtual', availabilityNote: 'One call a month, evenings',
+    gender: 'male', genderInSearch: false
+  });
+  assert.equal(ok.status, 200);
+  const me = await state.peter.me.call('GET', '/profile/me');
+  assert.equal(me.body.max_mentees, 2);
+  assert.equal(me.body.meeting_mode, 'virtual');
+  assert.equal(me.body.gender, 'male');
+  assert.equal(me.body.gender_in_search, false);
+  // Gender stays private until the person agrees to use it in search
+  const seen = await state.carol.me.call('GET', `/profile/${state.peter.id}`);
+  assert.equal(seen.body.gender, null);
+  assert.equal(seen.body.slots_left, 2);
+});
+
+test('the mentor directory filters by department, experience, meeting mode and consented gender', async () => {
+  const w = await makeMember('Wanjiku Mentor', 'wanjiku.mentor@example.org', 'mentor');
+  await db.execute("UPDATE users SET department = 'Cargo & Logistics', city = 'Mombasa' WHERE user_id = :id", { id: w.id });
+  await w.me.call('PUT', '/profile/me', {
+    headline: 'Former head of ground operations', skills: 'Ground operations, ramp safety, leadership',
+    experience: 'Led ramp and baggage teams at Moi International Airport', yearsOfExperience: 18,
+    gender: 'female', genderInSearch: true, meetingMode: 'in_person'
+  });
+  state.wanjiku = w;
+
+  const all = await state.carol.me.call('GET', '/mentors');
+  assert.equal(all.status, 200);
+  assert.ok(all.body.items.some((m) => m.mentor_id === w.id));
+  assert.ok(all.body.facets.departments.some((d) => d.value === 'Cargo & Logistics'));
+  assert.ok(all.body.facets.locations.some((l) => l.value === 'Mombasa'));
+
+  const women = await state.carol.me.call('GET', '/mentors?gender=female');
+  assert.deepEqual(women.body.items.map((m) => m.mentor_id), [w.id]);
+  // Peter is male but did not agree to be found by gender
+  const men = await state.carol.me.call('GET', '/mentors?gender=male');
+  assert.equal(men.body.items.some((m) => m.mentor_id === state.peter.id), false);
+
+  const senior = await state.carol.me.call('GET', '/mentors?minYears=25');
+  assert.ok(senior.body.items.every((m) => m.years_of_experience >= 25));
+  assert.ok(senior.body.items.some((m) => m.mentor_id === state.peter.id));
+  const online = await state.carol.me.call('GET', '/mentors?mode=virtual');
+  assert.equal(online.body.items.some((m) => m.mentor_id === w.id), false);
+  const dept = await state.carol.me.call('GET', `/mentors?department=${encodeURIComponent('Cargo & Logistics')}`);
+  assert.deepEqual(dept.body.items.map((m) => m.mentor_id), [w.id]);
+  const nobody = await state.carol.me.call('GET', '/mentors?gender=robot');
+  assert.equal(nobody.status, 400);
+});
+
+test('search falls back to keywords when the matching service is unavailable', async () => {
+  const r = await state.carol.me.call('GET', '/mentors?q=ramp%20safety');
+  assert.equal(r.status, 200);
+  assert.equal(r.body.searchMode, 'keywords');
+  assert.equal(r.body.items[0].mentor_id, state.wanjiku.id);
+  const none = await state.carol.me.call('GET', '/mentors?q=submarine%20welding');
+  assert.equal(none.body.total, 0);
+});
+
+test('a full or paused mentor cannot get new requests, and a mentor cannot accept past their limit', async () => {
+  await state.peter.me.call('PUT', '/profile/me', { maxMentees: 1 });
+  const a = await makeMember('Mentee One', 'mentee.one@example.org', 'mentee');
+  const b = await makeMember('Mentee Two', 'mentee.two@example.org', 'mentee');
+  const ra = await a.me.call('POST', '/mentorship-requests', { mentorId: state.peter.id });
+  const rb = await b.me.call('POST', '/mentorship-requests', { mentorId: state.peter.id });
+  assert.equal(ra.status, 201);
+  assert.equal(rb.status, 201);
+  assert.equal((await state.peter.me.call('PATCH', `/mentorship-requests/${ra.body.request_id}`, { decision: 'accepted' })).status, 200);
+  const over = await state.peter.me.call('PATCH', `/mentorship-requests/${rb.body.request_id}`, { decision: 'accepted' });
+  assert.equal(over.status, 409);
+  assert.equal(over.body.code, 'at_capacity');
+
+  const c = await makeMember('Mentee Three', 'mentee.three@example.org', 'mentee');
+  const full = await c.me.call('POST', '/mentorship-requests', { mentorId: state.peter.id });
+  assert.equal(full.status, 409);
+  assert.match(full.body.error, /not taking new mentees/);
+  // Full mentors drop out of the default list but can still be found on purpose
+  const list = await c.me.call('GET', '/mentors');
+  assert.equal(list.body.items.some((m) => m.mentor_id === state.peter.id), false);
+  const everyone = await c.me.call('GET', '/mentors?available=0');
+  const peter = everyone.body.items.find((m) => m.mentor_id === state.peter.id);
+  assert.equal(peter.available, false);
+  assert.equal(peter.slots_left, 0);
+
+  await state.wanjiku.me.call('PUT', '/profile/me', { acceptingMentees: false });
+  const paused = await c.me.call('POST', '/mentorship-requests', { mentorId: state.wanjiku.id });
+  assert.equal(paused.status, 409);
+  await state.wanjiku.me.call('PUT', '/profile/me', { acceptingMentees: true });
+});
+
+test('the directory pages through results 12 at a time', async () => {
+  for (let i = 0; i < 12; i++) await makeMember(`Paging Mentor ${String(i).padStart(2, '0')}`, `paging.${i}@example.org`, 'mentor');
+  const p1 = await state.carol.me.call('GET', '/mentors?sort=name');
+  assert.equal(p1.body.items.length, 12);
+  assert.ok(p1.body.pages >= 2);
+  const p2 = await state.carol.me.call('GET', `/mentors?sort=name&page=${p1.body.pages}`);
+  assert.ok(p2.body.items.length >= 1);
+  const names = p1.body.items.map((m) => m.name);
+  assert.deepEqual(names, [...names].sort((a, b) => a.localeCompare(b)));
+  assert.equal((await state.peter.me.call('GET', '/mentors')).status, 403);
+});
+
 /* ---------------- HR import and retirement ---------------- */
 
 test('an HR import previews changes, then a retired mentee becomes a mentor', async () => {

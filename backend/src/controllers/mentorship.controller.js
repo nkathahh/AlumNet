@@ -19,13 +19,19 @@ async function createRequest(req, res, next) {
 
         // Only active, eligible former staff can be asked
         const [[mentor]] = await pool.execute(
-            `SELECT u.user_id FROM mentors mt JOIN users u ON u.user_id = mt.user_id
+            `SELECT u.user_id, u.name, mt.accepting_mentees, mt.max_mentees,
+                    (SELECT COUNT(*) FROM mentorship_requests r WHERE r.mentor_id = u.user_id AND r.status = 'accepted') AS active
+             FROM mentors mt JOIN users u ON u.user_id = mt.user_id
              LEFT JOIN staff_directory sd ON sd.staff_number = u.staff_number
              WHERE mt.user_id = :mentorId AND u.status = 'active'
                AND (sd.staff_number IS NULL OR (sd.employment_status = 'former' AND sd.alumni_eligible = 1))`,
             { mentorId }
         );
         if (!mentor) return res.status(404).json({ error: 'Mentor not found' });
+        // Mentors choose whether they take mentees and how many at a time
+        if (!mentor.accepting_mentees || Number(mentor.active) >= Number(mentor.max_mentees)) {
+            return res.status(409).json({ error: `${mentor.name.split(' ')[0]} is not taking new mentees right now. Try another mentor, or check back later.` });
+        }
         // Same reply whichever side blocked, so nobody learns they were blocked
         if (await isBlockedEitherWay(userId, mentorId)) {
             return res.status(403).json({ error: 'This mentor is not taking requests from you right now' });
@@ -128,6 +134,20 @@ async function respondToRequest(req, res, next) {
         );
         if (!request) return res.status(404).json({ error: 'Request not found' });
         if (request.status !== 'pending') return res.status(400).json({ error: 'This request has already been decided' });
+
+        if (decision === 'accepted') {
+            const [[cap]] = await pool.execute(
+                `SELECT mt.max_mentees, (SELECT COUNT(*) FROM mentorship_requests r WHERE r.mentor_id = :userId AND r.status = 'accepted') AS active
+                 FROM mentors mt WHERE mt.user_id = :userId`,
+                { userId }
+            );
+            if (cap && Number(cap.active) >= Number(cap.max_mentees)) {
+                return res.status(409).json({
+                    code: 'at_capacity',
+                    error: `You already mentor ${cap.active}, the most you chose. Raise the limit on your profile, or end a mentorship first.`
+                });
+            }
+        }
 
         await pool.execute(
             `UPDATE mentorship_requests SET status = :decision, responded_at = NOW() WHERE request_id = :id`,

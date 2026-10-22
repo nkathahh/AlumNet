@@ -1801,3 +1801,36 @@ textarea:focus-visible {
 .filter-chip-row { margin: -6px 0 14px; }
 .filter-chip { display: inline-flex; align-items: center; gap: 8px; background: var(--wash); border-radius: 999px; padding: 5px 6px 5px 12px; font-size: 0.82rem; color: var(--ink); }
 .filter-chip button { border: 0; background: var(--panel); width: 22px; height: 22px; border-radius: 50%; cursor: pointer; color: var(--ink-soft); line-height: 1; }
+
+/* ------------------------------------------------------------------
+   Find a mentor (Module 3)
+   ------------------------------------------------------------------ */
+.fm-section { margin-bottom: 36px; }
+.fm-heading { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; margin-bottom: 14px; }
+.fm-search { display: flex; gap: 10px; margin-bottom: 12px; }
+.fm-search input { flex: 1; min-width: 0; }
+.fm-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 8px; margin-bottom: 10px; }
+.fm-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.fm-available { margin: 0; }
+.fm-note { font-size: 0.84rem; color: var(--ink-soft); background: var(--wash); border-radius: var(--radius); padding: 8px 12px; margin: 0 0 12px; }
+.fm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.fm-card { background: var(--panel); border: 1px solid var(--stone-line); border-radius: var(--radius-lg, 14px); padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.fm-card-top { display: flex; gap: 12px; align-items: flex-start; }
+.fm-name { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; color: var(--ink); cursor: pointer; text-align: left; margin-right: 4px; }
+.fm-name:hover { text-decoration: underline; }
+.fm-chips { margin: 0; }
+.fm-avail { font-size: 0.82rem; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 2px 0 8px; }
+.fm-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--slate); flex-shrink: 0; }
+.fm-avail.on .fm-dot { background: var(--kq-green); }
+.fm-avail.on { color: var(--kq-green); }
+.fm-avail.off { color: var(--slate); }
+.fm-card-actions { display: flex; gap: 8px; margin-top: auto; }
+.fm-pages { display: flex; justify-content: center; align-items: center; gap: 6px; margin-top: 18px; flex-wrap: wrap; }
+.fm-page { min-width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--stone-line); background: var(--panel); cursor: pointer; font: inherit; color: var(--ink); }
+.fm-page.active { background: var(--kq-red); color: #fff; border-color: var(--kq-red); }
+.pf-fieldset { border: 1px solid var(--stone-line); border-radius: var(--radius); padding: 12px 14px 4px; margin: 4px 0 18px; }
+.pf-fieldset legend { font-weight: 600; font-size: 0.88rem; padding: 0 6px; }
+@media (max-width: 640px) {
+  .fm-search { flex-direction: column; }
+  .fm-grid { grid-template-columns: 1fr; }
+}

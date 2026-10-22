@@ -1,5 +1,6 @@
-const axios = require('axios');
 const pool = require('../config/db');
+const { mlGet } = require('../utils/ml');
+const { cardsFor } = require('./mentors.controller');
 
 const MATCHING_FIELDS = ['skills', 'experience', 'career_interests'];
 
@@ -22,19 +23,20 @@ async function getRecommendations(req, res, next) {
       });
     }
 
-    const base = (process.env.ML_SERVICE_URL || 'http://localhost:5000').replace(/\/$/, '');
-    const url = `${base}/recommend?mentee_id=${userId}`;
-    // The shared key stops anyone else calling the ML service directly once it is online
-    const headers = process.env.ML_API_KEY ? { 'X-API-Key': process.env.ML_API_KEY } : {};
-    const response = await axios.get(url, { headers, timeout: 30000 });
-    // Never suggest someone either person has blocked
-    const [blocked] = await pool.execute(
-      `SELECT blocked_id AS id FROM user_blocks WHERE blocker_id = :userId
-       UNION SELECT blocker_id AS id FROM user_blocks WHERE blocked_id = :userId`,
-      { userId }
-    );
-    const hidden = new Set(blocked.map((b) => b.id));
-    res.json((response.data || []).filter((m) => !hidden.has(m.mentor_id)));
+    const { data } = await mlGet('/recommend', { mentee_id: userId });
+    const matches = data || [];
+
+    // Card details also apply blocks, HR status and availability
+    const cards = new Map((await cardsFor(userId, matches.map((m) => m.mentor_id))).map((c) => [c.mentor_id, c]));
+    const ranked = matches
+      .filter((m) => cards.has(m.mentor_id))
+      .map((m) => ({ ...m, ...cards.get(m.mentor_id), score: m.score }))
+      // Only mentors who are taking mentees and have a free place are suggested
+      .filter((m) => m.available)
+      // Scores are compared in 2-point bands: within a band, the mentor with more
+      // free places comes first, so the most popular mentors are not flooded
+      .sort((a, b) => Math.floor(b.score / 2) - Math.floor(a.score / 2) || b.slots_left - a.slots_left || b.score - a.score);
+    res.json(ranked.slice(0, 10));
   } catch (err) {
     if (err.response) return res.status(err.response.status).json(err.response.data);
     if (err.code === 'ECONNREFUSED' || err.code === 'ECONNABORTED') {

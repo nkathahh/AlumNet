@@ -41,6 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
   wireModerationScreen();
   renderBlockedList();
   wireSafetyLinks();
+  wireMentorDirectory();
   wireHrImport();
   checkAdminTwoFactor();
   wireOnboarding();
@@ -738,7 +739,7 @@ async function renderMentorList() {
     const data = await recRes.json();
     const myRequests = reqRes.ok ? await reqRes.json() : [];
     const pendingMentorIds = new Set(
-      myRequests.filter((r) => r.status === 'pending').map((r) => r.other_user_id)
+      myRequests.filter((r) => ['pending', 'accepted'].includes(r.status)).map((r) => r.other_user_id)
     );
 
     if (!recRes.ok) {
@@ -748,11 +749,21 @@ async function renderMentorList() {
       return;
     }
     if (!data.length) {
-      list.innerHTML = '<p style="color:var(--slate); padding:20px 4px;">No mentor matches yet.</p>';
+      list.innerHTML = '<p style="color:var(--slate); padding:20px 4px;">No mentors with a free place match your profile right now. Browse all mentors below.</p>';
       return;
     }
-    list.innerHTML = data.map((m) => apiMentorCardHTML(m, pendingMentorIds.has(m.mentor_id))).join('');
-    wireMentorCardActions(list);
+    // The best three first; the rest on request, so the page is not a wall of cards
+    const more = document.getElementById('recs-more');
+    const draw = (count) => {
+      list.innerHTML = data.slice(0, count).map((m) => apiMentorCardHTML(m, pendingMentorIds.has(m.mentor_id))).join('');
+      wireMentorCardActions(list);
+      if (more) {
+        more.style.display = data.length > 3 ? 'inline-flex' : 'none';
+        more.textContent = count < data.length ? `Show all ${data.length} recommendations` : 'Show fewer';
+        more.onclick = () => draw(count < data.length ? data.length : 3);
+      }
+    };
+    draw(more ? 3 : data.length);
   } catch {
     list.innerHTML = '<p style="color:var(--kq-red); padding:20px 4px;">Could not reach the server.</p>';
   }
@@ -783,9 +794,11 @@ function apiMentorCardHTML(m, alreadyRequested) {
           ${m.verified ? verifiedBadgeHTML('Verified former KQ staff') : ''}
           <span class="match-score">${m.score}% match</span>
         </div>
+        ${m.headline ? `<div class="req-headline" style="margin-bottom:4px;">${escapeHTML(m.headline)}</div>` : ''}
         <div class="mentor-meta" style="margin:0 0 8px;">
           ${escapeHTML(m.department || '')}${m.years_of_experience ? ' · ' + m.years_of_experience + ' yrs experience' : ''}
         </div>
+        ${availabilityHTML(m)}
         ${matchBreakdownHTML(m.breakdown)}
       </div>
       <div class="mentor-actions">
@@ -1066,8 +1079,12 @@ function drawProfile(p) {
 
   document.getElementById('pf-strength').innerHTML = profileStrengthHTML(p);
 
+  const modeLabel = { in_person: 'In person', virtual: 'Online', either: 'In person or online' }[p.meeting_mode];
   const details = [
     ['Email', p.email],
+    ...(p.role === 'mentor' ? [['Mentoring', p.accepting_mentees === false
+      ? 'Not taking new mentees'
+      : `${p.active_mentees || 0} of ${p.max_mentees || 3} places used${modeLabel ? ', ' + modeLabel.toLowerCase() : ''}`]] : []),
     ['Industry', p.industry],
     ['Member since', formatDate(p.created_at)]
   ].filter(([, v]) => v);
@@ -1107,6 +1124,24 @@ async function wireProfileForm() {
     const yearsField = document.getElementById('years-field');
     yearsField.style.display = profile.role === 'mentor' ? 'block' : 'none';
     form.years.value = profile.years_of_experience ?? '';
+    const mentor = profile.role === 'mentor';
+    document.getElementById('availability-fields').style.display = mentor ? 'block' : 'none';
+    if (mentor) {
+      form.accepting.checked = profile.accepting_mentees !== false;
+      form.maxMentees.value = String(profile.max_mentees || 3);
+      form.meetingMode.value = profile.meeting_mode || 'either';
+      form.availabilityNote.value = profile.availability_note || '';
+    }
+    form.gender.value = profile.gender || '';
+    form.genderInSearch.checked = Boolean(profile.gender_in_search);
+    // Mentees cannot be filtered by gender, so the choice only matters for mentors
+    document.getElementById('gender-search-row').style.display = mentor ? 'flex' : 'none';
+    const syncGender = () => {
+      form.genderInSearch.disabled = !form.gender.value || form.gender.value === 'another';
+      if (form.genderInSearch.disabled) form.genderInSearch.checked = false;
+    };
+    form.gender.onchange = syncGender;
+    syncGender();
   }
 
   function setEditing(on) {
@@ -1145,7 +1180,15 @@ async function wireProfileForm() {
       country: form.country.value,
       linkedinUrl: linkedin
     };
-    if (profile.role === 'mentor') body.yearsOfExperience = form.years.value;
+    if (profile.role === 'mentor') {
+      body.yearsOfExperience = form.years.value;
+      body.acceptingMentees = form.accepting.checked;
+      body.maxMentees = Number(form.maxMentees.value);
+      body.meetingMode = form.meetingMode.value;
+      body.availabilityNote = form.availabilityNote.value;
+      body.genderInSearch = form.genderInSearch.checked;
+    }
+    body.gender = form.gender.value;
 
     const btn = form.querySelector('button[type="submit"]');
     btn.disabled = true;
@@ -1203,6 +1246,7 @@ async function openMentorProfile(mentorId) {
           <h3>${escapeHTML(data.name)} ${data.verified ? verifiedBadgeHTML(data.verified_label || 'Verified') : ''}</h3>
           ${data.headline ? `<div class="pf-headline">${escapeHTML(data.headline)}</div>` : ''}
           <div class="modal-meta">${meta}</div>
+          ${data.role === 'mentor' ? availabilityHTML({ ...data, meeting_label: { in_person: 'In person', virtual: 'Online', either: 'In person or online' }[data.meeting_mode] }) : ''}
         </div>
       </div>
       ${section('About', data.bio)}
@@ -2622,9 +2666,25 @@ async function renderMentorDashboard() {
       : active.length ? `You are mentoring ${active.length} staff member${active.length === 1 ? '' : 's'}. No new requests right now.`
         : 'Your dashboard will fill up as mentees connect with you.';
 
+  // ---------- Availability ----------
+  const maxM = Number(profile.max_mentees || 0);
+  const full = maxM && active.length >= maxM;
+  const paused = profile.accepting_mentees === false;
+  if (paused || full) {
+    document.getElementById('md-nudge').insertAdjacentHTML('beforeend', `
+      <div class="md-banner">
+        <div class="md-banner-icon">${mdIcon(MD_ICONS.users)}</div>
+        <div class="md-banner-body">
+          <strong>${paused ? 'You are not taking new mentees' : `You are mentoring ${active.length} of ${maxM}, your limit`}</strong>
+          <p>${paused ? 'Mentees cannot send you new requests. Your current mentorships carry on.' : 'You no longer appear as available. Raise your limit if you have time for more.'}</p>
+        </div>
+        <a href="profile.html#edit" class="btn btn-secondary">Change availability</a>
+      </div>`);
+  }
+
   // ---------- Matching nudge ----------
   if (missingMatchingFields(profile).length) {
-    document.getElementById('md-nudge').innerHTML = `
+    document.getElementById('md-nudge').insertAdjacentHTML('beforeend', `
       <div class="md-banner">
         <div class="md-banner-icon">${mdIcon(MD_ICONS.spark)}</div>
         <div class="md-banner-body">
@@ -2632,7 +2692,7 @@ async function renderMentorDashboard() {
           <p>Matches are based on your skills, experience and career interests. Add them so the right mentees are matched with you.</p>
         </div>
         <a href="profile.html#edit" class="btn btn-primary">Complete profile</a>
-      </div>`;
+      </div>`);
   }
 
   // ---------- Stat cards ----------
@@ -4002,4 +4062,165 @@ function wireModerationScreen() {
   const sel = document.getElementById('mod-risk-filter');
   if (sel) sel.addEventListener('change', drawModerationQueue);
   renderModeration();
+}
+
+
+/* --------------------------------------------------------------------
+   Mentor directory: search by meaning, filters, sort and pages.
+   The filters live in the address, so the back button and shared links work.
+   -------------------------------------------------------------------- */
+
+function availabilityHTML(m) {
+  if (m.accepting_mentees === undefined && m.available === undefined) return '';
+  let text;
+  let cls;
+  if (!m.accepting_mentees) { text = 'Not taking new mentees right now'; cls = 'off'; }
+  else if (!m.slots_left) { text = 'Full at the moment'; cls = 'off'; }
+  else { text = `${m.slots_left} of ${m.max_mentees} place${m.max_mentees === 1 ? '' : 's'} free`; cls = 'on'; }
+  const extra = [m.meeting_label, m.availability_note].filter(Boolean).map(escapeHTML).join(' · ');
+  return `<div class="fm-avail ${cls}"><span class="fm-dot"></span>${text}${extra ? `<span class="md-muted"> · ${extra}</span>` : ''}</div>`;
+}
+
+const DIR_FIELDS = { q: 'dir-q', department: 'dir-department', minYears: 'dir-years', location: 'dir-location', mode: 'dir-mode', gender: 'dir-gender', sort: 'dir-sort' };
+let dirRequested = new Set();
+let dirPage = 1;
+
+function dirState() {
+  const state = {};
+  Object.entries(DIR_FIELDS).forEach(([key, id]) => {
+    const v = document.getElementById(id).value.trim();
+    if (v) state[key] = v;
+  });
+  if (!document.getElementById('dir-available').checked) state.available = '0';
+  if (!state.q && state.sort === 'match') delete state.sort;
+  if (dirPage > 1) state.page = String(dirPage);
+  return state;
+}
+
+function directoryCardHTML(m) {
+  const requested = dirRequested.has(m.mentor_id);
+  const place = [m.department, m.city, m.years_of_experience ? `${m.years_of_experience} yrs experience` : ''].filter(Boolean).map(escapeHTML).join(' · ');
+  return `
+    <article class="fm-card">
+      <div class="fm-card-top">
+        <div class="pf-avatar pf-avatar-sm" style="background:${colorFromName(m.name || '')}">${mdInitials(m.name)}</div>
+        <div style="min-width:0;">
+          <button type="button" class="fm-name" data-dir-profile="${m.mentor_id}">${escapeHTML(m.name)}</button>
+          ${m.verified ? verifiedBadgeHTML('Verified') : ''}
+          ${m.headline ? `<div class="req-headline">${escapeHTML(m.headline)}</div>` : ''}
+          <div class="md-muted st-small">${place}</div>
+        </div>
+      </div>
+      ${m.skills_preview && m.skills_preview.length ? `<div class="pf-chips fm-chips">${m.skills_preview.map((x) => `<span class="pf-chip">${escapeHTML(x)}</span>`).join('')}</div>` : ''}
+      ${availabilityHTML(m)}
+      <div class="fm-card-actions">
+        <button type="button" class="btn btn-secondary md-btn-sm" data-dir-profile="${m.mentor_id}">View profile</button>
+        <button type="button" class="btn ${requested || !m.available ? 'btn-secondary' : 'btn-primary'} md-btn-sm" data-dir-request="${m.mentor_id}" data-name="${escapeHTML(m.name)}" ${requested || !m.available ? 'disabled' : ''}>
+          ${requested ? 'Requested' : m.available ? 'Request' : 'Unavailable'}
+        </button>
+      </div>
+    </article>`;
+}
+
+function fillSelect(id, options, label, fmt = (o) => o.value) {
+  const sel = document.getElementById(id);
+  const current = sel.value;
+  sel.innerHTML = `<option value="">${label}</option>` + options.map((o) => `<option value="${escapeHTML(o.value)}">${escapeHTML(fmt(o))} (${o.count})</option>`).join('');
+  if ([...sel.options].some((o) => o.value === current)) sel.value = current;
+}
+
+async function loadDirectory(pushHistory = true) {
+  const results = document.getElementById('dir-results');
+  const state = dirState();
+  const qs = new URLSearchParams(state).toString();
+  if (pushHistory) history.replaceState(null, '', `recommendations.html${qs ? '?' + qs : ''}#browse`);
+  results.innerHTML = '<div class="md-skel md-skel-row"></div><div class="md-skel md-skel-row"></div>';
+  const data = await mdGet(`/mentors${qs ? '?' + qs : ''}`);
+  if (!data) { results.innerHTML = '<p class="md-muted">Could not load mentors. Try again in a moment.</p>'; return; }
+
+  fillSelect('dir-department', data.facets.departments, 'Any department');
+  fillSelect('dir-location', data.facets.locations, 'Anywhere');
+
+  const note = document.getElementById('dir-note');
+  if (state.q && data.searchMode === 'keywords') {
+    note.textContent = 'The matching service is busy, so these results match your words exactly rather than their meaning.';
+    note.style.display = 'block';
+  } else if (state.q && data.searchMode === 'meaning') {
+    note.textContent = `Mentors whose experience is closest in meaning to "${state.q}", not just the exact words.`;
+    note.style.display = 'block';
+  } else {
+    note.style.display = 'none';
+  }
+  const genderNote = state.gender ? ' Only mentors who chose to share their gender appear in this filter.' : '';
+  document.getElementById('dir-summary').textContent = `${data.total} mentor${data.total === 1 ? '' : 's'}.${genderNote}`;
+
+  results.innerHTML = data.items.length
+    ? data.items.map(directoryCardHTML).join('')
+    : mdEmpty('search', 'No mentors match', state.available === '0' ? 'Try fewer filters or different words.' : 'Try fewer filters, or untick "Only mentors with a free place" to include mentors who are full.');
+
+  results.querySelectorAll('[data-dir-profile]').forEach((b) => { b.onclick = () => openMentorProfile(b.dataset.dirProfile); });
+  results.querySelectorAll('[data-dir-request]').forEach((b) => {
+    b.onclick = () => openRequestDialog(b.dataset.dirRequest, b.dataset.name, () => {
+      dirRequested.add(Number(b.dataset.dirRequest));
+      b.disabled = true;
+      b.textContent = 'Requested';
+      b.classList.replace('btn-primary', 'btn-secondary');
+      updateRequestsNote();
+    });
+  });
+
+  const pages = document.getElementById('dir-pages');
+  if (data.pages <= 1) { pages.innerHTML = ''; return; }
+  const nums = [];
+  for (let i = 1; i <= data.pages; i++) {
+    if (i === 1 || i === data.pages || Math.abs(i - data.page) <= 1) nums.push(i);
+    else if (nums[nums.length - 1] !== '...') nums.push('...');
+  }
+  pages.innerHTML = `
+    <button type="button" class="btn btn-secondary md-btn-sm" data-page="${data.page - 1}" ${data.page === 1 ? 'disabled' : ''}>Previous</button>
+    ${nums.map((n) => (n === '...' ? '<span class="md-muted">...</span>' : `<button type="button" class="fm-page ${n === data.page ? 'active' : ''}" data-page="${n}" ${n === data.page ? 'aria-current="page"' : ''}>${n}</button>`)).join('')}
+    <button type="button" class="btn btn-secondary md-btn-sm" data-page="${data.page + 1}" ${data.page === data.pages ? 'disabled' : ''}>Next</button>`;
+  pages.querySelectorAll('[data-page]').forEach((b) => {
+    b.onclick = () => {
+      dirPage = Number(b.dataset.page);
+      loadDirectory();
+      document.getElementById('mentor-directory').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+  });
+}
+
+async function updateRequestsNote() {
+  const rows = await mdGet('/mentorship-requests');
+  if (!rows) return;
+  dirRequested = new Set(rows.filter((r) => ['pending', 'accepted'].includes(r.status)).map((r) => r.other_user_id));
+  const pending = rows.filter((r) => r.status === 'pending').length;
+  const note = document.getElementById('dir-requests-note');
+  if (note) note.textContent = pending ? `You have ${pending} of 5 requests waiting for a reply.` : 'You can have up to 5 requests waiting at a time.';
+}
+
+async function wireMentorDirectory() {
+  if (!document.getElementById('mentor-directory')) return;
+  // Restore filters from the address
+  const params = new URLSearchParams(location.search);
+  Object.entries(DIR_FIELDS).forEach(([key, id]) => { if (params.get(key)) document.getElementById(id).value = params.get(key); });
+  document.getElementById('dir-available').checked = params.get('available') !== '0';
+  dirPage = Number(params.get('page')) || 1;
+  if (!params.get('sort')) document.getElementById('dir-sort').value = params.get('q') ? 'match' : 'experience';
+
+  await updateRequestsNote();
+  const reload = () => { dirPage = 1; loadDirectory(); };
+  ['dir-department', 'dir-years', 'dir-location', 'dir-mode', 'dir-gender', 'dir-sort', 'dir-available'].forEach((id) => {
+    document.getElementById(id).addEventListener('change', reload);
+  });
+  document.getElementById('dir-search-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    // A new search sorts by best match; clearing it goes back to experience
+    document.getElementById('dir-sort').value = document.getElementById('dir-q').value.trim() ? 'match' : 'experience';
+    reload();
+  });
+  document.getElementById('dir-q').addEventListener('search', () => {
+    if (!document.getElementById('dir-q').value) { document.getElementById('dir-sort').value = 'experience'; reload(); }
+  });
+  await loadDirectory(false);
+  if (location.hash === '#browse') document.getElementById('mentor-directory').scrollIntoView({ block: 'start' });
 }

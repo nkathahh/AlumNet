@@ -32,11 +32,64 @@
       <div class="app-header">
         <div>
           <h1>Find a mentor</h1>
-          <span class="sub">Retired staff ranked by how well their background matches your profile.</span>
+          <span class="sub">Former Kenya Airways staff who volunteer to guide current staff.</span>
         </div>
       </div>
 
-      <div class="mentor-list" id="mentor-list"></div>
+      <section class="fm-section">
+        <div class="section-heading fm-heading">
+          <h2>Recommended for you</h2>
+          <span class="md-muted st-small">Ranked by how well their background fits your skills, experience and goals. Only mentors with a free place are shown.</span>
+        </div>
+        <div class="mentor-list" id="mentor-list"></div>
+        <button type="button" class="btn-quiet" id="recs-more" style="display:none;"></button>
+      </section>
+
+      <section class="fm-section" id="mentor-directory">
+        <div class="section-heading fm-heading">
+          <h2>Browse all mentors</h2>
+          <span class="md-muted st-small" id="dir-requests-note"></span>
+        </div>
+        <form class="fm-search" id="dir-search-form" role="search">
+          <input type="search" id="dir-q" class="search-pill" maxlength="200"
+            placeholder="Describe what you want help with, e.g. moving into cargo management" aria-label="Search mentors">
+          <button type="submit" class="btn btn-primary">Search</button>
+        </form>
+        <div class="fm-filters">
+          <select id="dir-department" class="select-pill" aria-label="Department"><option value="">Any department</option></select>
+          <select id="dir-years" class="select-pill" aria-label="Experience">
+            <option value="">Any experience</option>
+            <option value="5">5+ years</option>
+            <option value="10">10+ years</option>
+            <option value="20">20+ years</option>
+          </select>
+          <select id="dir-location" class="select-pill" aria-label="Location"><option value="">Anywhere</option></select>
+          <select id="dir-mode" class="select-pill" aria-label="How they meet">
+            <option value="">In person or online</option>
+            <option value="in_person">In person</option>
+            <option value="virtual">Online</option>
+          </select>
+          <select id="dir-gender" class="select-pill" aria-label="Gender" title="Only mentors who chose to share their gender for this filter">
+            <option value="">Any gender</option>
+            <option value="female">Women mentors</option>
+            <option value="male">Men mentors</option>
+          </select>
+          <select id="dir-sort" class="select-pill" aria-label="Sort by">
+            <option value="match">Best match</option>
+            <option value="experience">Most experience</option>
+            <option value="availability">Most free places</option>
+            <option value="newest">Newest</option>
+            <option value="name">Name A to Z</option>
+          </select>
+        </div>
+        <div class="fm-bar">
+          <label class="check-row fm-available"><input type="checkbox" id="dir-available" checked><span>Only mentors with a free place</span></label>
+          <span class="md-muted st-small" id="dir-summary"></span>
+        </div>
+        <p class="fm-note" id="dir-note" style="display:none;"></p>
+        <div class="fm-grid" id="dir-results"></div>
+        <nav class="fm-pages" id="dir-pages" aria-label="Pages"></nav>
+      </section>
     </main>
   </div>
 

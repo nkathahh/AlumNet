@@ -109,3 +109,30 @@ def test_recommendations_are_ranked_and_explained(client):
 
     scores = [r["score"] for r in res.get_json()]
     assert scores == sorted(scores, reverse=True)
+
+
+def test_mentor_vectors_are_cached_and_refreshed_when_a_profile_changes(client):
+    client.get("/recommend?mentee_id=9001", headers=KEY)
+    client.get("/recommend?mentee_id=9001", headers=KEY)
+    # Nothing changed, so no mentor profile is encoded again
+    assert service.app.config["LAST_ENCODED"] == 0
+
+    conn = service.get_connection()
+    cur = conn.cursor()
+    cur.execute("UPDATE profiles SET skills = 'Cabin safety training, first aid' WHERE user_id = 9003")
+    conn.commit()
+    cur.close()
+    conn.close()
+    client.get("/recommend?mentee_id=9001", headers=KEY)
+    # Only the edited mentor's texts that changed are encoded again
+    assert 1 <= service.app.config["LAST_ENCODED"] <= 4
+
+
+def test_search_finds_mentors_by_meaning_and_respects_the_filtered_list(client):
+    assert client.get("/search", headers=KEY).status_code == 400
+    res = client.get("/search?q=engine overhaul and airworthiness", headers=KEY)
+    assert res.status_code == 200
+    ranked = [r["mentor_id"] for r in res.get_json() if r["mentor_id"] in (9002, 9003)]
+    assert ranked[0] == 9002
+    only = client.get("/search?q=engine overhaul&ids=9003", headers=KEY).get_json()
+    assert [r["mentor_id"] for r in only] == [9003]

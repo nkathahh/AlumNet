@@ -47,6 +47,20 @@ Strathmore University.
   spot-checks and can be taken down, and an accuracy panel compares the automatic checks with
   admin decisions. Admins are reminded about posts waiting more than 48 hours; waiting never
   approves anything.
+- **Find a mentor:** a "Recommended for you" list from the matching model, then a directory of
+  every mentor with search by meaning (the BGE model compares what you type with each profile,
+  so "help moving into management" finds "led a team of 40"), filters for department,
+  experience, location, meeting mode and gender, sorting, and pages of 12. Filters are kept in
+  the address so links and the back button work. If the matching service is down, search falls
+  back to exact words and says so.
+- **Mentor capacity:** mentors choose whether they take mentees, how many at a time, how they
+  meet and when they are free. Full or paused mentors are not recommended and cannot be sent
+  requests, a mentor cannot accept past their limit, and mentors with more free places come
+  first when two matches are almost equal, so popular mentors are not flooded.
+- **Gender with consent:** gender is optional and only used in the mentor filter when the mentor
+  agrees. It is never shown on profiles.
+- **Faster matching:** mentor profile vectors are cached in the database and only re-encoded
+  when a profile changes.
 - **Admin tools:** identity verification queue, HR records import with a preview of changes,
   a user table with role, department, last activity and 2FA, suspensions with a reason, and a
   readable activity log ("Approved sign-up for Daniel Gitonga (KQ27651) as mentor")
@@ -189,15 +203,17 @@ progress, and the full development and test results will follow.
 Every push and pull request to `main` runs `.github/workflows/ci.yml`. Each job starts an
 empty MySQL 8 database, builds it from `database/migrations` and tests the real code:
 
-- **Backend API tests** (`backend/tests/api.test.js`, 51 tests): sign-up by HR email match,
+- **Backend API tests** (`backend/tests/api.test.js`, 56 tests): sign-up by HR email match,
   the alumni office review path with risk signals, impostor detection, roles from HR, HttpOnly
   session cookies, CSRF protection, log out everywhere, suspension, single-use reset links,
   two-factor with backup codes, admin 2FA requirement, HR import with retirement conversion,
   profile privacy, data export and deletion, scam checks, reports and auto-hiding, blocking,
   contact sharing after acceptance, moderation lanes and trust, request changes and resubmit,
-  learning from approvals and scam rejections, security headers and rate limiting.
+  learning from approvals and scam rejections, the mentor directory and its filters, gender
+  consent, mentor capacity, search fallback, paging, security headers and rate limiting.
 - **Recommendation service tests** (`ml-service/tests/test_app.py`): the API key check, input
-  errors and a ranking check with the real BGE model on seeded synthetic profiles.
+  errors, a ranking check with the real BGE model on seeded synthetic profiles, the embedding
+  cache and search by meaning.
 
 Results appear as a tick or cross next to each commit on GitHub, and each run keeps the
 test reports as downloadable artifacts.
