@@ -49,13 +49,7 @@ async function createRequest(req, res, next) {
             return res.status(409).json({ error: message });
         }
 
-        const [[{ pending }]] = await pool.execute(
-            "SELECT COUNT(*) AS pending FROM mentorship_requests WHERE mentee_id = :userId AND status = 'pending'",
-            { userId }
-        );
-        if (pending >= MAX_PENDING) {
-            return res.status(409).json({ error: `You have ${MAX_PENDING} requests waiting. Wait for replies or withdraw one before asking someone new.` });
-        }
+        await expireStaleRequests({ menteeId: userId });
         const [[recentDecline]] = await pool.execute(
             `SELECT 1 AS hit FROM mentorship_requests WHERE mentee_id = :userId AND mentor_id = :mentorId
              AND status = 'declined' AND COALESCE(responded_at, requested_at) > DATE_SUB(NOW(), INTERVAL 30 DAY)`,
@@ -65,10 +59,32 @@ async function createRequest(req, res, next) {
             return res.status(409).json({ error: 'This mentor declined a request from you recently. You can ask again after 30 days.' });
         }
 
-        const [result] = await pool.execute(
-            `INSERT INTO mentorship_requests (mentee_id, mentor_id, status, message, risk_flags) VALUES (:userId, :mentorId, 'pending', :message, :flags)`,
-            { userId, mentorId, message: message || null, flags: scan && scan.flags.length ? JSON.stringify(scan.flags) : null }
-        );
+        // The limit check and the insert happen together, with the mentee's row
+        // locked, so two quick clicks cannot both get past the limit
+        const conn = await pool.getConnection();
+        let result;
+        try {
+            await conn.beginTransaction();
+            await conn.execute('SELECT user_id FROM mentees WHERE user_id = :userId FOR UPDATE', { userId });
+            const [[{ pending }]] = await conn.execute(
+                "SELECT COUNT(*) AS pending FROM mentorship_requests WHERE mentee_id = :userId AND status = 'pending'",
+                { userId }
+            );
+            if (pending >= MAX_PENDING) {
+                await conn.rollback();
+                return res.status(409).json({ error: `You have ${MAX_PENDING} requests waiting. Wait for replies or withdraw one before asking someone new.` });
+            }
+            [result] = await conn.execute(
+                `INSERT INTO mentorship_requests (mentee_id, mentor_id, status, message, risk_flags) VALUES (:userId, :mentorId, 'pending', :message, :flags)`,
+                { userId, mentorId, message: message || null, flags: scan && scan.flags.length ? JSON.stringify(scan.flags) : null }
+            );
+            await conn.commit();
+        } catch (err) {
+            await conn.rollback();
+            throw err;
+        } finally {
+            conn.release();
+        }
         await fileAutomaticReport('user', userId, scan, 'a mentorship request message');
 
         // Tell the mentor they have a new request
@@ -87,9 +103,53 @@ async function createRequest(req, res, next) {
     }
 }
 
+/*
+ * A request with no reply after 14 days expires and the mentee is told.
+ * Runs when requests are listed or sent, and from the clean-up job.
+ */
+const EXPIRY_DAYS = 14;
+async function expireStaleRequests({ menteeId = null, mentorId = null } = {}) {
+    const [stale] = await pool.execute(
+        `SELECT r.request_id, r.mentee_id, u.name AS mentor_name FROM mentorship_requests r
+         JOIN users u ON u.user_id = r.mentor_id
+         WHERE r.status = 'pending' AND r.requested_at < DATE_SUB(NOW(), INTERVAL ${EXPIRY_DAYS} DAY)
+           AND (:menteeId IS NULL OR r.mentee_id = :menteeId) AND (:mentorId IS NULL OR r.mentor_id = :mentorId)`,
+        { menteeId, mentorId }
+    );
+    for (const r of stale) {
+        await pool.execute("UPDATE mentorship_requests SET status = 'expired', responded_at = NOW() WHERE request_id = :id AND status = 'pending'", { id: r.request_id });
+        await createNotification(
+            r.mentee_id, 'request_expired',
+            `Your request to ${r.mentor_name} expired after ${EXPIRY_DAYS} days without a reply. You can ask another mentor.`,
+            'recommendations.html'
+        );
+    }
+    return stale.length;
+}
+
+// When a mentor becomes full or pauses, people waiting on them are told
+async function tellWaitingMentees(mentorId, why) {
+    const [rows] = await pool.execute(
+        `SELECT r.mentee_id, u.name FROM mentorship_requests r JOIN users u ON u.user_id = r.mentor_id
+         WHERE r.mentor_id = :mentorId AND r.status = 'pending'`,
+        { mentorId }
+    );
+    for (const r of rows) {
+        const first = r.name.split(' ')[0];
+        await createNotification(
+            r.mentee_id, 'mentor_unavailable',
+            why === 'full'
+                ? `${first} now has as many mentees as they can take, so your request may not be accepted. You can withdraw it and ask another mentor.`
+                : `${first} has paused new mentorships, so your request may not be answered soon. You can withdraw it and ask another mentor.`,
+            'requests.html'
+        );
+    }
+}
+
 async function listMyRequests(req, res, next) {
     try {
         const { userId, role } = req.user;
+        await expireStaleRequests(role === 'mentor' ? { mentorId: userId } : { menteeId: userId });
         const column = role === 'mentor' ? 'mentor_id' : 'mentee_id';
         const otherColumn = role === 'mentor' ? 'mentee_id' : 'mentor_id';
 
@@ -135,24 +195,46 @@ async function respondToRequest(req, res, next) {
         if (!request) return res.status(404).json({ error: 'Request not found' });
         if (request.status !== 'pending') return res.status(400).json({ error: 'This request has already been decided' });
 
-        if (decision === 'accepted') {
-            const [[cap]] = await pool.execute(
-                `SELECT mt.max_mentees, (SELECT COUNT(*) FROM mentorship_requests r WHERE r.mentor_id = :userId AND r.status = 'accepted') AS active
-                 FROM mentors mt WHERE mt.user_id = :userId`,
+
+        // Accepting checks the limit and saves in one transaction with the mentor's
+        // row locked, so two accepts at the same moment cannot go over the limit
+        const conn = await pool.getConnection();
+        let nowFull = false;
+        try {
+            await conn.beginTransaction();
+            const [[cap]] = await conn.execute(
+                'SELECT max_mentees FROM mentors WHERE user_id = :userId FOR UPDATE',
                 { userId }
             );
-            if (cap && Number(cap.active) >= Number(cap.max_mentees)) {
-                return res.status(409).json({
-                    code: 'at_capacity',
-                    error: `You already mentor ${cap.active}, the most you chose. Raise the limit on your profile, or end a mentorship first.`
-                });
+            if (decision === 'accepted') {
+                const [[{ active }]] = await conn.execute(
+                    "SELECT COUNT(*) AS active FROM mentorship_requests WHERE mentor_id = :userId AND status = 'accepted'",
+                    { userId }
+                );
+                if (cap && Number(active) >= Number(cap.max_mentees)) {
+                    await conn.rollback();
+                    return res.status(409).json({
+                        code: 'at_capacity',
+                        error: `You already mentor ${active}, the most you chose. Raise the limit on your profile, or end a mentorship first.`
+                    });
+                }
+                nowFull = cap && Number(active) + 1 >= Number(cap.max_mentees);
             }
+            const [changed] = await conn.execute(
+                `UPDATE mentorship_requests SET status = :decision, responded_at = NOW() WHERE request_id = :id AND status = 'pending'`,
+                { decision, id }
+            );
+            if (!changed.affectedRows) {
+                await conn.rollback();
+                return res.status(400).json({ error: 'This request has already been decided' });
+            }
+            await conn.commit();
+        } catch (err) {
+            await conn.rollback();
+            throw err;
+        } finally {
+            conn.release();
         }
-
-        await pool.execute(
-            `UPDATE mentorship_requests SET status = :decision, responded_at = NOW() WHERE request_id = :id`,
-            { decision, id }
-        );
 
         // Tell the mentee the outcome
         const mentorName = await getUserName(userId);
@@ -164,6 +246,9 @@ async function respondToRequest(req, res, next) {
                 : `${mentorName} declined your mentorship request.`,
             'requests.html'
         );
+
+        // Now full: the other people waiting are told, so they can ask someone else
+        if (nowFull) await tellWaitingMentees(userId, 'full');
 
         res.json({ request_id: Number(id), status: decision });
     } catch (err) { next(err); }
@@ -229,4 +314,4 @@ async function withdrawRequest(req, res, next) {
   } catch (err) { next(err); }
 }
 
-module.exports = { createRequest, listMyRequests, respondToRequest, withdrawRequest, endMentorship };
+module.exports = { expireStaleRequests, tellWaitingMentees, createRequest, listMyRequests, respondToRequest, withdrawRequest, endMentorship };

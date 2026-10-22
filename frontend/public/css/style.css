@@ -1834,3 +1834,5 @@ textarea:focus-visible {
   .fm-search { flex-direction: column; }
   .fm-grid { grid-template-columns: 1fr; }
 }
+.fm-why { font-size: 0.82rem; color: var(--kq-green); }
+.pf-chip-hit { border-color: var(--kq-green); color: var(--kq-green); font-weight: 600; }

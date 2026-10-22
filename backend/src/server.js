@@ -103,6 +103,7 @@ async function cleanUpOldRecords() {
     await pool.query(`UPDATE signup_requests SET status = 'expired' WHERE status IN ('awaiting_email','pending_review') AND expires_at < NOW()`);
     await pool.query(`DELETE FROM signup_requests WHERE status IN ('expired','rejected','completed','approved') AND created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)`);
     await pool.query('DELETE FROM password_resets WHERE created_at < DATE_SUB(NOW(), INTERVAL 7 DAY)');
+    await require('./controllers/mentorship.controller').expireStaleRequests();
   } catch (err) {
     console.error('Clean-up skipped:', err.message);
   }

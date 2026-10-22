@@ -60,7 +60,10 @@ Strathmore University.
 - **Gender with consent:** gender is optional and only used in the mentor filter when the mentor
   agrees. It is never shown on profiles.
 - **Faster matching:** mentor profile vectors are cached in the database and only re-encoded
-  when a profile changes.
+  when a profile changes. They are deleted when an account is deleted, because they are worked
+  out from personal data.
+- **Fair waiting:** a request with no reply after 14 days expires, and mentees are told when a
+  mentor they are waiting on becomes full or pauses, so they can ask someone else.
 - **Admin tools:** identity verification queue, HR records import with a preview of changes,
   a user table with role, department, last activity and 2FA, suspensions with a reason, and a
   readable activity log ("Approved sign-up for Daniel Gitonga (KQ27651) as mentor")
@@ -203,14 +206,16 @@ progress, and the full development and test results will follow.
 Every push and pull request to `main` runs `.github/workflows/ci.yml`. Each job starts an
 empty MySQL 8 database, builds it from `database/migrations` and tests the real code:
 
-- **Backend API tests** (`backend/tests/api.test.js`, 56 tests): sign-up by HR email match,
+- **Backend API tests** (`backend/tests/api.test.js`, 62 tests): sign-up by HR email match,
   the alumni office review path with risk signals, impostor detection, roles from HR, HttpOnly
   session cookies, CSRF protection, log out everywhere, suspension, single-use reset links,
   two-factor with backup codes, admin 2FA requirement, HR import with retirement conversion,
   profile privacy, data export and deletion, scam checks, reports and auto-hiding, blocking,
   contact sharing after acceptance, moderation lanes and trust, request changes and resubmit,
   learning from approvals and scam rejections, the mentor directory and its filters, gender
-  consent, mentor capacity, search fallback, paging, security headers and rate limiting.
+  consent, mentor capacity (including two accepts at the same moment), request expiry, search
+  fallback, filter counts, paging, removal of embeddings on account deletion, security headers
+  and rate limiting.
 - **Recommendation service tests** (`ml-service/tests/test_app.py`): the API key check, input
   errors, a ranking check with the real BGE model on seeded synthetic profiles, the embedding
   cache and search by meaning.

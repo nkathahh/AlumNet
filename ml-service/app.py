@@ -187,20 +187,22 @@ def health():
     return jsonify(status="ok")
 
 
-@app.get("/search")
+@app.post("/search")
 def search():
     """
     Search mentors by meaning, not just exact words: "help moving into
     management" finds a mentor whose profile says "led a team of 40".
-    Optional ids=1,2,3 limits the search to mentors the backend has already
-    filtered (department, experience and so on).
+    The JSON body is {"q": "...", "ids": [1, 2, 3]}; ids limits the search to
+    mentors the backend has already filtered (department, experience and so
+    on). It is a POST so the list can be any length.
     """
-    q = (request.args.get('q') or '').strip()
+    body = request.get_json(silent=True) or {}
+    q = str(body.get('q') or '').strip()
     if not q:
         return jsonify(error="q is required"), 400
     if len(q) > 200:
         return jsonify(error="Keep the search under 200 characters"), 400
-    ids = [int(x) for x in (request.args.get('ids') or '').split(',') if x.strip().isdigit()]
+    ids = [int(x) for x in (body.get('ids') or []) if str(x).isdigit()][:5000]
 
     conn = get_connection()
     cur = conn.cursor(dictionary=True)

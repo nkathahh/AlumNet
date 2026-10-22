@@ -862,7 +862,8 @@ async function renderRequests() {
   }
 
   function draw() {
-    const filtered = allMyRequests.filter((r) => r.status === activeTab);
+    // Expired requests sit with declined ones: both mean "no longer waiting"
+    const filtered = allMyRequests.filter((r) => r.status === activeTab || (activeTab === 'declined' && r.status === 'expired'));
     list.innerHTML = filtered.length
       ? filtered.map(requestCardHTML).join('')
       : `<p style="color: var(--slate); padding: 20px 4px;">No ${activeTab} requests.</p>`;
@@ -941,7 +942,7 @@ function requestCardHTML(r) {
   } else if (canEnd) {
     actionHTML = `<button class="btn btn-secondary" data-action="end" data-request-id="${r.request_id}">End mentorship</button>`;
   } else {
-    actionHTML = `<span class="request-status ${r.status}">${r.status === 'accepted' ? 'active' : r.status}</span>`;
+    actionHTML = `<span class="request-status ${r.status === 'expired' ? 'ended' : r.status}">${r.status === 'accepted' ? 'active' : r.status === 'expired' ? 'expired, no reply in 14 days' : r.status}</span>`;
   }
 
   const contact = r.status === 'accepted' && r.other_email
@@ -2689,7 +2690,7 @@ async function renderMentorDashboard() {
         <div class="md-banner-icon">${mdIcon(MD_ICONS.spark)}</div>
         <div class="md-banner-body">
           <strong>Mentees can't find you yet</strong>
-          <p>Matches are based on your skills, experience and career interests. Add them so the right mentees are matched with you.</p>
+          <p>Matches and search are based on your skills, experience and career interests. Until you add them, you do not appear in mentees' recommendations or search results.</p>
         </div>
         <a href="profile.html#edit" class="btn btn-primary">Complete profile</a>
       </div>`);
@@ -4111,7 +4112,8 @@ function directoryCardHTML(m) {
           <div class="md-muted st-small">${place}</div>
         </div>
       </div>
-      ${m.skills_preview && m.skills_preview.length ? `<div class="pf-chips fm-chips">${m.skills_preview.map((x) => `<span class="pf-chip">${escapeHTML(x)}</span>`).join('')}</div>` : ''}
+      ${m.related_skills && m.related_skills.length ? `<div class="fm-why">Related to your search: ${m.related_skills.map(escapeHTML).join(', ')}</div>` : ''}
+      ${m.skills_preview && m.skills_preview.length ? `<div class="pf-chips fm-chips">${[...new Set([...(m.related_skills || []), ...m.skills_preview])].slice(0, 4).map((x) => `<span class="pf-chip ${(m.related_skills || []).includes(x) ? 'pf-chip-hit' : ''}">${escapeHTML(x)}</span>`).join('')}</div>` : ''}
       ${availabilityHTML(m)}
       <div class="fm-card-actions">
         <button type="button" class="btn btn-secondary md-btn-sm" data-dir-profile="${m.mentor_id}">View profile</button>
@@ -4139,7 +4141,7 @@ async function loadDirectory(pushHistory = true) {
   if (!data) { results.innerHTML = '<p class="md-muted">Could not load mentors. Try again in a moment.</p>'; return; }
 
   fillSelect('dir-department', data.facets.departments, 'Any department');
-  fillSelect('dir-location', data.facets.locations, 'Anywhere');
+  fillSelect('dir-location', data.facets.locations, 'Any city');
 
   const note = document.getElementById('dir-note');
   if (state.q && data.searchMode === 'keywords') {
@@ -4183,7 +4185,12 @@ async function loadDirectory(pushHistory = true) {
   pages.querySelectorAll('[data-page]').forEach((b) => {
     b.onclick = () => {
       dirPage = Number(b.dataset.page);
-      loadDirectory();
+      loadDirectory().then(() => {
+        // Move keyboard and screen-reader focus to the top of the new page
+        const heading = document.querySelector('#mentor-directory h2');
+        heading.setAttribute('tabindex', '-1');
+        heading.focus({ preventScroll: true });
+      });
       document.getElementById('mentor-directory').scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
   });

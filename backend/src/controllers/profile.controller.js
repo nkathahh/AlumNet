@@ -103,6 +103,13 @@ async function updateMyProfile(req, res, next) {
       }
     }
 
+    // Only a change from "taking mentees" to "paused" tells the people waiting
+    let wasAccepting = false;
+    if (mentorSets.accepting_mentees === 0) {
+      const [[m]] = await pool.execute('SELECT accepting_mentees FROM mentors WHERE user_id = :userId', { userId });
+      wasAccepting = Boolean(m && m.accepting_mentees);
+    }
+
     let years;
     if (body.yearsOfExperience !== undefined && role === 'mentor') {
       years = body.yearsOfExperience === '' || body.yearsOfExperience === null ? null : Number(body.yearsOfExperience);
@@ -162,8 +169,11 @@ async function updateMyProfile(req, res, next) {
       connection.release();
     }
     // Profiles are public to members, so check what was written in them
-    const written = [values.headline, values.bio, values.experience].filter(Boolean).join('\n');
+    const written = [values.headline, values.bio, values.experience, mentorSets.availability_note].filter(Boolean).join('\n');
     if (written) await fileAutomaticReport('user', userId, scanText(written), 'their profile');
+    if (mentorSets.accepting_mentees === 0 && wasAccepting) {
+      await require('./mentorship.controller').tellWaitingMentees(userId, 'paused');
+    }
     res.json({ success: true });
   } catch (err) {
     next(err);

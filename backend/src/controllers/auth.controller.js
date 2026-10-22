@@ -782,7 +782,13 @@ async function deleteMyAccount(req, res, next) {
       await conn.execute('DELETE FROM password_resets WHERE user_id = :userId', { userId });
       await conn.execute(
         `UPDATE profiles SET skills = NULL, experience = NULL, career_interests = NULL, industry = NULL,
-                headline = NULL, bio = NULL, linkedin_url = NULL WHERE user_id = :userId`,
+                headline = NULL, bio = NULL, linkedin_url = NULL, gender = NULL, gender_in_search = 0 WHERE user_id = :userId`,
+        { userId }
+      );
+      // Embeddings are worked out from the profile, so they are personal data too
+      await conn.execute('DELETE FROM profile_embeddings WHERE user_id = :userId', { userId });
+      await conn.execute(
+        'UPDATE mentors SET availability_note = NULL, accepting_mentees = 0 WHERE user_id = :userId',
         { userId }
       );
       // The row stays so other people's history still makes sense, but holds nothing personal

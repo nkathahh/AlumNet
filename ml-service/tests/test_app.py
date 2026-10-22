@@ -129,10 +129,10 @@ def test_mentor_vectors_are_cached_and_refreshed_when_a_profile_changes(client):
 
 
 def test_search_finds_mentors_by_meaning_and_respects_the_filtered_list(client):
-    assert client.get("/search", headers=KEY).status_code == 400
-    res = client.get("/search?q=engine overhaul and airworthiness", headers=KEY)
+    assert client.post("/search", json={}, headers=KEY).status_code == 400
+    res = client.post("/search", json={"q": "engine overhaul and airworthiness"}, headers=KEY)
     assert res.status_code == 200
     ranked = [r["mentor_id"] for r in res.get_json() if r["mentor_id"] in (9002, 9003)]
     assert ranked[0] == 9002
-    only = client.get("/search?q=engine overhaul&ids=9003", headers=KEY).get_json()
+    only = client.post("/search", json={"q": "engine overhaul", "ids": [9003]}, headers=KEY).get_json()
     assert [r["mentor_id"] for r in only] == [9003]

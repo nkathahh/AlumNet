@@ -835,6 +835,75 @@ test('the directory pages through results 12 at a time', async () => {
   assert.equal((await state.peter.me.call('GET', '/mentors')).status, 403);
 });
 
+test('two accepts at the same moment cannot take a mentor past their limit', async () => {
+  const mentor = await makeMember('Limit Mentor', 'limit.mentor@example.org', 'mentor');
+  await mentor.me.call('PUT', '/profile/me', { maxMentees: 1 });
+  const x = await makeMember('Race Mentee X', 'race.x@example.org', 'mentee');
+  const y = await makeMember('Race Mentee Y', 'race.y@example.org', 'mentee');
+  const rx = await x.me.call('POST', '/mentorship-requests', { mentorId: mentor.id });
+  const ry = await y.me.call('POST', '/mentorship-requests', { mentorId: mentor.id });
+  const [a, b] = await Promise.all([
+    mentor.me.call('PATCH', `/mentorship-requests/${rx.body.request_id}`, { decision: 'accepted' }),
+    mentor.me.call('PATCH', `/mentorship-requests/${ry.body.request_id}`, { decision: 'accepted' })
+  ]);
+  assert.deepEqual([a.status, b.status].sort(), [200, 409]);
+  const [[{ n }]] = await db.execute("SELECT COUNT(*) AS n FROM mentorship_requests WHERE mentor_id = :id AND status = 'accepted'", { id: mentor.id });
+  assert.equal(n, 1);
+  // The mentee still waiting is told the mentor is now full
+  const waiting = a.status === 409 ? x : y;
+  const notes = await waiting.me.call('GET', '/notifications');
+  assert.ok(notes.body.some((m) => /as many mentees as they can take/.test(m.message)));
+});
+
+test('two requests at the same moment cannot take a mentee past 5 waiting', async () => {
+  const m = await makeMember('Busy Mentee', 'busy.mentee@example.org', 'mentee');
+  const [mentors] = await db.execute("SELECT u.user_id FROM users u JOIN mentors mt ON mt.user_id = u.user_id WHERE u.name LIKE 'Paging Mentor%' ORDER BY u.user_id LIMIT 6");
+  for (const row of mentors.slice(0, 4)) await m.me.call('POST', '/mentorship-requests', { mentorId: row.user_id });
+  const results = await Promise.all(mentors.slice(4, 6).map((row) => m.me.call('POST', '/mentorship-requests', { mentorId: row.user_id })));
+  assert.deepEqual(results.map((r) => r.status).sort(), [201, 409]);
+  state.busy = m;
+  state.busyFirstMentor = mentors[0].user_id;
+});
+
+test('a request with no reply for 14 days expires and the mentee is told', async () => {
+  await db.execute(
+    "UPDATE mentorship_requests SET requested_at = DATE_SUB(NOW(), INTERVAL 15 DAY) WHERE mentee_id = :m AND mentor_id = :t",
+    { m: state.busy.id, t: state.busyFirstMentor }
+  );
+  const list = await state.busy.me.call('GET', '/mentorship-requests');
+  assert.equal(list.body.find((r) => r.other_user_id === state.busyFirstMentor).status, 'expired');
+  const notes = await state.busy.me.call('GET', '/notifications');
+  assert.ok(notes.body.some((n) => /expired after 14 days/.test(n.message)));
+});
+
+test('pausing tells mentees who are waiting, and the availability note is scam-checked', async () => {
+  const waiter = await makeMember('Waiting Mentee', 'waiting.mentee@example.org', 'mentee');
+  await waiter.me.call('POST', '/mentorship-requests', { mentorId: state.wanjiku.id });
+  await state.wanjiku.me.call('PUT', '/profile/me', { acceptingMentees: false, availabilityNote: 'WhatsApp me first, sessions cost KSh 500 via M-Pesa' });
+  const notes = await waiter.me.call('GET', '/notifications');
+  assert.ok(notes.body.some((n) => /paused new mentorships/.test(n.message)));
+  const queue = await state.admin.call('GET', '/admin/reports');
+  assert.ok(queue.body.some((g) => g.target_type === 'user' && g.target_id === state.wanjiku.id && g.automatic));
+  await state.admin.call('POST', '/admin/reports/resolve', { targetType: 'user', targetId: state.wanjiku.id, action: 'dismiss' });
+  await state.wanjiku.me.call('PUT', '/profile/me', { acceptingMentees: true, availabilityNote: 'Weekday evenings' });
+});
+
+test('filter counts respect the other filters, and keyword results say which skills matched', async () => {
+  const women = await state.carol.me.call('GET', '/mentors?gender=female&available=0');
+  // Only departments that have a consenting woman mentor appear
+  assert.deepEqual(women.body.facets.departments.map((d) => d.value), ['Cargo & Logistics']);
+  assert.ok(women.body.facets.locations.every((l) => l.value !== 'Kenya'));
+  const hit = await state.carol.me.call('GET', '/mentors?q=ramp%20safety');
+  assert.ok(hit.body.items[0].related_skills.includes('ramp safety'));
+});
+
+test('the directory is rate limited per account', async () => {
+  const scraper = await makeMember('Fast Clicker', 'fast.clicker@example.org', 'mentee');
+  let last;
+  for (let i = 0; i < 31; i++) last = await scraper.me.call('GET', '/mentors');
+  assert.equal(last.status, 429);
+});
+
 /* ---------------- HR import and retirement ---------------- */
 
 test('an HR import previews changes, then a retired mentee becomes a mentor', async () => {
@@ -880,6 +949,8 @@ test('a member can download their data', async () => {
 });
 
 test('deleting an account removes personal data and ends the session', async () => {
+  const [[j]] = await db.execute('SELECT user_id FROM users WHERE email = :e', { e: JOYCE.email });
+  await db.execute("INSERT INTO profile_embeddings (user_id, kind, text_hash, vector) VALUES (:id, 'whole', REPEAT('a', 64), '[0.1]')", { id: j.user_id });
   const wrong = await state.joyce.call('POST', '/auth/account/delete', { password: 'nope', code: authenticator.generate(state.joyceSecret) });
   assert.equal(wrong.status, 400);
   const r = await state.joyce.call('POST', '/auth/account/delete', { password: 'Reset2Passw0rd', code: authenticator.generate(state.joyceSecret) });
@@ -888,6 +959,8 @@ test('deleting an account removes personal data and ends the session', async () 
   assert.equal(u.name, 'Deleted member');
   assert.equal(u.staff_number, null);
   assert.equal(u.status, 'deleted');
+  const [[{ vectors }]] = await db.execute('SELECT COUNT(*) AS vectors FROM profile_embeddings WHERE user_id = :id', { id: j.user_id });
+  assert.equal(vectors, 0);
   assert.equal((await state.joyce.call('GET', '/auth/account')).status, 401);
   const login = await client().call('POST', '/auth/login', { email: JOYCE.email, password: 'Reset2Passw0rd' });
   assert.equal(login.status, 401);

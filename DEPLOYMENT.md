@@ -131,3 +131,21 @@ If email is not set up, reset links appear in Render's **Logs** tab instead.
 
 Free services sleep when idle: Render after 15 minutes, Hugging Face after 48 hours. Open
 the site and load **Find a mentor** once, a few minutes before you present.
+
+## Least privilege for the matching service
+
+The matching service only needs to read profiles and write its own cache of
+profile vectors. On a hosted database, give it its own user with just that:
+
+```sql
+CREATE USER 'alumnet_ml'@'%' IDENTIFIED BY 'a-long-random-password';
+GRANT SELECT ON alumnet.users TO 'alumnet_ml'@'%';
+GRANT SELECT ON alumnet.mentors TO 'alumnet_ml'@'%';
+GRANT SELECT ON alumnet.profiles TO 'alumnet_ml'@'%';
+GRANT SELECT ON alumnet.staff_directory TO 'alumnet_ml'@'%';
+GRANT SELECT, INSERT, UPDATE ON alumnet.profile_embeddings TO 'alumnet_ml'@'%';
+```
+
+Use this user's details for `DB_USER` and `DB_PASSWORD` in the Hugging Face
+Space. If the service is ever compromised, it cannot change accounts, posts
+or reports.

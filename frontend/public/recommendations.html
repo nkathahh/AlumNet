@@ -63,7 +63,7 @@
             <option value="10">10+ years</option>
             <option value="20">20+ years</option>
           </select>
-          <select id="dir-location" class="select-pill" aria-label="Location"><option value="">Anywhere</option></select>
+          <select id="dir-location" class="select-pill" aria-label="City"><option value="">Any city</option></select>
           <select id="dir-mode" class="select-pill" aria-label="How they meet">
             <option value="">In person or online</option>
             <option value="in_person">In person</option>
@@ -84,9 +84,9 @@
         </div>
         <div class="fm-bar">
           <label class="check-row fm-available"><input type="checkbox" id="dir-available" checked><span>Only mentors with a free place</span></label>
-          <span class="md-muted st-small" id="dir-summary"></span>
+          <span class="md-muted st-small" id="dir-summary" role="status" aria-live="polite"></span>
         </div>
-        <p class="fm-note" id="dir-note" style="display:none;"></p>
+        <p class="fm-note" id="dir-note" style="display:none;" aria-live="polite"></p>
         <div class="fm-grid" id="dir-results"></div>
         <nav class="fm-pages" id="dir-pages" aria-label="Pages"></nav>
       </section>

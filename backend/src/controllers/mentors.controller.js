@@ -1,5 +1,5 @@
 const pool = require('../config/db');
-const { mlGet } = require('../utils/ml');
+const { mlPost } = require('../utils/ml');
 
 const PAGE_SIZE = 12;
 // Search keeps results that are clearly related to the query: at least this
@@ -54,8 +54,18 @@ function shapeCard(r) {
     meeting_mode: r.meeting_mode,
     meeting_label: MODES[r.meeting_mode] || null,
     availability_note: r.availability_note,
+    skills: String(r.skills || '').split(',').map((x) => x.trim()).filter(Boolean),
     skills_preview: String(r.skills || '').split(',').map((x) => x.trim()).filter(Boolean).slice(0, 4)
   };
+}
+
+// Which of a mentor's skills share a word with the search, so each result can
+// say why it came up ("Related to your search: cargo handling")
+const STOP = new Set(['with', 'from', 'into', 'help', 'want', 'need', 'about', 'like', 'that', 'this', 'mentor', 'mentors', 'someone', 'would', 'have', 'and', 'the', 'for']);
+function relatedSkills(q, skills) {
+  const stems = String(q).toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 3 && !STOP.has(w)).map((w) => w.slice(0, 5));
+  if (!stems.length) return [];
+  return skills.filter((sk) => sk.toLowerCase().split(/[^a-z0-9]+/).some((w) => stems.some((st) => w.startsWith(st)))).slice(0, 3);
 }
 
 // Words people type that mean the same filter, so "women mentors" works
@@ -89,25 +99,31 @@ async function listMentors(req, res, next) {
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     let sort = String(req.query.sort || (q ? 'match' : 'experience'));
 
-    const where = [];
+    // Each filter is kept separately, so each menu's counts can apply every
+    // filter except its own (choosing "Finance (4)" then shows 4 mentors)
+    const clauses = {};
     const params = { viewerId };
-    if (department) { where.push('u.department = :department'); params.department = department; }
-    if (location) { where.push('(u.city = :location OR u.country = :location)'); params.location = location; }
+    if (department) { clauses.department = 'u.department = :department'; params.department = department; }
+    if (location) { clauses.location = 'u.city = :location'; params.location = location; }
     // Only mentors who agreed to use their gender in search can match this filter
     if (gender) {
       if (!['female', 'male'].includes(gender)) return res.status(400).json({ error: 'Choose women or men mentors' });
-      where.push('p.gender_in_search = 1 AND p.gender = :gender'); params.gender = gender;
+      clauses.gender = 'p.gender_in_search = 1 AND p.gender = :gender'; params.gender = gender;
     }
     if (mode) {
       if (!['in_person', 'virtual'].includes(mode)) return res.status(400).json({ error: 'Choose in person or online' });
-      where.push("mt.meeting_mode IN (:mode, 'either')"); params.mode = mode;
+      clauses.mode = "mt.meeting_mode IN (:mode, 'either')"; params.mode = mode;
     }
-    if (minYears > 0) { where.push('COALESCE(mt.years_of_experience, 0) >= :minYears'); params.minYears = minYears; }
+    if (minYears > 0) { clauses.minYears = 'COALESCE(mt.years_of_experience, 0) >= :minYears'; params.minYears = minYears; }
     if (availableOnly) {
-      where.push(`mt.accepting_mentees = 1 AND mt.max_mentees >
-        (SELECT COUNT(*) FROM mentorship_requests r2 WHERE r2.mentor_id = u.user_id AND r2.status = 'accepted')`);
+      clauses.available = `mt.accepting_mentees = 1 AND mt.max_mentees >
+        (SELECT COUNT(*) FROM mentorship_requests r2 WHERE r2.mentor_id = u.user_id AND r2.status = 'accepted')`;
     }
-    const filterSql = where.length ? ` AND ${where.join(' AND ')}` : '';
+    const sqlFor = (except) => {
+      const parts = Object.entries(clauses).filter(([k]) => k !== except).map(([, v]) => v);
+      return parts.length ? ` AND ${parts.join(' AND ')}` : '';
+    };
+    const filterSql = sqlFor(null);
 
     const [rows] = await pool.execute(`SELECT ${CARD_COLUMNS} ${BASE_FROM} ${filterSql}`, params);
     let cards = rows.map(shapeCard);
@@ -117,7 +133,8 @@ async function listMentors(req, res, next) {
     if (q) {
       const scores = new Map();
       try {
-        const { data } = await mlGet('/search', { q, ids: cards.map((c) => c.mentor_id).join(',') }, 15000);
+        // The candidate list goes in the request body, so it works for any number of mentors
+        const { data } = await mlPost('/search', { q, ids: cards.map((c) => c.mentor_id) }, 15000);
         data.forEach((r) => scores.set(r.mentor_id, r.score));
         searchMode = 'meaning';
         const best = Math.max(0, ...data.map((r) => r.score));
@@ -151,19 +168,21 @@ async function listMentors(req, res, next) {
       name: (a, b) => a.name.localeCompare(b.name)
     };
     cards.sort(sorters[sort] || sorters.experience);
+    if (q) cards = cards.map((c) => ({ ...c, related_skills: relatedSkills(q, c.skills) }));
 
-    // Counts for the filter menus, from all visible mentors (ignoring the other filters)
-    const [facetRows] = await pool.execute(
-      `SELECT u.department, u.city, u.country, IF(p.gender_in_search = 1, p.gender, NULL) AS gender ${BASE_FROM}`,
-      { viewerId }
-    );
-    const count = (key) => {
-      const m = new Map();
-      facetRows.forEach((r) => { if (r[key]) m.set(r[key], (m.get(r[key]) || 0) + 1); });
-      return [...m.entries()].map(([value, n]) => ({ value, count: n })).sort((a, b) => a.value.localeCompare(b.value));
+    // Counts for the filter menus, each using every other active filter
+    const facet = async (column, key) => {
+      const [rowsF] = await pool.execute(
+        `SELECT ${column} AS value, COUNT(*) AS n ${BASE_FROM} ${sqlFor(key)} AND ${column} IS NOT NULL AND ${column} != ''
+         GROUP BY ${column} ORDER BY ${column}`,
+        params
+      );
+      return rowsF.map((r) => ({ value: r.value, count: Number(r.n) }));
     };
-    const locations = new Map();
-    facetRows.forEach((r) => [r.city, r.country].filter(Boolean).forEach((v) => locations.set(v, (locations.get(v) || 0) + 1)));
+    const departments = await facet('u.department', 'department');
+    // Cities only: mixing "Kenya" and "Nairobi" in one menu was confusing
+    const locations = await facet('u.city', 'location');
+    const genders = (await facet("IF(p.gender_in_search = 1, p.gender, NULL)", 'gender')).filter((g) => ['female', 'male'].includes(g.value));
 
     const total = cards.length;
     const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -175,11 +194,7 @@ async function listMentors(req, res, next) {
       pages,
       pageSize: PAGE_SIZE,
       searchMode,
-      facets: {
-        departments: count('department'),
-        locations: [...locations.entries()].map(([value, n]) => ({ value, count: n })).sort((a, b) => b.count - a.count || a.value.localeCompare(b.value)),
-        genders: count('gender').filter((g) => ['female', 'male'].includes(g.value))
-      }
+      facets: { departments, locations, genders }
     });
   } catch (err) { next(err); }
 }
