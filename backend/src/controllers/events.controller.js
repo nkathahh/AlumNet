@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const { scanPost } = require('../utils/scam');
+const { chooseLane, finishSubmission } = require('../utils/moderation');
 
 // Shared by mentor proposals and admin-created events
 function validateEventInput({ title, eventDate, mode, location, capacity }) {
@@ -120,9 +121,10 @@ async function proposeEvent(req, res, next) {
 
     const { title, eventDate, description, mode, location, capacity } = req.body;
     const scan = scanPost({ title, description, location: mode === 'virtual' ? null : location, link: mode === 'virtual' ? location : null });
+    const routed = await chooseLane('event', { userId, title, link: mode === 'virtual' ? location : null }, scan);
     const [result] = await pool.execute(
-      `INSERT INTO events (title, event_date, description, mode, location, capacity, created_by, status, risk_level, risk_flags)
-       VALUES (:title, :eventDate, :description, :mode, :location, :capacity, :userId, 'pending', :riskLevel, :riskFlags)`,
+      `INSERT INTO events (title, event_date, description, mode, location, capacity, created_by, status, risk_level, risk_flags, submitted_at)
+       VALUES (:title, :eventDate, :description, :mode, :location, :capacity, :userId, 'pending', :riskLevel, :riskFlags, NOW())`,
       {
         title: title.trim(),
         eventDate,
@@ -135,10 +137,36 @@ async function proposeEvent(req, res, next) {
         riskFlags: JSON.stringify(scan.flags)
       }
     );
-    res.status(201).json({ eventId: result.insertId, message: 'Submitted for review',
-      // A high-risk post gets a general notice only, so scammers cannot learn which words to change
-      needsCloserReview: scan.level === 'high',
-      warnings: scan.level === 'high' ? [] : scan.flags.map((f) => f.label) });
+    const reply = await finishSubmission('event', result.insertId, routed, scan);
+    res.status(201).json({ eventId: result.insertId, ...reply });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function resubmitEvent(req, res, next) {
+  try {
+    const { userId } = req.user;
+    const id = Number(req.params.id);
+    const [[event]] = await pool.execute('SELECT status FROM events WHERE event_id = :id AND created_by = :userId', { id, userId });
+    if (!event) return res.status(404).json({ error: 'Event not found' });
+    if (event.status !== 'changes_requested') return res.status(409).json({ error: 'Only an event with changes requested can be edited' });
+    const error = validateEventInput(req.body);
+    if (error) return res.status(400).json({ error });
+
+    const { title, eventDate, description, mode, location, capacity } = req.body;
+    const scan = scanPost({ title, description, location: mode === 'virtual' ? null : location, link: mode === 'virtual' ? location : null });
+    const routed = await chooseLane('event', { userId, title, link: mode === 'virtual' ? location : null, isResubmission: true, excludeId: id }, scan);
+    await pool.execute(
+      `UPDATE events SET title = :title, event_date = :eventDate, description = :description, mode = :mode, location = :location,
+         capacity = :capacity, status = 'pending', risk_level = :riskLevel, risk_flags = :riskFlags, submitted_at = NOW(), reviewed_at = NULL
+       WHERE event_id = :id`,
+      {
+        id, title: title.trim(), eventDate, description: description || null, mode, location: location.trim(),
+        capacity: capacity ? Number(capacity) : null, riskLevel: scan.level, riskFlags: JSON.stringify(scan.flags)
+      }
+    );
+    res.json({ eventId: id, ...(await finishSubmission('event', id, routed, scan)) });
   } catch (err) {
     next(err);
   }
@@ -149,7 +177,8 @@ async function listMyProposals(req, res, next) {
   try {
     const { userId } = req.user;
     const [rows] = await pool.execute(
-      `SELECT event_id, title, event_date, status
+      `SELECT event_id, title, event_date, status, auto_approved, rejection_reason, review_note,
+              description, mode, location, capacity
        FROM events WHERE created_by = :userId
        ORDER BY event_date DESC`,
       { userId }
@@ -166,5 +195,6 @@ module.exports = {
   registerForEvent,
   cancelRegistration,
   proposeEvent,
+  resubmitEvent,
   listMyProposals
 };

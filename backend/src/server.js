@@ -108,6 +108,8 @@ async function cleanUpOldRecords() {
 }
 cleanUpOldRecords();
 setInterval(cleanUpOldRecords, 12 * 60 * 60 * 1000).unref();
+// Remind admins about posts waiting more than 48 hours (never auto-approves)
+setInterval(() => require('./controllers/moderation.controller').remindStale(), 12 * 60 * 60 * 1000).unref();
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log(`AlumNet running at http://localhost:${PORT}`));

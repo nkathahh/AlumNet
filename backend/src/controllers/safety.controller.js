@@ -74,12 +74,14 @@ async function createReport(req, res, next) {
       if (reporters >= AUTO_HIDE_AFTER) {
         if (targetType === 'opportunity') {
           await pool.execute(
-            "UPDATE career_opportunities SET approval_status = 'pending' WHERE opportunity_id = :targetId AND approval_status = 'approved'",
+            `UPDATE career_opportunities SET approval_status = 'pending', moderation_lane = 'hold',
+               lane_reasons = '["Hidden after reports from 3 members"]' WHERE opportunity_id = :targetId AND approval_status = 'approved'`,
             { targetId }
           );
         } else {
           await pool.execute(
-            "UPDATE events SET status = 'pending' WHERE event_id = :targetId AND status = 'approved' AND created_by IS NOT NULL",
+            `UPDATE events SET status = 'pending', moderation_lane = 'hold',
+               lane_reasons = '["Hidden after reports from 3 members"]' WHERE event_id = :targetId AND status = 'approved' AND created_by IS NOT NULL`,
             { targetId }
           );
         }

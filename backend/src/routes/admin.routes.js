@@ -3,6 +3,7 @@ const router = express.Router();
 const { requireAuth, requireRole, requireAdminTwoFactor } = require('../middleware/auth.middleware');
 const admin = require('../controllers/admin.controller');
 const safety = require('../controllers/safety.controller');
+const moderation = require('../controllers/moderation.controller');
 
 // Every admin tool needs an admin session with two-factor turned on
 router.use(requireAuth, requireRole('admin'), requireAdminTwoFactor);
@@ -25,6 +26,15 @@ router.delete('/events/:id', admin.deleteEvent);
 
 router.get('/opportunities/pending', admin.listPendingOpportunities);
 router.patch('/opportunities/:id/review', admin.reviewOpportunity);
+
+router.get('/moderation', moderation.getQueue);
+router.get('/moderation/insights', moderation.insights);
+router.get('/moderation/learned', moderation.listLearned);
+router.post('/moderation/approve-clean', moderation.approveClean);
+router.put('/moderation/settings', moderation.setAutoApprove);
+router.delete('/moderation/blocked/:id', moderation.unblockIndicator);
+router.delete('/moderation/known/:domain', moderation.forgetKnownSite);
+router.post('/moderation/:kind/:id/decision', moderation.decide);
 
 router.get('/reports', safety.listReports);
 router.post('/reports/resolve', safety.resolveReports);

@@ -244,26 +244,48 @@
             <div id="admin-tab-opportunities" class="md" style="display:none;">
                 <header class="md-top">
                     <h1 class="md-greeting">Content moderation</h1>
-                    <p class="md-sub">Approve or reject what mentors submit before it goes live. Automatic checks put the riskiest posts first.</p>
+                    <p class="md-sub">Opportunities and event proposals from mentors. Automatic checks sort each one into a lane; you decide everything that is not clearly safe.</p>
                 </header>
-                <div class="mod-filter">
-                    <label for="mod-risk-filter">Show</label>
-                    <select id="mod-risk-filter">
-                        <option value="all">Everything waiting</option>
-                        <option value="high">High risk</option>
-                        <option value="medium">Check first</option>
-                        <option value="low">No warning signs</option>
-                        <option value="reported">Reported by members</option>
-                    </select>
+
+                <section class="md-panel mod-controls">
+                    <div class="mod-lane-key">
+                        <div><span class="md-pill risk-high">Hold</span> Never published automatically. Look first.</div>
+                        <div><span class="md-pill neutral">Queue</span> Needs your decision.</div>
+                        <div><span class="md-pill approved">Fast lane</span> Trusted poster, known website, no warnings: published straight away.</div>
+                    </div>
+                    <label class="mod-switch">
+                        <input type="checkbox" id="fast-lane-toggle">
+                        <span><strong>Fast lane</strong><br><span class="md-muted st-small" id="fast-lane-text">Off: every post waits for an admin.</span></span>
+                    </label>
+                </section>
+
+                <section class="mod-insights" id="mod-insights"></section>
+
+                <div class="mod-toolbar">
+                    <div class="mod-filter">
+                        <label for="mod-risk-filter">Show</label>
+                        <select id="mod-risk-filter">
+                            <option value="all">Everything waiting</option>
+                            <option value="hold">Held</option>
+                            <option value="high">High risk</option>
+                            <option value="medium">Check first</option>
+                            <option value="low">No warning signs</option>
+                            <option value="reported">Reported by members</option>
+                            <option value="stale">Waiting over 48 hours</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary md-btn-sm" id="approve-clean-btn" style="display:none;"></button>
                 </div>
-                <div class="section-heading">
-                    <h2>Opportunity posts</h2>
-                </div>
-                <div id="admin-opportunities-list"></div>
-                <div class="section-heading" style="margin-top:32px;">
-                    <h2>Event proposals</h2>
-                </div>
-                <div id="admin-pending-events"></div>
+                <div id="mod-queue"></div>
+
+                <div class="section-heading" style="margin-top:32px;"><h2>Published automatically (last 30 days)</h2></div>
+                <p class="md-muted st-small" style="margin:-6px 0 12px;">Spot-check these. Taking one down also removes the poster's trusted status.</p>
+                <div id="mod-auto"></div>
+
+                <details class="st-disclosure mod-learned">
+                    <summary>What AlumNet has learned from your decisions</summary>
+                    <div id="mod-learned"></div>
+                </details>
             </div>
 
             <!-- ================= Activity log ================= -->

@@ -35,6 +35,18 @@ Strathmore University.
   high-risk result warns the mentor and files a report from "Automatic check". High-risk posters
   are told only that their post needs a closer review, so scammers cannot learn the rules. Mentees can have at most
   five requests waiting and cannot re-ask a mentor who declined within 30 days.
+- **Smart moderation:** each post is sorted into a lane. *Hold* (high risk, a blocked website,
+  email or link, a burst of posts or one link shared by several accounts) is never published
+  automatically. *Queue* needs an admin. *Fast lane* publishes straight away, but only when the
+  alumni office switches it on and the poster is trusted (verified former staff, account 30+
+  days old, 2 admin-approved posts, nothing rejected as a scam, no upheld reports, two-factor on)
+  and the link is a known employer website with no warnings. Admins approve, request changes
+  (the poster edits and resubmits) or reject with a reason the poster sees. Approvals teach the
+  system known employer websites; scam rejections block the website, email or exact link for
+  every account. Clean posts can be approved in one click, automatic approvals are listed for
+  spot-checks and can be taken down, and an accuracy panel compares the automatic checks with
+  admin decisions. Admins are reminded about posts waiting more than 48 hours; waiting never
+  approves anything.
 - **Admin tools:** identity verification queue, HR records import with a preview of changes,
   a user table with role, department, last activity and 2FA, suspensions with a reason, and a
   readable activity log ("Approved sign-up for Daniel Gitonga (KQ27651) as mentor")
@@ -177,12 +189,13 @@ progress, and the full development and test results will follow.
 Every push and pull request to `main` runs `.github/workflows/ci.yml`. Each job starts an
 empty MySQL 8 database, builds it from `database/migrations` and tests the real code:
 
-- **Backend API tests** (`backend/tests/api.test.js`, 41 tests): sign-up by HR email match,
+- **Backend API tests** (`backend/tests/api.test.js`, 51 tests): sign-up by HR email match,
   the alumni office review path with risk signals, impostor detection, roles from HR, HttpOnly
   session cookies, CSRF protection, log out everywhere, suspension, single-use reset links,
   two-factor with backup codes, admin 2FA requirement, HR import with retirement conversion,
   profile privacy, data export and deletion, scam checks, reports and auto-hiding, blocking,
-  contact sharing after acceptance, security headers and rate limiting.
+  contact sharing after acceptance, moderation lanes and trust, request changes and resubmit,
+  learning from approvals and scam rejections, security headers and rate limiting.
 - **Recommendation service tests** (`ml-service/tests/test_app.py`): the API key check, input
   errors and a ranking check with the real BGE model on seeded synthetic profiles.
 

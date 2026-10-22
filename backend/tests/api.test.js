@@ -568,6 +568,163 @@ test('profile text is checked too, without piling up duplicate reports', async (
   assert.equal(stats.body.openReports, 0);
 });
 
+/* ---------------- Smart moderation ---------------- */
+
+const clean = (title, link = 'https://www.jambojet.com/careers') => ({
+  title, company: 'Jambojet', opportunityType: 'full_time', location: 'Nairobi',
+  description: 'Support the safety management system and analyse incident reports. Apply on the careers page.',
+  applyLink: link, closingDate: nextMonth()
+});
+const findItem = (queue, id) => queue.body.items.find((i) => i.kind === 'opportunity' && i.id === id);
+
+test('a new poster always goes to the queue, and the admin sees why', async () => {
+  const r = await state.peter.me.call('POST', '/opportunities', clean('Safety Officer'));
+  assert.equal(r.status, 201);
+  assert.equal(r.body.published, false);
+  const queue = await state.admin.call('GET', '/admin/moderation');
+  const item = findItem(queue, r.body.opportunityId);
+  assert.equal(item.moderation_lane, 'queue');
+  assert.ok(item.lane_reasons.some((x) => /not yet trusted/.test(x)));
+  assert.equal(item.poster_trust.trusted, false);
+  state.peterPost = r.body.opportunityId;
+});
+
+test('the admin can ask for changes; the poster edits and it goes back through the checks', async () => {
+  const noNote = await state.admin.call('POST', `/admin/moderation/opportunity/${state.peterPost}/decision`, { decision: 'changes_requested' });
+  assert.equal(noNote.status, 400);
+  const asked = await state.admin.call('POST', `/admin/moderation/opportunity/${state.peterPost}/decision`, { decision: 'changes_requested', note: 'Add the salary range and location' });
+  assert.equal(asked.body.state, 'changes_requested');
+  const mine = await state.peter.me.call('GET', '/opportunities/mine');
+  assert.equal(mine.body.find((p) => p.opportunity_id === state.peterPost).review_note, 'Add the salary range and location');
+  const resent = await state.peter.me.call('PUT', `/opportunities/${state.peterPost}`, { ...clean('Safety Officer'), location: 'Nairobi, Embakasi' });
+  assert.equal(resent.status, 200);
+  const queue = await state.admin.call('GET', '/admin/moderation');
+  assert.ok(findItem(queue, state.peterPost).lane_reasons.some((x) => /Resubmitted/.test(x)));
+  const twice = await state.peter.me.call('PUT', `/opportunities/${state.peterPost}`, clean('Safety Officer'));
+  assert.equal(twice.status, 409);
+});
+
+test('a rejection needs a reason, and the poster is told it', async () => {
+  const r = await state.peter.me.call('POST', '/opportunities', clean('Duplicate Analyst'));
+  const none = await state.admin.call('POST', `/admin/moderation/opportunity/${r.body.opportunityId}/decision`, { decision: 'rejected' });
+  assert.equal(none.status, 400);
+  const ok = await state.admin.call('POST', `/admin/moderation/opportunity/${r.body.opportunityId}/decision`, { decision: 'rejected', reason: 'duplicate' });
+  assert.equal(ok.status, 200);
+  const notes = await state.peter.me.call('GET', '/notifications');
+  assert.ok(notes.body.some((n) => /Already posted/.test(n.message)));
+});
+
+test('a trusted poster on a known site is published straight away, but only when the fast lane is on', async () => {
+  const tess = await makeMember('Tess Trusted', 'tess.trusted@example.org', 'mentor');
+  const [[staff]] = await db.execute(
+    `SELECT staff_number FROM staff_directory WHERE employment_status = 'former' AND alumni_eligible = 1
+     AND staff_number NOT IN (SELECT staff_number FROM users WHERE staff_number IS NOT NULL) LIMIT 1`
+  );
+  await db.execute('UPDATE users SET staff_number = :s, created_at = DATE_SUB(NOW(), INTERVAL 40 DAY), totp_enabled = 1 WHERE user_id = :id', { s: staff.staff_number, id: tess.id });
+  for (const t of ['Earlier post one', 'Earlier post two']) {
+    await db.execute(
+      `INSERT INTO career_opportunities (posted_by, title, description, company, opportunity_type, apply_link, closing_date, approval_status, created_at)
+       VALUES (:id, :t, 'Earlier post', 'Jambojet', 'full_time', 'https://www.jambojet.com/careers', DATE_ADD(CURDATE(), INTERVAL 20 DAY), 'approved', DATE_SUB(NOW(), INTERVAL 10 DAY))`,
+      { id: tess.id, t }
+    );
+  }
+  state.tess = tess;
+
+  const off = await tess.me.call('POST', '/opportunities', clean('Ramp Supervisor'));
+  assert.equal(off.body.published, false);
+  let queue = await state.admin.call('GET', '/admin/moderation');
+  assert.deepEqual(findItem(queue, off.body.opportunityId).lane_reasons, ['Fast lane is switched off']);
+
+  const on = await state.admin.call('PUT', '/admin/moderation/settings', { autoApprove: true });
+  assert.equal(on.body.autoApprove, true);
+  const fast = await tess.me.call('POST', '/opportunities', clean('Cargo Planner'));
+  assert.equal(fast.body.published, true);
+  const live = await state.carol.me.call('GET', '/opportunities');
+  assert.ok(live.body.some((o) => o.opportunity_id === fast.body.opportunityId));
+  const logs = await state.admin.call('GET', '/admin/activity-logs');
+  assert.equal(logs.body[0].admin_name, 'Automatic');
+  assert.match(logs.body[0].description, /Auto-approved opportunity "Cargo Planner".*Known employer website \(jambojet\.com\)/);
+  state.fastPost = fast.body.opportunityId;
+
+  // A website the alumni office has never approved still needs a person
+  const newSite = await tess.me.call('POST', '/opportunities', clean('Lounge Manager', 'https://careers.newairline.co.ke/lounge'));
+  assert.equal(newSite.body.published, false);
+  queue = await state.admin.call('GET', '/admin/moderation');
+  assert.ok(findItem(queue, newSite.body.opportunityId).lane_reasons.some((x) => /New website/.test(x)));
+});
+
+test('too many posts in a day are held, however trusted the account', async () => {
+  const burst = await state.tess.me.call('POST', '/opportunities', clean('Fourth Post Today'));
+  assert.equal(burst.body.published, false);
+  const queue = await state.admin.call('GET', '/admin/moderation');
+  const item = findItem(queue, burst.body.opportunityId);
+  assert.equal(item.moderation_lane, 'hold');
+  assert.ok(item.lane_reasons.some((x) => /post number 4 in the last 24 hours/.test(x)));
+  // Spread the earlier posts out so the next tests are not affected
+  await db.execute('UPDATE career_opportunities SET submitted_at = DATE_SUB(NOW(), INTERVAL 2 DAY) WHERE posted_by = :id', { id: state.tess.id });
+});
+
+test('taking down an auto-approved post removes the poster\'s trust', async () => {
+  const noReason = await state.admin.call('POST', `/admin/moderation/opportunity/${state.fastPost}/decision`, { decision: 'take_down' });
+  assert.equal(noReason.status, 400);
+  const down = await state.admin.call('POST', `/admin/moderation/opportunity/${state.fastPost}/decision`, { decision: 'take_down', reason: 'misleading', note: 'Jambojet confirmed no such role' });
+  assert.equal(down.status, 200);
+  const next = await state.tess.me.call('POST', '/opportunities', clean('Another Clean Post'));
+  assert.equal(next.body.published, false);
+  const queue = await state.admin.call('GET', '/admin/moderation');
+  assert.ok(queue.body.autoApproved.some((a) => a.id === state.fastPost && a.state === 'rejected'));
+  assert.equal(findItem(queue, next.body.opportunityId).poster_trust.trusted, false);
+});
+
+test('rejecting a post as a scam blocks its website for every account', async () => {
+  const scam = await state.peter.me.call('POST', '/opportunities', clean('Remote Data Entry', 'https://kq-jobs-portal.com/apply'));
+  await state.admin.call('POST', `/admin/moderation/opportunity/${scam.body.opportunityId}/decision`, { decision: 'rejected', reason: 'asks_for_payment', note: 'Asked applicants for a fee by phone' });
+  const learned = await state.admin.call('GET', '/admin/moderation/learned');
+  assert.ok(learned.body.blocked.some((b) => b.value === 'kq-jobs-portal.com'));
+  assert.ok(learned.body.known.some((k) => k.domain === 'jambojet.com'));
+
+  const again = await state.tess.me.call('POST', '/opportunities', clean('Data Entry Clerk', 'https://kq-jobs-portal.com/apply'));
+  assert.equal(again.body.needsCloserReview, true);
+  const queue = await state.admin.call('GET', '/admin/moderation');
+  const item = findItem(queue, again.body.opportunityId);
+  assert.equal(item.moderation_lane, 'hold');
+  assert.ok(item.lane_reasons.some((x) => /rejected as a scam \(kq-jobs-portal\.com\)/.test(x)));
+  assert.ok(item.lane_reasons.some((x) => /posted by another account/.test(x)));
+});
+
+test('a scam on a shortened link blocks that exact link, not the whole shortener', async () => {
+  const scam = await state.peter.me.call('POST', '/opportunities', clean('Airport Jobs', 'https://bit.ly/kq-airport-jobs'));
+  await state.admin.call('POST', `/admin/moderation/opportunity/${scam.body.opportunityId}/decision`, { decision: 'rejected', reason: 'asks_for_payment' });
+  const learned = await state.admin.call('GET', '/admin/moderation/learned');
+  assert.ok(learned.body.blocked.some((b) => b.kind === 'link' && b.value === 'bit.ly/kq-airport-jobs'));
+  assert.equal(learned.body.blocked.some((b) => b.value === 'bit.ly'), false);
+  const again = await state.tess.me.call('POST', '/opportunities', clean('Airport Jobs Again', 'http://bit.ly/kq-airport-jobs/'));
+  const queue = await state.admin.call('GET', '/admin/moderation');
+  assert.ok(findItem(queue, again.body.opportunityId).lane_reasons.some((x) => /a link from a post rejected as a scam/.test(x)));
+});
+
+test('approve all clean posts leaves held and flagged posts for a person', async () => {
+  const before = await state.admin.call('GET', '/admin/moderation');
+  const cleanCount = before.body.items.filter((i) => i.clean && i.moderation_lane === 'queue').length;
+  assert.ok(cleanCount >= 1);
+  const r = await state.admin.call('POST', '/admin/moderation/approve-clean');
+  assert.equal(r.body.approved, cleanCount);
+  const after = await state.admin.call('GET', '/admin/moderation');
+  assert.ok(after.body.items.length > 0);
+  assert.ok(after.body.items.every((i) => !i.clean || i.moderation_lane !== 'queue'));
+});
+
+test('the accuracy panel compares the automatic checks with admin decisions', async () => {
+  const r = await state.admin.call('GET', '/admin/moderation/insights');
+  assert.equal(r.status, 200);
+  assert.ok(r.body.byRisk.low.decided >= 3);
+  assert.equal(r.body.autoApproved, 1);
+  assert.equal(r.body.autoTakenDown, 1);
+  assert.ok(r.body.knownSites >= 5);
+  assert.ok(r.body.blocked >= 1);
+  await state.admin.call('PUT', '/admin/moderation/settings', { autoApprove: false });
+});
+
 /* ---------------- HR import and retirement ---------------- */
 
 test('an HR import previews changes, then a retired mentee becomes a mentor', async () => {

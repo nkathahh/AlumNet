@@ -38,7 +38,11 @@
                         opportunity</button>
                 </div>
             </div>
-            <div class="opportunity-filters">
+            <div class="tabs opp-tabs" id="opp-tabs" style="display:none;">
+                <button class="tab active" data-opp-view="all">All opportunities</button>
+                <button class="tab" data-opp-view="mine">My posts <span class="tab-count" id="my-posts-count"></span></button>
+            </div>
+            <div class="opportunity-filters" id="opp-filters">
                 <input type="search" id="opp-search" class="search-pill" placeholder="Search title, company or keyword">
                 <select id="opp-industry" class="select-pill">
                     <option value="">All industries</option>
@@ -57,9 +61,13 @@
                     <option value="internal_transfer">Internal transfer</option>
                     <option value="volunteer">Volunteer</option>
                 </select>
+                <select id="opp-poster" class="select-pill" aria-label="Posted by">
+                    <option value="">Anyone</option>
+                </select>
             </div>
-            <div id="my-posts" style="margin-top:36px;"></div>
+            <div class="filter-chip-row" id="opp-poster-chip"></div>
             <div id="opportunities-list"></div>
+            <div id="my-posts" style="display:none;"></div>
         </main>
     </div>
     <script src="js/main.js"></script>

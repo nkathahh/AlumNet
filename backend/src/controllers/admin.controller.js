@@ -147,43 +147,16 @@ async function listPendingEvents(req, res, next) {
   }
 }
 
+// Kept for older screens; every decision goes through smart moderation
 async function reviewEvent(req, res, next) {
   try {
-    const { decision } = req.body;
+    const { applyDecision } = require('./moderation.controller');
+    const { decision, reason } = req.body;
     if (!['approved', 'rejected'].includes(decision)) {
       return res.status(400).json({ error: 'Decision must be approved or rejected' });
     }
-    const eventId = req.params.id;
-    const [result] = await pool.execute(
-      `UPDATE events SET status = :decision WHERE event_id = :eventId AND status = 'pending'`,
-      { decision, eventId }
-    );
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: 'Event not found or already reviewed' });
-    }
-
-    // Tell the mentor who proposed it
-    const [[event]] = await pool.execute(
-      `SELECT e.title, e.created_by, u.name AS proposer FROM events e
-       LEFT JOIN users u ON u.user_id = e.created_by WHERE e.event_id = :eventId`,
-      { eventId }
-    );
-    await logAdminAction(
-      req.user.userId, `${decision}_event`, 'events', eventId,
-      `${decision === 'approved' ? 'Approved' : 'Rejected'} event "${event.title}"${event.proposer ? ` proposed by ${event.proposer}` : ''}`,
-      event.title
-    );
-    if (event && event.created_by) {
-      await createNotification(
-        event.created_by,
-        `event_${decision}`,
-        decision === 'approved'
-          ? `Your event "${event.title}" was approved and is now live.`
-          : `Your event "${event.title}" was not approved.`,
-        'events.html'
-      );
-    }
-
+    const result = await applyDecision({ kind: 'event', id: req.params.id, decision, reason, note: String(req.body.note || '').trim().slice(0, 255), adminId: req.user.userId });
+    if (result.error) return res.status(result.status).json({ error: result.error });
     res.json({ message: `Event ${decision}` });
   } catch (err) {
     next(err);
@@ -230,53 +203,23 @@ async function listPendingOpportunities(req, res, next) {
 
 async function reviewOpportunity(req, res, next) {
     try {
-        const { id } = req.params;
-        const { decision, reviewNotes } = req.body;
+        const { applyDecision } = require('./moderation.controller');
+        const { decision, reason } = req.body;
         if (!['approved', 'rejected'].includes(decision)) {
             return res.status(400).json({ error: "decision must be 'approved' or 'rejected'" });
         }
-
-        const [[opportunity]] = await pool.execute(
-            `SELECT co.title, co.posted_by, u.name AS poster FROM career_opportunities co
-             LEFT JOIN users u ON u.user_id = co.posted_by WHERE co.opportunity_id = :id`,
-            { id }
-        );
-        if (!opportunity) return res.status(404).json({ error: 'Opportunity not found' });
-
-        await pool.execute(
-            'UPDATE career_opportunities SET approval_status = :decision WHERE opportunity_id = :id',
-            { decision, id }
-        );
-        await pool.execute(
-            `INSERT INTO content_approvals (admin_id, opportunity_id, status, review_notes)
-       VALUES (:adminId, :id, :decision, :reviewNotes)`,
-            { adminId: req.user.userId, id, decision, reviewNotes: reviewNotes || null }
-        );
-        await logAdminAction(
-            req.user.userId, `${decision}_opportunity`, 'career_opportunities', id,
-            `${decision === 'approved' ? 'Approved' : 'Rejected'} opportunity "${opportunity.title}"${opportunity.poster ? ` posted by ${opportunity.poster}` : ''}`,
-            opportunity.title
-        );
-
-        // Tell the mentor who posted it
-        await createNotification(
-            opportunity.posted_by,
-            `opportunity_${decision}`,
-            decision === 'approved'
-                ? `Your opportunity "${opportunity.title}" was approved and is now visible to the network.`
-                : `Your opportunity "${opportunity.title}" was not approved.`,
-            'opportunities.html'
-        );
-
-        res.json({ opportunity_id: Number(id), status: decision });
+        const note = String(req.body.note || req.body.reviewNotes || '').trim().slice(0, 255);
+        const result = await applyDecision({ kind: 'opportunity', id: req.params.id, decision, reason, note, adminId: req.user.userId });
+        if (result.error) return res.status(result.status).json({ error: result.error });
+        res.json({ opportunity_id: Number(req.params.id), status: decision });
     } catch (err) { next(err); }
 }
 
 async function listActivityLogs(req, res, next) {
     try {
         const [rows] = await pool.query(`
-      SELECT l.*, u.name AS admin_name
-      FROM admin_activity_logs l JOIN users u ON u.user_id = l.admin_id
+      SELECT l.*, COALESCE(u.name, 'Automatic') AS admin_name
+      FROM admin_activity_logs l LEFT JOIN users u ON u.user_id = l.admin_id
       ORDER BY l.created_at DESC, l.log_id DESC LIMIT 50
     `);
         res.json(rows);
