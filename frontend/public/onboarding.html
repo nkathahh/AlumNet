@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Welcome to AlumNet</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <div class="app-shell">
+        <button id="hamburger-btn" class="hamburger-btn" aria-label="Open menu" aria-expanded="false">
+            <span></span><span></span><span></span>
+        </button>
+        <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+        <div class="topbar-actions">
+            <label class="theme-switch" title="Toggle dark mode">
+                <input type="checkbox" id="theme-toggle-checkbox">
+                <span class="switch-track"><span class="switch-thumb"></span></span>
+            </label>
+            <button id="logout-btn" class="icon-btn" aria-label="Log out" title="Log out">⏻</button>
+        </div>
+
+        <aside class="app-sidebar">
+            <div class="app-brand"><span class="mark">KQ</span> AlumNet</div>
+            <nav id="sidebar-nav"></nav>
+            <div class="app-sidebar-foot"></div>
+        </aside>
+
+        <main class="app-main">
+            <div class="md ob-wrap" id="onboarding-page">
+                <header class="md-top" style="padding-right:0;">
+                    <p class="md-date">Set up your profile</p>
+                    <h1 class="md-greeting" id="ob-title">Welcome to AlumNet</h1>
+                    <p class="md-sub" id="ob-sub">A few details so we can match you well. It takes about two minutes.</p>
+                </header>
+                <div class="ob-progress" id="ob-progress"><span class="on"></span><span></span><span></span><span></span></div>
+
+                <section class="md-panel">
+                    <div class="st-body">
+                        <div class="ob-step" data-step="1">
+                            <h2>Introduce yourself</h2>
+                            <p class="field-hint" style="margin-bottom:16px;">A one-line headline helps people recognise you.</p>
+                            <div class="field">
+                                <label for="ob-headline">Headline</label>
+                                <input type="text" id="ob-headline" maxlength="120">
+                            </div>
+                            <div class="field-row">
+                                <div class="field"><label for="ob-city">City</label><input type="text" id="ob-city" maxlength="100" placeholder="Nairobi"></div>
+                                <div class="field"><label for="ob-country">Country</label><input type="text" id="ob-country" maxlength="100" placeholder="Kenya"></div>
+                            </div>
+                        </div>
+
+                        <div class="ob-step" data-step="2" style="display:none;">
+                            <h2>Your skills</h2>
+                            <p class="field-hint">Tap the ones that fit, or type your own separated by commas. Matching uses these.</p>
+                            <div class="ob-chips" id="ob-skill-chips"></div>
+                            <div class="field">
+                                <label for="ob-skills">Skills</label>
+                                <textarea id="ob-skills" maxlength="1000" rows="3"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="ob-step" data-step="3" style="display:none;">
+                            <h2>Your experience</h2>
+                            <p class="field-hint" style="margin-bottom:16px;" id="ob-exp-hint">Roles you have held and what you did in them.</p>
+                            <div class="field">
+                                <label for="ob-experience">Experience</label>
+                                <textarea id="ob-experience" maxlength="3000" rows="5"></textarea>
+                            </div>
+                            <div class="field" id="ob-years-field" style="display:none;">
+                                <label for="ob-years">Years at or around KQ</label>
+                                <input type="number" id="ob-years" min="0" max="60">
+                            </div>
+                        </div>
+
+                        <div class="ob-step" data-step="4" style="display:none;">
+                            <h2 id="ob-goals-title">What you want to grow in</h2>
+                            <p class="field-hint" id="ob-goals-hint">Career goals or areas you want guidance on.</p>
+                            <div class="ob-chips" id="ob-goal-chips"></div>
+                            <div class="field">
+                                <label for="ob-goals" id="ob-goals-label">Career interests</label>
+                                <textarea id="ob-goals" maxlength="1000" rows="3"></textarea>
+                            </div>
+                        </div>
+
+                        <p class="st-msg" id="ob-msg"></p>
+                        <div class="ob-nav">
+                            <button type="button" class="btn-quiet" id="ob-skip">Skip for now</button>
+                            <div style="display:flex; gap:10px;">
+                                <button type="button" class="btn btn-secondary md-btn-sm" id="ob-back" style="display:none;">Back</button>
+                                <button type="button" class="btn btn-primary md-btn-sm" id="ob-next">Next</button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+    <script src="js/main.js"></script>
+</body>
+
+</html>

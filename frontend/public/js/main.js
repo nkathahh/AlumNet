@@ -36,10 +36,46 @@ document.addEventListener('DOMContentLoaded', () => {
   wireForgotPasswordForm();
   wireResetPasswordForm();
   renderAccountSettings();
+  renderAdminVerification();
+  wireHrImport();
+  checkAdminTwoFactor();
+  wireOnboarding();
 });
 
 // Same server as the page when served over http(s); localhost when a page is opened as a file
 const API_BASE = location.protocol === 'file:' ? 'http://localhost:4000/api' : `${location.origin}/api`;
+
+/*
+ * Every API call goes through here. The session lives in an HttpOnly cookie
+ * that page scripts cannot read, so nothing secret is kept in localStorage.
+ * The custom header is what the server's CSRF check looks for. If the
+ * session has ended (expired, logged out elsewhere, suspended), the person
+ * is sent to the login page instead of seeing broken pages.
+ */
+const AUTH_PATHS = ['/auth/login', '/auth/google', '/auth/2fa/verify', '/auth/signup', '/auth/forgot-password', '/auth/reset-password', '/auth/logout'];
+(function secureApiCalls() {
+  const nativeFetch = window.fetch.bind(window);
+  window.fetch = async (input, init = {}) => {
+    const url = typeof input === 'string' ? input : input.url;
+    if (!url.startsWith(API_BASE)) return nativeFetch(input, init);
+    const headers = new Headers(init.headers || {});
+    headers.delete('Authorization');
+    headers.set('X-Requested-With', 'AlumNet');
+    const res = await nativeFetch(input, { ...init, headers, credentials: 'include' });
+    const path = url.slice(API_BASE.length);
+    if (res.status === 401 && !AUTH_PATHS.some((p) => path.startsWith(p))) {
+      clearSession();
+      const page = location.pathname.split('/').pop();
+      if (PAGE_ROLES[page] || page === 'onboarding.html') window.location.href = 'login.html?expired=1';
+    }
+    return res;
+  };
+})();
+
+function clearSession() {
+  localStorage.removeItem('alumnet_token');
+  localStorage.removeItem('alumnet_role');
+}
 
 const HOME_PAGE = { mentee: 'mentee-dashboard.html', mentor: 'mentor-dashboard.html', admin: 'admin.html' };
 
@@ -53,6 +89,7 @@ const PAGE_ROLES = {
   'opportunities.html': ['mentee', 'mentor'],
   'notifications.html': ['mentee', 'mentor'],
   'settings.html': ['mentee', 'mentor', 'admin'],
+  'onboarding.html': ['mentee', 'mentor'],
   'admin.html': ['admin']
 };
 
@@ -96,7 +133,9 @@ const NAV_CONFIG = {
     {
       group: 'Platform', links: [
         { tab: 'overview', label: 'Overview' },
+        { tab: 'verification', label: 'Verification' },
         { tab: 'users', label: 'User management' },
+        { tab: 'hr', label: 'HR records' },
         { tab: 'events', label: 'Event management' },
         { tab: 'opportunities', label: 'Content moderation' },
         { tab: 'logs', label: 'Activity log' }
@@ -213,9 +252,9 @@ function wireThemeToggle() {
 function wireLogout() {
   const btn = document.getElementById('logout-btn');
   if (!btn) return;
-  btn.addEventListener('click', () => {
-    localStorage.removeItem('alumnet_token');
-    localStorage.removeItem('alumnet_role');
+  btn.addEventListener('click', async () => {
+    try { await fetch(`${API_BASE}/auth/logout`, { method: 'POST' }); } catch { /* offline: still clear locally */ }
+    clearSession();
     window.location.href = 'login.html';
   });
 }
@@ -252,156 +291,153 @@ async function updateSidebar() {
    -------------------------------------------------------------------- */
 
 function wireSignupForm() {
-  const form = document.getElementById('signup-form');
-  if (!form) return;
+  const startForm = document.getElementById('signup-start-form');
+  if (!startForm) return;
 
-  const roleSelect = document.getElementById('role');
-  const staffFields = document.getElementById('staff-fields');
-  const menteeEmailField = document.getElementById('mentee-email-field');
-  const mentorEmailField = document.getElementById('mentor-email-field');
-  const staffNumberInput = document.getElementById('staffNumber');
-  const staffStatus = document.getElementById('staff-lookup-status');
-  const errorEl = document.getElementById('signup-error');
-  const passwordInput = document.getElementById('password');
-  const confirmInput = document.getElementById('confirmPassword');
-  const matchStatus = document.getElementById('password-match-status');
-  const toggleBtn = document.getElementById('toggle-password');
-  const usernameInput = document.getElementById('username');
-  const usernameStatus = document.getElementById('username-status');
-  let verifiedStaff = null;
-  let usernameOk = false;
-  let usernameTimer = null;
-
-  // Live check so people find out a username is taken before submitting
-  usernameInput.addEventListener('input', () => {
-    usernameOk = false;
-    clearTimeout(usernameTimer);
-    const value = usernameInput.value.trim().toLowerCase();
-    if (!value) { usernameStatus.textContent = ''; return; }
-    usernameTimer = setTimeout(async () => {
-      try {
-        const res = await fetch(`${API_BASE}/auth/username-available?username=${encodeURIComponent(value)}`);
-        const data = await res.json();
-        usernameOk = data.available;
-        usernameStatus.textContent = data.available ? `${value} is available.` : data.reason;
-        usernameStatus.style.color = data.available ? 'var(--kq-green)' : 'var(--kq-red)';
-      } catch {
-        usernameStatus.textContent = '';
-      }
-    }, 350);
+  const steps = ['su-start', 'su-sent', 'su-checking', 'su-password', 'su-details', 'su-submitted', 'su-invalid'];
+  const show = (id) => steps.forEach((s) => {
+    const el = document.getElementById(s);
+    if (el) el.style.display = s === id ? 'block' : 'none';
   });
 
-  toggleBtn.addEventListener('click', () => {
-    const show = passwordInput.type === 'password';
-    passwordInput.type = show ? 'text' : 'password';
-    toggleBtn.textContent = show ? 'Hide' : 'Show';
-  });
-
-  function checkPasswordsMatch() {
-    if (!confirmInput.value) { matchStatus.textContent = ''; return; }
-    const match = passwordInput.value === confirmInput.value;
-    matchStatus.textContent = match ? 'Passwords match.' : 'Passwords do not match.';
-    matchStatus.style.color = match ? 'var(--kq-green)' : 'var(--kq-red)';
+  function signedIn(result) {
+    saveSession(result);
+    navigateWithFade(result.onboardingRequired ? 'onboarding.html' : (HOME_PAGE[result.role] || 'login.html'));
   }
-  passwordInput.addEventListener('input', checkPasswordsMatch);
-  confirmInput.addEventListener('input', checkPasswordsMatch);
 
-  roleSelect.addEventListener('change', () => {
-    const role = roleSelect.value;
-    staffFields.style.display = role ? 'block' : 'none';
-    menteeEmailField.style.display = role === 'mentee' ? 'block' : 'none';
-    mentorEmailField.style.display = role === 'mentor' ? 'block' : 'none';
-  });
-
-  staffNumberInput.addEventListener('blur', async () => {
-    verifiedStaff = null;
-    document.getElementById('fullName').value = '';
-    document.getElementById('department').value = '';
-    document.getElementById('idNumberDisplay').value = '';
-    document.getElementById('emailMentee').value = '';
-    if (!staffNumberInput.value) { staffStatus.textContent = ''; return; }
-
-    staffStatus.textContent = 'Checking...';
-    try {
-      const res = await fetch(`${API_BASE}/auth/staff-lookup?staffNumber=${encodeURIComponent(staffNumberInput.value)}`);
-      const data = await res.json();
-      if (!res.ok) { staffStatus.textContent = data.error || 'Staff number not found'; return; }
-
-      verifiedStaff = data;
-      document.getElementById('fullName').value = data.full_name;
-      document.getElementById('department').value = data.department;
-      document.getElementById('idNumberDisplay').value = data.id_number;
-      if (data.mobile_number) document.getElementById('mobileNumber').value = data.mobile_number;
-      if (roleSelect.value === 'mentee') document.getElementById('emailMentee').value = data.kq_email || '';
-      staffStatus.textContent = `Verified: ${data.full_name} (${data.department}, ${data.employment_status})`;
-    } catch {
-      staffStatus.textContent = 'Could not reach the server.';
-    }
-  });
-
-  form.addEventListener('submit', async (e) => {
+  // Step 1: staff number and email. The reply is the same whatever was
+  // entered, so nobody can use this form to find out who works at KQ.
+  startForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    errorEl.style.display = 'none';
-    const role = roleSelect.value;
+    const errorEl = document.getElementById('su-start-error');
+    showFormError(errorEl, '');
+    const staffNumber = startForm.staffNumber.value.trim().toUpperCase();
+    const email = startForm.email.value.trim().toLowerCase();
+    if (!/^KQ\d{4,6}$/.test(staffNumber)) { showFormError(errorEl, 'Enter your staff number, for example KQ48213.'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showFormError(errorEl, 'Enter a valid email address.'); return; }
+    if (!startForm.acceptPrivacy.checked) { showFormError(errorEl, 'Please read and accept the privacy notice to continue.'); return; }
 
-    if (!verifiedStaff) {
-      errorEl.textContent = 'Enter your staff number and wait for it to verify.';
-      errorEl.style.display = 'block'; return;
-    }
-    if (role === 'mentee' && verifiedStaff.employment_status !== 'active') {
-      errorEl.textContent = 'Only current employees can register as mentees.';
-      errorEl.style.display = 'block'; return;
-    }
-    if (!usernameOk) {
-      errorEl.textContent = 'Choose an available username.';
-      errorEl.style.display = 'block'; return;
-    }
-    const pwProblem = passwordProblem(passwordInput.value);
-    if (pwProblem) {
-      errorEl.textContent = pwProblem;
-      errorEl.style.display = 'block'; return;
-    }
-    if (passwordInput.value !== confirmInput.value) {
-      errorEl.textContent = 'Passwords do not match.';
-      errorEl.style.display = 'block'; return;
-    }
-
-    const payload = {
-      role, staffNumber: staffNumberInput.value, password: passwordInput.value,
-      username: usernameInput.value.trim().toLowerCase(),
-      mobileNumber: document.getElementById('mobileNumber').value || undefined,
-      country: document.getElementById('country').value,
-      city: document.getElementById('city').value,
-      skills: document.getElementById('skills').value,
-      experience: document.getElementById('experience').value,
-      careerInterests: document.getElementById('interests').value,
-      industry: document.getElementById('industry').value,
-      email: role === 'mentor' ? document.getElementById('emailMentor').value : undefined,
-      yearsOfExperience: role === 'mentor' ? document.getElementById('mentorYears').value || null : undefined
-    };
-
+    const btn = startForm.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
     try {
-      const res = await fetch(`${API_BASE}/auth/register`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
-      });
-      const result = await res.json();
-      if (!res.ok) { errorEl.textContent = result.error || 'Registration failed'; errorEl.style.display = 'block'; return; }
-      localStorage.setItem('alumnet_token', result.token);
-      localStorage.setItem('alumnet_role', result.role);
-      window.location.href = HOME_PAGE[result.role] || 'login.html';
+      const { ok, data } = await postJSON('/auth/signup/start', { staffNumber, email, acceptPrivacy: true });
+      if (!ok) { showFormError(errorEl, data.error || 'Something went wrong. Try again.'); return; }
+      document.getElementById('su-sent-email').textContent = email;
+      show('su-sent');
     } catch {
-      errorEl.textContent = 'Could not reach the server. Is the backend running on port 4000?';
-      errorEl.style.display = 'block';
+      showFormError(errorEl, 'Could not reach the server.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Continue';
     }
   });
+  document.getElementById('su-again').addEventListener('click', () => { startForm.reset(); show('su-start'); });
+
+  // Step 2: the emailed link brings the person back here with a token
+  const token = new URLSearchParams(location.search).get('token');
+  if (!token) return;
+  // Keep the token out of the address bar, history and screenshots
+  history.replaceState(null, '', 'signup.html');
+  show('su-checking');
+
+  (async () => {
+    let data;
+    try {
+      const res = await fetch(`${API_BASE}/auth/signup/link?token=${encodeURIComponent(token)}`);
+      data = await res.json();
+      if (!res.ok) {
+        document.getElementById('su-invalid-text').textContent = data.error || 'It may have expired or already been used.';
+        show('su-invalid');
+        return;
+      }
+    } catch {
+      document.getElementById('su-invalid-text').textContent = 'Could not reach the server. Open the link again in a moment.';
+      show('su-invalid');
+      return;
+    }
+
+    if (data.state === 'set_password') {
+      const roleText = data.role === 'mentor'
+        ? 'HR records show you as former Kenya Airways staff, so you will join as a mentor.'
+        : 'HR records show you as current Kenya Airways staff, so you will join as a mentee.';
+      document.getElementById('su-welcome').textContent = `Welcome, ${data.name.split(' ')[0]}`;
+      document.getElementById('su-role-line').textContent = `${roleText} ${data.department ? 'Department: ' + data.department + '.' : ''} Choose how you will sign in.`;
+      show('su-password');
+      wirePasswordToggle('su-toggle', 'su-pass');
+
+      const form = document.getElementById('signup-password-form');
+      const errorEl = document.getElementById('su-password-error');
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        showFormError(errorEl, '');
+        const problem = passwordProblem(form.password.value);
+        if (problem) { showFormError(errorEl, problem); return; }
+        if (form.password.value !== form.confirm.value) { showFormError(errorEl, 'Passwords do not match.'); return; }
+        const btn = form.querySelector('button[type="submit"]');
+        btn.disabled = true;
+        try {
+          const r = await postJSON('/auth/signup/complete', { token, password: form.password.value });
+          if (!r.ok) { showFormError(errorEl, r.data.error || 'Could not create your account.'); return; }
+          signedIn(r.data);
+        } catch {
+          showFormError(errorEl, 'Could not reach the server.');
+        } finally {
+          btn.disabled = false;
+        }
+      });
+
+      const googleWrap = document.getElementById('su-google');
+      renderGoogleButton(document.getElementById('su-google-btn'), async (credential) => {
+        showFormError(errorEl, '');
+        try {
+          const r = await postJSON('/auth/signup/complete', { token, googleCredential: credential });
+          if (!r.ok) { showFormError(errorEl, r.data.error || 'Google sign-up failed.'); return; }
+          signedIn(r.data);
+        } catch {
+          showFormError(errorEl, 'Could not reach the server.');
+        }
+      }, 'signup_with').then((shown) => { googleWrap.style.display = shown ? 'block' : 'none'; });
+      return;
+    }
+
+    // Email confirmed but it is not the one HR holds: collect details for review
+    show('su-details');
+    const form = document.getElementById('signup-details-form');
+    const errorEl = document.getElementById('su-details-error');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      showFormError(errorEl, '');
+      const fullName = form.fullName.value.trim();
+      const phone = form.phone.value.trim();
+      if (fullName.split(/\s+/).length < 2) { showFormError(errorEl, 'Enter your full name as HR knows it.'); return; }
+      if (phone.replace(/\D/g, '').length < 9) { showFormError(errorEl, 'Enter a phone number we can reach you on.'); return; }
+      const problem = passwordProblem(form.password.value);
+      if (problem) { showFormError(errorEl, problem); return; }
+      const btn = form.querySelector('button[type="submit"]');
+      btn.disabled = true;
+      try {
+        const r = await postJSON('/auth/signup/review', { token, fullName, phone, password: form.password.value });
+        if (!r.ok) { showFormError(errorEl, r.data.error || 'Could not send your details.'); return; }
+        if (r.data.message) document.getElementById('su-submitted-text').textContent = r.data.message;
+        show('su-submitted');
+      } catch {
+        showFormError(errorEl, 'Could not reach the server.');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  })();
 }
 
 /* --------------------------------------------------------------------
    Sign-in helpers shared by login, Google and two-factor
    -------------------------------------------------------------------- */
 
+// The real session is the HttpOnly cookie. These two values only help the
+// page decide which menu to draw; the server checks every request itself.
 function saveSession(result) {
-  localStorage.setItem('alumnet_token', result.token);
+  localStorage.setItem('alumnet_token', 'cookie');
   localStorage.setItem('alumnet_role', result.role);
 }
 
@@ -464,7 +500,7 @@ async function renderGoogleButton(container, onCredential, text = 'signin_with')
 }
 
 /* --------------------------------------------------------------------
-   Login: email or username, Google, then two-factor if switched on
+   Login: email, Google, then two-factor if switched on
    -------------------------------------------------------------------- */
 
 function wireLoginForm() {
@@ -489,10 +525,33 @@ function wireLoginForm() {
   // A message from the reset page, for example
   const params = new URLSearchParams(location.search);
   const notice = document.getElementById('login-notice');
-  if (notice && params.get('reset') === '1') {
-    notice.textContent = 'Your password has been reset. Log in with your new password.';
+  const notices = {
+    reset: 'Your password has been reset. Log in with your new password.',
+    expired: 'Your session has ended. Please log in again.'
+  };
+  const which = Object.keys(notices).find((k) => params.get(k) === '1');
+  if (notice && which) {
+    notice.textContent = notices[which];
     notice.style.display = 'block';
+    history.replaceState(null, '', 'login.html');
   }
+  if (which === 'expired') clearSession();
+
+  // Two-factor step: app code by default, backup code if the phone is lost
+  let usingBackup = false;
+  const codeInput = document.getElementById('twofa-code');
+  const useBackupBtn = document.getElementById('twofa-use-backup');
+  function setCodeMode(backup) {
+    usingBackup = backup;
+    codeInput.value = '';
+    codeInput.maxLength = backup ? 11 : 6;
+    codeInput.placeholder = backup ? 'xxxxx-xxxxx' : '000000';
+    codeInput.inputMode = backup ? 'text' : 'numeric';
+    document.getElementById('twofa-label').textContent = backup ? 'Backup code' : 'Verification code';
+    if (useBackupBtn) useBackupBtn.textContent = backup ? 'Use the code from my app instead' : 'Lost your phone? Use a backup code';
+    codeInput.focus();
+  }
+  if (useBackupBtn) useBackupBtn.addEventListener('click', () => setCodeMode(!usingBackup));
 
   function handleResult(result) {
     if (result.twoFactorRequired) {
@@ -503,21 +562,21 @@ function wireLoginForm() {
       return;
     }
     saveSession(result);
-    navigateWithFade(HOME_PAGE[result.role] || 'login.html');
+    navigateWithFade(result.onboardingRequired ? 'onboarding.html' : (HOME_PAGE[result.role] || 'login.html'));
   }
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     showFormError(errorEl, '');
-    const identifier = form.identifier.value.trim();
+    const email = form.email.value.trim();
     const password = form.password.value;
-    if (!identifier || !password) { showFormError(errorEl, 'Enter your email or username and your password.'); return; }
+    if (!email || !password) { showFormError(errorEl, 'Enter your email and password.'); return; }
 
     const submitBtn = form.querySelector('button[type="submit"]');
     submitBtn.disabled = true;
     submitBtn.textContent = 'Signing you in...';
     try {
-      const { ok, data } = await postJSON('/auth/login', { identifier, password });
+      const { ok, data } = await postJSON('/auth/login', { email, password });
       if (!ok) { showFormError(errorEl, data.error || 'Login failed'); return; }
       handleResult(data);
     } catch {
@@ -532,8 +591,9 @@ function wireLoginForm() {
     twoFaForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       showFormError(twoFaError, '');
-      const code = document.getElementById('twofa-code').value.replace(/\s/g, '');
-      if (!/^\d{6}$/.test(code)) { showFormError(twoFaError, 'Enter the 6-digit code from your authenticator app.'); return; }
+      const code = codeInput.value.replace(/\s/g, '');
+      if (!usingBackup && !/^\d{6}$/.test(code)) { showFormError(twoFaError, 'Enter the 6-digit code from your authenticator app.'); return; }
+      if (usingBackup && !/^[a-z0-9]{5}-?[a-z0-9]{5}$/i.test(code)) { showFormError(twoFaError, 'Enter one of your backup codes, for example abcde-12345.'); return; }
       const btn = twoFaForm.querySelector('button[type="submit"]');
       btn.disabled = true;
       try {
@@ -552,6 +612,7 @@ function wireLoginForm() {
     });
     document.getElementById('twofa-back').addEventListener('click', () => {
       tempToken = null;
+      setCodeMode(false);
       twoFaStep.style.display = 'none';
       loginStep.style.display = 'block';
     });
@@ -588,13 +649,13 @@ function wireForgotPasswordForm() {
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     showFormError(errorEl, '');
-    const identifier = form.identifier.value.trim();
-    if (!identifier) { showFormError(errorEl, 'Enter your email or username.'); return; }
+    const email = form.email.value.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showFormError(errorEl, 'Enter the email on your account.'); return; }
     const btn = form.querySelector('button[type="submit"]');
     btn.disabled = true;
     btn.textContent = 'Sending...';
     try {
-      const { ok, data } = await postJSON('/auth/forgot-password', { identifier });
+      const { ok, data } = await postJSON('/auth/forgot-password', { email });
       if (!ok) { showFormError(errorEl, data.error || 'Something went wrong.'); return; }
       document.getElementById('forgot-step').style.display = 'none';
       document.getElementById('forgot-done').style.display = 'block';
@@ -612,6 +673,7 @@ function wireResetPasswordForm() {
   if (!form) return;
   const errorEl = document.getElementById('reset-error');
   const token = new URLSearchParams(location.search).get('token');
+  if (token) history.replaceState(null, '', 'reset-password.html');
   if (!token) {
     document.getElementById('reset-step').style.display = 'none';
     document.getElementById('reset-invalid').style.display = 'block';
@@ -652,7 +714,7 @@ function wirePasswordToggle(buttonId, inputId) {
 }
 
 /* --------------------------------------------------------------------
-   Mentor recommendations (FR-04) — real, calls the ML service
+   Mentor recommendations (FR-04): calls the ML service
    -------------------------------------------------------------------- */
 
 async function renderMentorList() {
@@ -675,7 +737,9 @@ async function renderMentorList() {
     );
 
     if (!recRes.ok) {
-      list.innerHTML = `<p style="color:var(--kq-red); padding:20px 4px;">${data.error || 'Could not load recommendations.'}</p>`;
+      list.innerHTML = data.code === 'profile_incomplete'
+        ? `<div class="md">${mdEmpty('search', 'Finish your profile to see matches', 'Mentors are matched on your skills, experience and career interests. Add them and your matches appear here.', 'profile.html#edit', 'Complete my profile')}</div>`
+        : `<p style="color:var(--kq-red); padding:20px 4px;">${escapeHTML(data.error || 'Could not load recommendations.')}</p>`;
       return;
     }
     if (!data.length) {
@@ -760,7 +824,7 @@ function wireMentorCardActions(list) {
 }
 
 /* --------------------------------------------------------------------
-   Mentorship requests (FR-05, FR-06) — real
+   Mentorship requests (FR-05, FR-06)
    -------------------------------------------------------------------- */
 
 let allMyRequests = [];
@@ -863,15 +927,15 @@ function requestCardHTML(r) {
   return `
     <div class="request-card">
       <div>
-        <strong>${r.other_name}</strong><br>
-        <span style="font-size:0.82rem; color:var(--slate);">${r.other_department || ''} · ${r.status === 'ended' ? 'Ended' : 'Requested'} on ${date}</span>
+        <strong>${escapeHTML(r.other_name)}</strong><br>
+        <span style="font-size:0.82rem; color:var(--slate);">${escapeHTML(r.other_department || '')} · ${r.status === 'ended' ? 'Ended' : 'Requested'} on ${date}</span>
       </div>
       ${actionHTML}
     </div>`;
 }
 
 /* --------------------------------------------------------------------
-   Profile (FR-03) — real
+   Profile (FR-03)
    -------------------------------------------------------------------- */
 
 /* ===================== Professional profile ===================== */
@@ -928,6 +992,11 @@ function profileStrengthHTML(p, { showCta = false } = {}) {
     ${showCta && next ? '<a href="profile.html#edit" class="btn btn-secondary md-btn-sm pf-strength-cta">Complete profile</a>' : ''}`;
 }
 
+// Shown when the account is linked to a Kenya Airways HR record
+function verifiedBadgeHTML(label) {
+  return `<span class="verified-badge" title="Checked against Kenya Airways HR records"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>${escapeHTML(label)}</span>`;
+}
+
 function drawProfile(p) {
   document.getElementById('pf-name').textContent = p.name || '';
   const avatar = document.getElementById('pf-avatar');
@@ -937,6 +1006,9 @@ function drawProfile(p) {
   const role = document.getElementById('pf-role');
   role.textContent = p.role === 'mentor' ? 'Mentor' : p.role === 'mentee' ? 'Mentee' : p.role;
   role.className = `role-badge ${p.role}`;
+  const oldBadge = role.parentElement.querySelector('.verified-badge');
+  if (oldBadge) oldBadge.remove();
+  if (p.verified) role.insertAdjacentHTML('afterend', verifiedBadgeHTML(p.employment_status === 'former' ? 'Verified former KQ staff' : 'Verified current KQ staff'));
 
   const headline = document.getElementById('pf-headline');
   headline.textContent = p.headline || (p.role === 'mentor' ? 'Add a headline, for example "Retired Captain, 25 years with Kenya Airways"' : 'Add a headline, for example "Cabin Crew | Aspiring Safety Trainer"');
@@ -964,7 +1036,6 @@ function drawProfile(p) {
 
   const details = [
     ['Email', p.email],
-    ['Username', p.username ? `@${p.username}` : 'Not set'],
     ['Industry', p.industry],
     ['Member since', formatDate(p.created_at)]
   ].filter(([, v]) => v);
@@ -1097,7 +1168,7 @@ async function openMentorProfile(mentorId) {
       <div class="pf-modal-head">
         <div class="pf-avatar pf-avatar-sm" style="background:${colorFromName(data.name || '')}">${mdInitials(data.name)}</div>
         <div>
-          <h3>${escapeHTML(data.name)}</h3>
+          <h3>${escapeHTML(data.name)} ${data.verified ? verifiedBadgeHTML(data.verified_label || 'Verified') : ''}</h3>
           ${data.headline ? `<div class="pf-headline">${escapeHTML(data.headline)}</div>` : ''}
           <div class="modal-meta">${meta}</div>
         </div>
@@ -1117,7 +1188,7 @@ async function openMentorProfile(mentorId) {
 }
 
 /* --------------------------------------------------------------------
-   Events (FR-07, FR-08) — mentee/mentor view, still mock
+   Events (FR-07, FR-08): mentee and mentor view
    -------------------------------------------------------------------- */
 
 let allEvents = [];
@@ -1137,7 +1208,7 @@ async function renderEvents() {
     const res = await fetch(`${API_BASE}/events`, { headers: { Authorization: `Bearer ${token}` } });
     const data = await res.json();
     if (!res.ok) {
-      grid.innerHTML = `<p style="color:var(--kq-red); padding:20px 4px;">${data.error || 'Could not load events.'}</p>`;
+      grid.innerHTML = `<p style="color:var(--kq-red); padding:20px 4px;">${escapeHTML(data.error || 'Could not load events.')}</p>`;
       return;
     }
     allEvents = data;
@@ -1191,15 +1262,15 @@ function eventCardHTML(e) {
   const attendance = e.capacity !== null
     ? `${e.attendee_count} / ${e.capacity} attending`
     : `${e.attendee_count} attending`;
-  const host = e.is_official ? 'KQ Alumni Office' : (e.organiser_name || 'Alumni member');
+  const host = escapeHTML(e.is_official ? 'KQ Alumni Office' : (e.organiser_name || 'Alumni member'));
 
   let where;
   if (e.mode === 'virtual') {
     where = e.location
-      ? `Virtual · <a href="${e.location}" target="_blank" rel="noopener">Join link</a>`
+      ? `Virtual · <a href="${escapeHTML(e.location)}" target="_blank" rel="noopener noreferrer">Join link</a>`
       : 'Virtual · link shared after registering';
   } else {
-    where = e.location || 'Venue to be confirmed';
+    where = escapeHTML(e.location || 'Venue to be confirmed');
   }
 
   let button;
@@ -1217,8 +1288,8 @@ function eventCardHTML(e) {
         <span class="event-badge ${e.is_official ? 'official' : 'community'}">${e.is_official ? 'Official' : 'Community'}</span>
       </div>
       <div class="date">${date} · ${time}</div>
-      <h3>${e.title}</h3>
-      <p>${e.description || ''}</p>
+      <h3>${escapeHTML(e.title)}</h3>
+      <p>${escapeHTML(e.description || '')}</p>
       <div class="event-meta">
         <div>${where}</div>
         <div>Hosted by ${host}</div>
@@ -1345,7 +1416,7 @@ async function renderMyProposals() {
       ${rows.map((p) => `
         <div class="request-card">
           <div>
-            <strong>${p.title}</strong><br>
+            <strong>${escapeHTML(p.title)}</strong><br>
             <span style="font-size:0.82rem; color:var(--slate);">
               ${new Date(p.event_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
             </span>
@@ -1365,7 +1436,7 @@ async function renderAdminPendingEvents() {
   try {
     const res = await fetch(`${API_BASE}/admin/events/pending`, { headers: { Authorization: `Bearer ${token}` } });
     const rows = await res.json();
-    if (!res.ok) { list.innerHTML = `<p>${rows.error || 'Could not load proposals.'}</p>`; return; }
+    if (!res.ok) { list.innerHTML = `<p>${escapeHTML(rows.error || 'Could not load proposals.')}</p>`; return; }
     if (!rows.length) {
       list.innerHTML = '<p style="color:var(--slate); padding:20px 4px;">No event proposals waiting for review.</p>';
       return;
@@ -1375,12 +1446,12 @@ async function renderAdminPendingEvents() {
       <div class="opportunity-card">
         <div>
           <span class="tag">${e.mode === 'virtual' ? 'Virtual' : 'In person'}</span>
-          <h3 style="font-size:1rem; margin:6px 0;">${e.title}</h3>
-          <p class="mentor-blurb">${e.description || ''}</p>
+          <h3 style="font-size:1rem; margin:6px 0;">${escapeHTML(e.title)}</h3>
+          <p class="mentor-blurb">${escapeHTML(e.description || '')}</p>
           <div class="mentor-meta">
-            ${new Date(e.event_date).toLocaleString('en-GB')} · ${e.location || ''}${e.capacity ? ' · capacity ' + e.capacity : ''}
+            ${new Date(e.event_date).toLocaleString('en-GB')} · ${escapeHTML(e.location || '')}${e.capacity ? ' · capacity ' + e.capacity : ''}
           </div>
-          <div class="mentor-meta">Proposed by ${e.proposed_by_name}</div>
+          <div class="mentor-meta">Proposed by ${escapeHTML(e.proposed_by_name)}</div>
         </div>
         <div style="display:flex; gap:8px;">
           <button class="btn btn-primary" data-review-event="${e.event_id}" data-decision="approved">Approve</button>
@@ -1407,7 +1478,7 @@ async function renderAdminPendingEvents() {
 }
 
 /* --------------------------------------------------------------------
-   Career opportunities (FR-09) — mentee/mentor view, still mock
+   Career opportunities (FR-09): mentee and mentor view
    -------------------------------------------------------------------- */
 
 let allOpportunities = [];
@@ -1517,7 +1588,7 @@ function opportunityCardHTML(o) {
 function openOpportunityModal(o) {
   const link = (o.apply_link || '').trim();
   const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(link);
-  const href = isEmail ? `mailto:${link}` : link;
+  const href = isEmail ? `mailto:${link}` : (/^https?:\/\//i.test(link) ? link : '');
   const closing = closingLabel(o.closing_date);
 
   const backdrop = document.createElement('div');
@@ -1530,7 +1601,7 @@ function openOpportunityModal(o) {
       <div class="modal-section"><div class="label">Description</div><div class="value" style="white-space:pre-line;">${escapeHTML(o.description || '')}</div></div>
       ${closing.text ? `<div class="modal-section"><div class="label">Closing date</div><div class="value">${closing.text}</div></div>` : ''}
       <div class="modal-section"><div class="label">Posted by</div><div class="value">${escapeHTML(o.posted_by_name)}${o.posted_by_department ? ', ' + escapeHTML(o.posted_by_department) : ''}</div></div>
-      ${link
+      ${href
       ? `<a class="btn btn-primary btn-block" href="${escapeHTML(href)}" target="_blank" rel="noopener" style="margin-bottom:10px;">${isEmail ? 'Apply by email' : 'Apply now'}</a>`
       : '<p class="mentor-meta" style="margin-bottom:10px;">No application link was provided.</p>'}
       <button class="btn btn-secondary btn-block" id="close-opp-modal">Close</button>
@@ -1663,7 +1734,7 @@ async function renderMyPosts() {
 }
 
 /* --------------------------------------------------------------------
-   Admin dashboard (FR-12) — real, all four tabs
+   Admin dashboard (FR-12)
    -------------------------------------------------------------------- */
 
 let allAdminUsers = [];
@@ -1684,7 +1755,7 @@ async function renderAdminTable() {
     const users = await usersRes.json();
 
     if (!statsRes.ok || !usersRes.ok) {
-      tbody.innerHTML = `<tr><td colspan="6">${stats.error || users.error || 'Could not load admin data.'}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7">${escapeHTML(stats.error || users.error || 'Could not load admin data.')}</td></tr>`;
       return;
     }
 
@@ -1696,34 +1767,49 @@ async function renderAdminTable() {
 
     allAdminUsers = users;
     tbody.innerHTML = users.map(adminRowHTML).join('');
-    wireAdminActions(tbody, token);
+    wireAdminActions(tbody);
   } catch {
-    tbody.innerHTML = '<tr><td colspan="6">Could not reach the server.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7">Could not reach the server.</td></tr>';
   }
 }
 
 function adminRowHTML(u) {
-  const joined = new Date(u.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   const isSuspended = u.status === 'suspended';
+  const roleLabel = { mentor: 'Mentor', mentee: 'Mentee', admin: 'Admin' }[u.role] || 'No role';
+  const lastActive = u.last_login_at ? timeAgo(u.last_login_at) : 'Never';
   return `
     <tr>
-      <td>${u.name}</td><td>${u.email}</td><td>${u.role}</td>
-      <td>${isSuspended ? 'Flagged' : 'Active'}</td><td>${joined}</td>
-      <td><button class="btn btn-secondary" data-action="toggle-status" data-user-id="${u.user_id}">
+      <td><strong>${escapeHTML(u.name)}</strong><br><span class="md-muted st-small">${escapeHTML(u.email)}${u.staff_number ? ' · ' + escapeHTML(u.staff_number) : ''}</span></td>
+      <td>${roleLabel}${u.employment_status ? `<br><span class="md-muted st-small">${u.employment_status === 'former' ? 'Former staff' : 'Current staff'}</span>` : ''}</td>
+      <td>${escapeHTML(u.department || '')}</td>
+      <td><span class="md-pill ${isSuspended ? 'rejected' : 'approved'}">${isSuspended ? 'Suspended' : 'Active'}</span></td>
+      <td>${lastActive}</td>
+      <td>${u.totp_enabled ? 'On' : '<span class="md-muted">Off</span>'}</td>
+      <td>${u.role === 'admin' ? '' : `<button class="btn btn-secondary md-btn-sm" data-action="toggle-status" data-user-id="${u.user_id}" data-name="${escapeHTML(u.name)}" data-suspended="${isSuspended ? 1 : 0}">
         ${isSuspended ? 'Reactivate' : 'Suspend'}
-      </button></td>
+      </button>`}</td>
     </tr>`;
 }
 
-function wireAdminActions(tbody, token) {
+function wireAdminActions(tbody) {
   tbody.querySelectorAll('[data-action="toggle-status"]').forEach((btn) => {
     btn.addEventListener('click', async () => {
-      const userId = btn.dataset.userId;
+      const suspending = btn.dataset.suspended === '0';
+      let reason = '';
+      if (suspending) {
+        reason = prompt(`Why are you suspending ${btn.dataset.name}? They will see this reason.`, '');
+        if (reason === null) return;
+        reason = reason.trim();
+        if (!reason) { alert('Give a short reason so the member knows why.'); return; }
+      } else if (!confirm(`Reactivate ${btn.dataset.name}?`)) {
+        return;
+      }
       btn.disabled = true;
       try {
-        const res = await fetch(`${API_BASE}/admin/users/${userId}/toggle-status`, {
+        const res = await fetch(`${API_BASE}/admin/users/${btn.dataset.userId}/toggle-status`, {
           method: 'PATCH',
-          headers: { Authorization: `Bearer ${token}` }
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason })
         });
         const result = await res.json();
         if (!res.ok) { alert(result.error || 'Action failed'); btn.disabled = false; return; }
@@ -1741,15 +1827,187 @@ function wireAdminSearch() {
   const input = document.getElementById('admin-user-search');
   if (!input) return;
   input.addEventListener('input', () => {
-    const q = input.value.toLowerCase();
-    const filtered = allAdminUsers.filter((u) => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q));
+    const q = input.value.trim().toLowerCase();
+    const filtered = allAdminUsers.filter((u) =>
+      [u.name, u.email, u.staff_number, u.department, u.role].some((v) => String(v || '').toLowerCase().includes(q)));
     const tbody = document.getElementById('admin-table-body');
-    tbody.innerHTML = filtered.map(adminRowHTML).join('');
-    wireAdminActions(tbody, localStorage.getItem('alumnet_token'));
+    tbody.innerHTML = filtered.length ? filtered.map(adminRowHTML).join('') : '<tr><td colspan="7" class="md-muted">No members match that search.</td></tr>';
+    wireAdminActions(tbody);
   });
 }
 
-const ADMIN_TABS = ['overview', 'users', 'events', 'opportunities', 'logs'];
+/* ---------- Identity verification queue ---------- */
+
+async function renderAdminVerification() {
+  const list = document.getElementById('admin-verification-list');
+  if (!list) return;
+  const res = await fetch(`${API_BASE}/admin/signup-requests`);
+  const rows = await res.json().catch(() => []);
+  if (!res.ok) { list.innerHTML = `<p class="md-muted">${escapeHTML(rows.error || 'Could not load sign-up requests.')}</p>`; return; }
+  updateVerificationBadge(rows.length);
+  if (!rows.length) {
+    list.innerHTML = mdEmpty('check', 'Nobody waiting', 'Sign-ups that match HR records are verified automatically. Only the rest appear here.');
+    return;
+  }
+  const riskText = { low: 'Low risk', medium: 'Check first', high: 'High risk' };
+  list.innerHTML = rows.map((r) => `
+    <article class="vr-card" data-request="${r.request_id}">
+      <div class="vr-head">
+        <div>
+          <h3>${escapeHTML(r.full_name)} <span class="md-muted st-small">${escapeHTML(r.staff_number)}</span></h3>
+          <div class="md-muted st-small">Requested ${timeAgo(r.created_at)}${r.role_if_approved ? ' · would join as ' + r.role_if_approved : ''}</div>
+        </div>
+        <span class="md-pill risk-${r.risk_level}">${riskText[r.risk_level] || r.risk_level}</span>
+      </div>
+      <dl class="vr-cols">
+        <div><dt>Entered</dt><dd>${escapeHTML(r.full_name)}<br>${escapeHTML(r.email)} (confirmed)<br>${escapeHTML(r.phone || '')}</dd></div>
+        <div><dt>HR record</dt><dd>${r.hr_name ? `${escapeHTML(r.hr_name)}<br>${escapeHTML(r.hr_department || '')}, ${r.hr_status === 'former' ? 'former staff' : 'current staff'}<br>${escapeHTML(r.hr_phone || 'No phone on record')}` : 'No HR record for this staff number'}</dd></div>
+      </dl>
+      <ul class="vr-signals">${r.signals.map((s) => `<li class="${s.ok ? 'ok' : 'bad'}">${escapeHTML(s.label)}</li>`).join('')}</ul>
+      ${r.suggestion ? `<p class="vr-suggest ${r.risk_level}">${escapeHTML(r.suggestion)}</p>` : ''}
+      <div class="field" style="margin-bottom:10px;">
+        <label for="vr-note-${r.request_id}">Note (required to reject; the person is not shown it)</label>
+        <input type="text" id="vr-note-${r.request_id}" maxlength="255" placeholder="e.g. Confirmed by phone on HR number">
+      </div>
+      <p class="st-msg" id="vr-msg-${r.request_id}"></p>
+      <div class="md-inline-actions">
+        <button class="btn btn-primary md-btn-sm" data-vr="${r.request_id}" data-decision="approved" ${r.hr_name ? '' : 'disabled'}>Approve</button>
+        <button class="btn btn-secondary md-btn-sm" data-vr="${r.request_id}" data-decision="rejected">Reject</button>
+      </div>
+    </article>`).join('');
+
+  list.querySelectorAll('[data-vr]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.vr;
+      const note = document.getElementById(`vr-note-${id}`).value.trim();
+      const msg = document.getElementById(`vr-msg-${id}`);
+      if (btn.dataset.decision === 'rejected' && !note) { setMsg(msg, 'Add a short note saying why you are rejecting.'); return; }
+      if (btn.dataset.decision === 'approved' && !confirm('Approve this person? Their account is created from the HR record.')) return;
+      btn.closest('.vr-card').querySelectorAll('button').forEach((b) => (b.disabled = true));
+      const { ok, data } = await apiSend('PATCH', `/admin/signup-requests/${id}/review`, { decision: btn.dataset.decision, note });
+      if (!ok) {
+        setMsg(msg, data.error);
+        btn.closest('.vr-card').querySelectorAll('button').forEach((b) => (b.disabled = false));
+        return;
+      }
+      renderAdminVerification();
+      renderAdminLogs();
+      renderAdminTable();
+    });
+  });
+}
+
+function updateVerificationBadge(count) {
+  document.querySelectorAll('[data-admin-tab="verification"], a[href="admin.html#verification"]').forEach((link) => {
+    let badge = link.querySelector('.nav-badge');
+    if (!count) { if (badge) badge.remove(); return; }
+    if (!badge) { badge = document.createElement('span'); badge.className = 'nav-badge'; link.appendChild(badge); }
+    badge.textContent = count;
+  });
+}
+
+/* ---------- HR records import ---------- */
+
+// Small CSV reader: handles quoted values with commas and doubled quotes
+function parseCSV(text) {
+  const rows = [];
+  let row = [];
+  let cell = '';
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quoted) {
+      if (ch === '"' && text[i + 1] === '"') { cell += '"'; i++; }
+      else if (ch === '"') quoted = false;
+      else cell += ch;
+    } else if (ch === '"') quoted = true;
+    else if (ch === ',') { row.push(cell); cell = ''; }
+    else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i++;
+      row.push(cell); cell = '';
+      if (row.some((c) => c.trim() !== '')) rows.push(row);
+      row = [];
+    } else cell += ch;
+  }
+  row.push(cell);
+  if (row.some((c) => c.trim() !== '')) rows.push(row);
+  if (!rows.length) return [];
+  const headers = rows[0].map((h) => h.trim().toLowerCase().replace(/^﻿/, '').replace(/\s+/g, '_'));
+  return rows.slice(1).map((r) => Object.fromEntries(headers.map((h, i) => [h, (r[i] ?? '').trim()])));
+}
+
+function wireHrImport() {
+  const input = document.getElementById('hr-file');
+  if (!input) return;
+  const msg = document.getElementById('hr-msg');
+  const preview = document.getElementById('hr-preview');
+  let rows = null;
+
+  const list = (items, fmt) => items.length
+    ? `<ul class="vr-signals">${items.slice(0, 20).map((x) => `<li class="bad">${fmt(x)}</li>`).join('')}${items.length > 20 ? `<li>and ${items.length - 20} more</li>` : ''}</ul>`
+    : '';
+
+  input.addEventListener('change', async () => {
+    setMsg(msg, '');
+    preview.innerHTML = '';
+    const file = input.files[0];
+    if (!file) return;
+    if (file.size > 1.5 * 1024 * 1024) { setMsg(msg, 'That file is too large. Split it into smaller files.'); return; }
+    rows = parseCSV(await file.text());
+    if (!rows.length) { setMsg(msg, 'No rows found in that file.'); return; }
+    if (!('staff_number' in rows[0]) || !('employment_status' in rows[0])) {
+      setMsg(msg, 'The file needs at least staff_number and employment_status columns.');
+      return;
+    }
+    const { ok, data } = await apiSend('POST', '/admin/hr/preview', { rows });
+    if (!ok) { setMsg(msg, data.error); return; }
+    preview.innerHTML = `
+      <div class="hr-summary">
+        <div><strong>${data.added.length}</strong><span>New staff</span></div>
+        <div><strong>${data.updated.length}</strong><span>Updated</span></div>
+        <div><strong>${data.unchanged}</strong><span>Unchanged</span></div>
+        <div><strong>${data.retiring.length}</strong><span>Now former staff</span></div>
+        <div><strong>${data.invalid.length}</strong><span>Rows with problems</span></div>
+      </div>
+      ${data.retiring.length ? `<p class="st-text"><strong>These members become mentors.</strong> Their open requests as mentees will be closed and they will be told why.</p>${list(data.retiring, (x) => `${escapeHTML(x.full_name)} (${escapeHTML(x.staff_number)})`).replace(/class="bad"/g, '')}` : ''}
+      ${data.ineligible.length ? `<p class="st-text"><strong>These members lose access</strong> because HR marks them not eligible.</p>${list(data.ineligible, (x) => `${escapeHTML(x.full_name)} (${escapeHTML(x.staff_number)})`)}` : ''}
+      ${data.invalid.length ? `<p class="st-text"><strong>Skipped rows:</strong></p>${list(data.invalid, (x) => `Line ${x.line}${x.staff_number ? ' (' + escapeHTML(x.staff_number) + ')' : ''}: ${escapeHTML(x.errors.join(', '))}`)}` : ''}
+      <div class="st-actions">
+        <button type="button" class="btn-quiet" id="hr-cancel">Cancel</button>
+        <button type="button" class="btn btn-primary md-btn-sm" id="hr-apply" ${data.added.length + data.updated.length ? '' : 'disabled'}>Apply changes</button>
+      </div>`;
+    document.getElementById('hr-cancel').onclick = () => { preview.innerHTML = ''; input.value = ''; rows = null; };
+    document.getElementById('hr-apply').onclick = async () => {
+      const btn = document.getElementById('hr-apply');
+      btn.disabled = true;
+      btn.textContent = 'Applying...';
+      const r = await apiSend('POST', '/admin/hr/apply', { rows });
+      if (!r.ok) { setMsg(msg, r.data.error); btn.disabled = false; btn.textContent = 'Apply changes'; return; }
+      preview.innerHTML = '';
+      input.value = '';
+      setMsg(msg, `Done: ${r.data.summary}.`, true);
+      renderAdminTable();
+      renderAdminLogs();
+    };
+  });
+}
+
+/* Admin tools need 2FA: show one clear message instead of empty tabs */
+async function checkAdminTwoFactor() {
+  const banner = document.getElementById('admin-2fa-required');
+  if (!banner) return;
+  try {
+    const res = await fetch(`${API_BASE}/admin/stats`);
+    if (res.status !== 403) return;
+    const data = await res.json();
+    if (data.code !== 'two_factor_required') return;
+    banner.style.display = 'block';
+    document.querySelectorAll('[id^="admin-tab-"]').forEach((el) => { el.style.opacity = '0.35'; el.style.pointerEvents = 'none'; });
+  } catch { /* offline */ }
+}
+
+
+const ADMIN_TABS = ['overview', 'verification', 'users', 'hr', 'events', 'opportunities', 'logs'];
 
 function showAdminTab(name) {
   ADMIN_TABS.forEach((t) => {
@@ -1790,13 +2048,13 @@ async function renderAdminEvents() {
 
   const res = await fetch(`${API_BASE}/admin/events`, { headers: { Authorization: `Bearer ${token}` } });
   const events = await res.json();
-  if (!res.ok) { tbody.innerHTML = `<tr><td colspan="4">${events.error}</td></tr>`; return; }
+  if (!res.ok) { tbody.innerHTML = `<tr><td colspan="5">${escapeHTML(events.error)}</td></tr>`; return; }
 
   tbody.innerHTML = events.map((e) => `
     <tr>
-      <td>${e.title}</td>
+      <td>${escapeHTML(e.title)}</td>
       <td>${new Date(e.event_date).toLocaleString('en-GB')}</td>
-      <td>${e.description || ''}</td>
+      <td>${escapeHTML(e.description || '')}</td>
       <td><span class="request-status ${e.status}">${e.status}</span></td>
       <td><button class="btn btn-secondary" data-delete-event="${e.event_id}">Delete</button></td>
     </tr>`).join('');
@@ -1894,6 +2152,14 @@ async function renderAdminOpportunities() {
   });
 }
 
+const ADMIN_ACTION_LABELS = {
+  suspend_user: 'Suspended', reactivate_user: 'Reactivated',
+  approve_signup: 'Sign-up approved', reject_signup: 'Sign-up rejected', import_hr: 'HR import',
+  create_event: 'Event created', delete_event: 'Event deleted',
+  approved_event: 'Event approved', rejected_event: 'Event rejected',
+  approved_opportunity: 'Opportunity approved', rejected_opportunity: 'Opportunity rejected'
+};
+
 async function renderAdminLogs() {
   const tbody = document.getElementById('admin-logs-body');
   if (!tbody) return;
@@ -1901,18 +2167,20 @@ async function renderAdminLogs() {
 
   const res = await fetch(`${API_BASE}/admin/activity-logs`, { headers: { Authorization: `Bearer ${token}` } });
   const logs = await res.json();
-  if (!res.ok) { tbody.innerHTML = `<tr><td colspan="5">${logs.error}</td></tr>`; return; }
+  if (!res.ok) { tbody.innerHTML = `<tr><td colspan="4">${escapeHTML(logs.error)}</td></tr>`; return; }
+  if (!logs.length) { tbody.innerHTML = '<tr><td colspan="4" class="md-muted">No admin activity yet.</td></tr>'; return; }
 
   tbody.innerHTML = logs.map((l) => `
     <tr>
-      <td>${new Date(l.created_at).toLocaleString('en-GB')}</td>
-      <td>${l.admin_name}</td><td>${l.action_type}</td>
-      <td>${l.target_entity} #${l.target_entity_id}</td><td>${l.description || ''}</td>
+      <td>${new Date(l.created_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
+      <td>${escapeHTML(l.admin_name)}</td>
+      <td><span class="tag" style="white-space:nowrap;">${escapeHTML(ADMIN_ACTION_LABELS[l.action_type] || mdHumanise(l.action_type))}</span></td>
+      <td>${escapeHTML(l.description || l.target_label || '')}</td>
     </tr>`).join('');
 }
 
 /* --------------------------------------------------------------------
-   Notifications — still mock
+   Notifications
    -------------------------------------------------------------------- */
 
 // Escapes user-supplied text before it goes into innerHTML
@@ -2071,6 +2339,10 @@ const MD_ICONS = {
   calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
   dot: '<circle cx="12" cy="12" r="4"/>',
+  activity: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+  briefcase: '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>',
+  search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
   spark: '<path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>'
 };
 
@@ -2450,12 +2722,13 @@ async function renderAdminOverview() {
   const root = document.getElementById('admin-tab-overview');
   if (!root) return;
 
-  const [statsRaw, usersRaw, eventsRaw, oppsRaw, logsRaw] = await Promise.all([
+  const [statsRaw, usersRaw, eventsRaw, oppsRaw, logsRaw, signupsRaw] = await Promise.all([
     mdGet('/admin/stats'),
     mdGet('/admin/users'),
     mdGet('/admin/events/pending'),
     mdGet('/admin/opportunities/pending'),
-    mdGet('/admin/activity-logs')
+    mdGet('/admin/activity-logs'),
+    mdGet('/admin/signup-requests')
   ]);
 
   const stats = statsRaw || {};
@@ -2463,7 +2736,8 @@ async function renderAdminOverview() {
   const pendingEvents = mdList(eventsRaw);
   const pendingOpps = mdList(oppsRaw);
   const logs = mdList(logsRaw);
-  const toReview = pendingEvents.length + pendingOpps.length;
+  const signups = mdList(signupsRaw);
+  const toReview = pendingEvents.length + pendingOpps.length + signups.length;
 
   // ---------- Header ----------
   document.getElementById('ov-date').textContent = new Date().toLocaleDateString('en-GB', {
@@ -2490,6 +2764,10 @@ async function renderAdminOverview() {
 
   // ---------- Needs review ----------
   const reviewRows = [
+    ...signups.map((r) => ({
+      kind: 'signup', id: r.request_id, title: r.full_name, label: 'Identity check',
+      meta: `${r.staff_number} · ${{ low: 'low risk', medium: 'check first', high: 'high risk' }[r.risk_level] || ''}`
+    })),
     ...pendingEvents.map((e) => ({
       kind: 'event', id: e.event_id, title: e.title, label: 'Event',
       meta: `Proposed by ${e.proposed_by_name || 'a mentor'}${e.event_date ? ' · ' + new Date(e.event_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : ''}`
@@ -2502,17 +2780,19 @@ async function renderAdminOverview() {
   document.getElementById('ov-review').innerHTML = reviewRows.length
     ? reviewRows.slice(0, 6).map((r) => `
         <div class="md-item">
-          <div class="md-avatar md-avatar-soft">${mdIcon(MD_ICONS[r.kind === 'event' ? 'calendar' : 'briefcase'])}</div>
+          <div class="md-avatar md-avatar-soft">${mdIcon(MD_ICONS[{ event: 'calendar', signup: 'shield' }[r.kind] || 'briefcase'])}</div>
           <div class="md-item-body">
             <div class="md-item-title">${escapeHTML(r.title || 'Untitled')}</div>
             <div class="md-item-meta">${r.label} · ${escapeHTML(r.meta)}</div>
           </div>
           <div class="md-inline-actions">
-            <button class="btn btn-primary md-btn-sm" data-ov-review="${r.id}" data-kind="${r.kind}" data-decision="approved">Approve</button>
-            <button class="btn btn-secondary md-btn-sm" data-ov-review="${r.id}" data-kind="${r.kind}" data-decision="rejected">Reject</button>
+            ${r.kind === 'signup'
+              ? '<a href="#verification" class="btn btn-secondary md-btn-sm" data-goto-tab="verification">Review</a>'
+              : `<button class="btn btn-primary md-btn-sm" data-ov-review="${r.id}" data-kind="${r.kind}" data-decision="approved">Approve</button>
+            <button class="btn btn-secondary md-btn-sm" data-ov-review="${r.id}" data-kind="${r.kind}" data-decision="rejected">Reject</button>`}
           </div>
         </div>`).join('')
-    : mdEmpty('check', 'All clear', 'Event proposals and opportunity posts from mentors appear here for approval.');
+    : mdEmpty('check', 'All clear', 'Identity checks, event proposals and opportunity posts appear here for approval.');
 
   document.querySelectorAll('[data-ov-review]').forEach((btn) => {
     btn.addEventListener('click', async () => {
@@ -2630,18 +2910,12 @@ async function renderAccountSettings() {
   document.getElementById('st-name').textContent = account.name;
   document.getElementById('st-email').textContent = account.email;
   document.getElementById('st-created').textContent = formatDate(account.createdAt);
-  document.getElementById('st-username').value = account.username || '';
+  document.getElementById('st-role').textContent = { mentee: 'Mentee (current staff)', mentor: 'Mentor (former staff)', admin: 'Administrator' }[account.role] || account.role;
+  document.getElementById('st-verified').textContent = account.verified
+    ? `Verified against HR records (${account.employmentStatus === 'former' ? 'former' : 'current'} staff)`
+    : (account.role === 'admin' ? 'Alumni office account' : 'Not linked to an HR record');
+  if (account.role === 'admin' && !account.twoFactorEnabled) document.getElementById('st-admin-2fa').style.display = 'block';
   document.getElementById('st-pw-changed').textContent = account.passwordChangedAt ? `Last changed ${timeAgo(account.passwordChangedAt)}` : '';
-
-  // ---------- Username ----------
-  const usernameForm = document.getElementById('username-form');
-  usernameForm.onsubmit = async (e) => {
-    e.preventDefault();
-    const msg = document.getElementById('username-msg');
-    const { ok, data } = await apiSend('PATCH', '/auth/username', { username: document.getElementById('st-username').value });
-    if (ok) document.getElementById('st-username').value = data.username;
-    setMsg(msg, ok ? 'Username saved.' : data.error, ok);
-  };
 
   // ---------- Password ----------
   const pwForm = document.getElementById('password-form');
@@ -2665,8 +2939,87 @@ async function renderAccountSettings() {
     }
   };
 
-  drawTwoFactorPanel(account.twoFactorEnabled);
+  // ---------- Sessions ----------
+  document.getElementById('logout-everywhere').onclick = async () => {
+    if (!confirm('Log out of AlumNet on every device, including this one?')) return;
+    const { ok, data } = await apiSend('POST', '/auth/logout-everywhere');
+    if (!ok) { setMsg(document.getElementById('sessions-msg'), data.error); return; }
+    clearSession();
+    window.location.href = 'login.html';
+  };
+
+  // ---------- Data rights ----------
+  document.getElementById('export-data').onclick = async () => {
+    const btn = document.getElementById('export-data');
+    btn.disabled = true;
+    try {
+      const res = await fetch(`${API_BASE}/auth/account/export`);
+      if (!res.ok) throw new Error();
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `alumnet-my-data-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    } catch {
+      alert('Could not download your data. Try again.');
+    } finally {
+      btn.disabled = false;
+    }
+  };
+
+  if (account.role === 'admin') {
+    document.getElementById('delete-wrap').style.display = 'none';
+  } else {
+    if (account.twoFactorEnabled) document.getElementById('del-code-field').style.display = 'block';
+    document.getElementById('delete-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const msg = document.getElementById('del-msg');
+      if (!document.getElementById('del-confirm').checked) { setMsg(msg, 'Tick the box to confirm.'); return; }
+      const { ok, data } = await apiSend('POST', '/auth/account/delete', {
+        password: document.getElementById('del-password').value,
+        code: document.getElementById('del-code').value
+      });
+      if (!ok) { setMsg(msg, data.error); return; }
+      clearSession();
+      window.location.href = 'login.html';
+    };
+  }
+
+  drawTwoFactorPanel(account.twoFactorEnabled, account.backupCodesLeft);
   drawGooglePanel(account.googleLinked);
+}
+
+// Shown once, straight after they are created. Only hashes are stored.
+function backupCodesHTML(codes) {
+  return `
+    <div class="st-codes-box">
+      <p class="st-text"><strong>Save these backup codes now.</strong> Each one works once if you lose your phone. You will not see them again.</p>
+      <ul class="st-codes">${codes.map((c) => `<li><code>${escapeHTML(c)}</code></li>`).join('')}</ul>
+      <div class="st-actions" style="justify-content:flex-start; gap:10px;">
+        <button type="button" class="btn btn-secondary md-btn-sm" id="codes-copy">Copy</button>
+        <button type="button" class="btn btn-secondary md-btn-sm" id="codes-download">Download</button>
+      </div>
+    </div>`;
+}
+
+function wireBackupCodeButtons(codes) {
+  const text = `AlumNet backup codes (each works once)\n\n${codes.join('\n')}\n`;
+  const copy = document.getElementById('codes-copy');
+  if (copy) copy.onclick = async () => {
+    try { await navigator.clipboard.writeText(text); copy.textContent = 'Copied'; } catch { copy.textContent = 'Copy failed'; }
+  };
+  const dl = document.getElementById('codes-download');
+  if (dl) dl.onclick = () => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+    a.download = 'alumnet-backup-codes.txt';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
 }
 
 function setPill(id, on, onText, offText) {
@@ -2675,18 +3028,32 @@ function setPill(id, on, onText, offText) {
   pill.className = `md-pill ${on ? 'approved' : 'neutral'}`;
 }
 
-function drawTwoFactorPanel(enabled) {
+function drawTwoFactorPanel(enabled, codesLeft = 0, newCodes = null) {
   const panel = document.getElementById('twofa-panel');
   setPill('twofa-pill', enabled, 'On', 'Off');
+  const adminBanner = document.getElementById('st-admin-2fa');
+  if (adminBanner && enabled) adminBanner.style.display = 'none';
 
   if (enabled) {
+    const low = codesLeft <= 2;
     panel.innerHTML = `
       <p class="st-text">Each time you log in, AlumNet asks for a code from your authenticator app as well as your password.</p>
+      ${newCodes ? backupCodesHTML(newCodes) : `
+        <p class="st-text" ${low ? 'style="color:var(--kq-red);"' : ''}>Backup codes left: <strong>${codesLeft}</strong>${low ? '. Make new ones so you are not locked out.' : ''}</p>`}
+      <details class="st-disclosure">
+        <summary>Make new backup codes</summary>
+        <form id="codes-form" novalidate>
+          <p class="st-text">Your old codes stop working.</p>
+          <div class="field"><label for="codes-password">Password</label><input type="password" id="codes-password" autocomplete="current-password"></div>
+          <p class="st-msg" id="codes-msg"></p>
+          <button type="submit" class="btn btn-secondary md-btn-sm">Make new codes</button>
+        </form>
+      </details>
       <details class="st-disclosure">
         <summary>Turn off two-factor authentication</summary>
         <form id="twofa-disable-form" novalidate>
           <div class="field"><label for="tf-off-password">Password</label><input type="password" id="tf-off-password" autocomplete="current-password"></div>
-          <div class="field"><label for="tf-off-code">Current code from your app</label><input type="text" id="tf-off-code" class="code-input" inputmode="numeric" maxlength="6" placeholder="000000"></div>
+          <div class="field"><label for="tf-off-code">Code from your app, or a backup code</label><input type="text" id="tf-off-code" class="code-input" maxlength="11" placeholder="000000"></div>
           <p class="st-msg" id="tf-off-msg"></p>
           <button type="submit" class="btn btn-secondary md-btn-sm">Turn off</button>
         </form>
@@ -2700,6 +3067,13 @@ function drawTwoFactorPanel(enabled) {
       if (ok) drawTwoFactorPanel(false);
       else setMsg(document.getElementById('tf-off-msg'), data.error);
     };
+    document.getElementById('codes-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const { ok, data } = await apiSend('POST', '/auth/2fa/backup-codes', { password: document.getElementById('codes-password').value });
+      if (ok) drawTwoFactorPanel(true, data.backupCodes.length, data.backupCodes);
+      else setMsg(document.getElementById('codes-msg'), data.error);
+    };
+    if (newCodes) wireBackupCodeButtons(newCodes);
     return;
   }
 
@@ -2730,7 +3104,7 @@ function drawTwoFactorPanel(enabled) {
     document.getElementById('twofa-enable-form').onsubmit = async (e) => {
       e.preventDefault();
       const result = await apiSend('POST', '/auth/2fa/enable', { code: document.getElementById('tf-code').value });
-      if (result.ok) drawTwoFactorPanel(true);
+      if (result.ok) drawTwoFactorPanel(true, result.data.backupCodes.length, result.data.backupCodes);
       else setMsg(document.getElementById('tf-msg'), result.data.error);
     };
   };
@@ -2766,4 +3140,124 @@ async function drawGooglePanel(linked) {
     setMsg(document.getElementById('google-msg'), 'Google sign-in is not set up on this server yet.');
     document.getElementById('google-msg').style.color = 'var(--slate)';
   }
+}
+
+/* --------------------------------------------------------------------
+   First-time setup wizard. Suggestions come from the person's HR
+   department so they do not start from a blank page. Skipping still
+   marks the account as set up, so the wizard never nags.
+   -------------------------------------------------------------------- */
+
+const DEPARTMENT_SKILLS = {
+  'Flight Operations': ['Crew resource management', 'Flight planning', 'Aviation safety', 'Fleet scheduling', 'Regulatory compliance', 'Pilot training'],
+  'Cabin Services': ['Passenger safety', 'Customer service', 'Crew leadership', 'First aid', 'Service training', 'Conflict resolution'],
+  'Engineering & Maintenance': ['Aircraft maintenance', 'Quality assurance', 'Technical documentation', 'Reliability analysis', 'Regulatory compliance', 'Root cause analysis'],
+  'Ground Operations': ['Ramp operations', 'Turnaround planning', 'Ground safety', 'Team supervision', 'Baggage systems', 'On-time performance'],
+  'Cargo & Logistics': ['Cargo handling', 'Dangerous goods', 'Supply chain', 'Customs procedures', 'Revenue management', 'Warehouse operations'],
+  'Customer Experience': ['Customer service', 'Complaint handling', 'Service design', 'Loyalty programmes', 'Data analysis', 'Stakeholder management'],
+  'Commercial & Sales': ['Sales strategy', 'Revenue management', 'Pricing', 'Partnerships', 'Market analysis', 'Negotiation'],
+  'IT & Digital': ['Software development', 'Data analysis', 'Cybersecurity', 'Systems administration', 'Project management', 'Cloud platforms'],
+  'Human Resources': ['Recruitment', 'Employee relations', 'Training and development', 'Performance management', 'Labour law', 'Payroll'],
+  Finance: ['Financial reporting', 'Budgeting', 'Audit', 'Treasury', 'Cost control', 'Financial analysis'],
+  Security: ['Aviation security', 'Risk assessment', 'Incident response', 'Screening procedures', 'Regulatory compliance', 'Investigations'],
+  Corporate: ['Strategy', 'Corporate communications', 'Governance', 'Project management', 'Stakeholder management', 'Public relations']
+};
+const MENTEE_GOALS = ['Leadership', 'Moving into management', 'Changing department', 'Technical certification', 'Further studies', 'Public speaking', 'Career planning', 'Work-life balance'];
+const MENTOR_HELP = ['Leadership', 'Career planning', 'Technical guidance', 'Interview preparation', 'Moving into management', 'Industry knowledge', 'Retirement planning', 'Starting a business'];
+
+function chipPicker(container, options, textarea) {
+  const current = () => splitList(textarea.value).map((x) => x.toLowerCase());
+  container.innerHTML = options.map((o) => `<button type="button" class="ob-chip" data-chip="${escapeHTML(o)}">${escapeHTML(o)}</button>`).join('');
+  const sync = () => container.querySelectorAll('.ob-chip').forEach((c) => c.classList.toggle('on', current().includes(c.dataset.chip.toLowerCase())));
+  container.querySelectorAll('.ob-chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      const items = splitList(textarea.value);
+      const i = items.findIndex((x) => x.toLowerCase() === chip.dataset.chip.toLowerCase());
+      if (i >= 0) items.splice(i, 1); else items.push(chip.dataset.chip);
+      textarea.value = items.join(', ');
+      sync();
+    });
+  });
+  textarea.addEventListener('input', sync);
+  sync();
+}
+
+async function wireOnboarding() {
+  const root = document.getElementById('onboarding-page');
+  if (!root) return;
+  const p = await mdGet('/profile/me');
+  if (!p) { document.getElementById('ob-sub').textContent = 'Could not load your profile. Refresh to try again.'; return; }
+  const home = HOME_PAGE[p.role] || 'login.html';
+  if (p.onboarded_at) { window.location.href = home; return; }
+
+  const mentor = p.role === 'mentor';
+  document.getElementById('ob-title').textContent = `Welcome, ${(p.name || '').split(' ')[0]}`;
+  document.getElementById('ob-sub').textContent = mentor
+    ? 'You have joined as a mentor. A few details help current staff find you. It takes about two minutes.'
+    : 'You have joined as a mentee. A few details help us match you with the right mentor. It takes about two minutes.';
+  document.getElementById('ob-headline').placeholder = mentor ? 'e.g. Retired Captain, 25 years with Kenya Airways' : 'e.g. Cabin Crew | Aspiring Safety Trainer';
+  document.getElementById('ob-exp-hint').textContent = mentor
+    ? 'The roles you held at Kenya Airways and what you are proud of.'
+    : 'Your current role and what you do day to day.';
+  document.getElementById('ob-years-field').style.display = mentor ? 'block' : 'none';
+  if (mentor) {
+    document.getElementById('ob-goals-title').textContent = 'What you can help with';
+    document.getElementById('ob-goals-hint').textContent = 'Areas where you would like to guide current staff.';
+    document.getElementById('ob-goals-label').textContent = 'Areas you can help with';
+  }
+
+  const f = {
+    headline: document.getElementById('ob-headline'), city: document.getElementById('ob-city'),
+    country: document.getElementById('ob-country'), skills: document.getElementById('ob-skills'),
+    experience: document.getElementById('ob-experience'), years: document.getElementById('ob-years'),
+    goals: document.getElementById('ob-goals')
+  };
+  f.headline.value = p.headline || '';
+  f.city.value = p.city || '';
+  f.country.value = p.country || 'Kenya';
+  f.skills.value = p.skills || '';
+  f.experience.value = p.experience || '';
+  f.years.value = p.years_of_experience ?? '';
+  f.goals.value = p.career_interests || '';
+  chipPicker(document.getElementById('ob-skill-chips'), DEPARTMENT_SKILLS[p.department] || DEPARTMENT_SKILLS.Corporate, f.skills);
+  chipPicker(document.getElementById('ob-goal-chips'), mentor ? MENTOR_HELP : MENTEE_GOALS, f.goals);
+
+  let step = 1;
+  const total = 4;
+  const msg = document.getElementById('ob-msg');
+  const next = document.getElementById('ob-next');
+  const back = document.getElementById('ob-back');
+  function show() {
+    root.querySelectorAll('.ob-step').forEach((el) => { el.style.display = Number(el.dataset.step) === step ? 'block' : 'none'; });
+    document.querySelectorAll('#ob-progress span').forEach((s, i) => s.classList.toggle('on', i < step));
+    back.style.display = step > 1 ? 'inline-flex' : 'none';
+    next.textContent = step === total ? 'Finish' : 'Next';
+    setMsg(msg, '');
+  }
+
+  async function save(finish) {
+    const body = {
+      headline: f.headline.value, city: f.city.value, country: f.country.value,
+      skills: f.skills.value, experience: f.experience.value, careerInterests: f.goals.value
+    };
+    if (mentor) body.yearsOfExperience = f.years.value;
+    if (finish) body.completeOnboarding = true;
+    return apiSend('PUT', '/profile/me', body);
+  }
+
+  next.addEventListener('click', async () => {
+    if (step === 2 && !splitList(f.skills.value).length) { setMsg(msg, 'Add at least one skill. Matching depends on it.'); return; }
+    if (step < total) { step++; show(); return; }
+    next.disabled = true;
+    const { ok, data } = await save(true);
+    next.disabled = false;
+    if (!ok) { setMsg(msg, data.error || 'Could not save. Try again.'); return; }
+    window.location.href = home;
+  });
+  back.addEventListener('click', () => { step--; show(); });
+  document.getElementById('ob-skip').addEventListener('click', async () => {
+    await apiSend('PUT', '/profile/me', { completeOnboarding: true });
+    window.location.href = home;
+  });
+  show();
 }

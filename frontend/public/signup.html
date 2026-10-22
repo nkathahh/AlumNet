@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sign up — AlumNet</title>
+  <title>Sign up AlumNet</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 
@@ -44,115 +44,109 @@
           <a href="signup.html" class="active">Sign up</a>
         </div>
 
-        <h2>Create your alumni account</h2>
-        <span class="sub">A few details help AlumNet match you with the right mentors.</span>
-
-        <form id="signup-form" novalidate>
-          <div class="field">
-            <label for="role">I am a</label>
-            <select id="role" name="role" required>
-              <option value="">Select one</option>
-              <option value="mentee">Current Kenya Airways employee</option>
-              <option value="mentor">Former crew / staff (alumnus)</option>
-            </select>
-          </div>
-
-          <div id="staff-fields" style="display:none;">
+        <!-- Step 1: staff number and email only -->
+        <div id="su-start" class="su-step">
+          <h2>Join AlumNet</h2>
+          <span class="sub">For current and former Kenya Airways staff. We check your details against HR records, so you do not choose a role: current staff join as mentees and former staff as mentors.</span>
+          <form id="signup-start-form" novalidate>
             <div class="field">
-              <label for="staffNumber">Staff number</label>
-              <input type="text" id="staffNumber" name="staffNumber" placeholder="KQ48213">
-              <p class="field-hint" id="staff-lookup-status"></p>
+              <label for="su-staff">Staff number</label>
+              <input type="text" id="su-staff" name="staffNumber" placeholder="e.g. KQ48213" autocomplete="off" autocapitalize="characters" required>
             </div>
-            <div class="field-row">
-              <div class="field">
-                <label for="fullName">Full name</label>
-                <input type="text" id="fullName" readonly placeholder="Auto-filled after verification">
+            <div class="field">
+              <label for="su-email">Email</label>
+              <input type="email" id="su-email" name="email" autocomplete="email" required>
+              <p class="field-hint">Current staff: your KQ work email. Former staff: the personal email HR holds for you. If yours has changed, use your current one and the alumni office will verify you.</p>
+            </div>
+            <label class="check-row">
+              <input type="checkbox" id="su-privacy" name="acceptPrivacy">
+              <span>I have read the <a href="privacy.html" target="_blank" rel="noopener">privacy notice</a> and agree that AlumNet may check my details against Kenya Airways HR records.</span>
+            </label>
+            <p id="su-start-error" style="color:var(--kq-red); font-size:0.85rem; display:none; margin-bottom:16px;"></p>
+            <button type="submit" class="btn btn-primary btn-block">Continue</button>
+          </form>
+          <p class="auth-switch">Already have an account? <a href="login.html">Log in</a></p>
+        </div>
+
+        <!-- Step 2: check email (same reply whatever was entered) -->
+        <div id="su-sent" class="su-step" style="display:none;">
+          <div class="auth-step-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></svg></div>
+          <h2>Check your email</h2>
+          <span class="sub">If those details can be used to join AlumNet, we have sent a link to <strong id="su-sent-email"></strong>. It expires in 24 hours.</span>
+          <p class="field-hint">Nothing arrived after a few minutes? Check your spam folder, or <button type="button" class="btn-quiet" id="su-again">start again</button>.</p>
+        </div>
+
+        <!-- Link opened: checking -->
+        <div id="su-checking" class="su-step" style="display:none;">
+          <h2>Checking your link...</h2>
+        </div>
+
+        <!-- 3a: matched HR automatically -->
+        <div id="su-password" class="su-step" style="display:none;">
+          <div class="auth-step-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6l-8-3Z" /></svg></div>
+          <h2 id="su-welcome">Welcome</h2>
+          <span class="sub" id="su-role-line"></span>
+          <form id="signup-password-form" novalidate>
+            <div class="field">
+              <label for="su-pass">Create a password</label>
+              <div style="position:relative;">
+                <input type="password" id="su-pass" name="password" autocomplete="new-password" required>
+                <button type="button" id="su-toggle" class="btn-quiet" style="position:absolute; right:6px; top:6px; padding:4px 8px;">Show</button>
               </div>
-              <div class="field">
-                <label for="department">Department</label>
-                <input type="text" id="department" readonly placeholder="Auto-filled after verification">
-              </div>
+              <p class="field-hint">At least 8 characters, with letters and numbers.</p>
             </div>
             <div class="field">
-              <label for="idNumberDisplay">ID number / passport no.</label>
-              <input type="text" id="idNumberDisplay" readonly placeholder="Auto-filled after verification">
+              <label for="su-pass2">Confirm password</label>
+              <input type="password" id="su-pass2" name="confirm" autocomplete="new-password" required>
             </div>
+            <p id="su-password-error" style="color:var(--kq-red); font-size:0.85rem; display:none; margin-bottom:16px;"></p>
+            <button type="submit" class="btn btn-primary btn-block">Create my account</button>
+          </form>
+          <div id="su-google" style="display:none;">
+            <div class="auth-divider"><span>or</span></div>
+            <div id="su-google-btn" class="google-btn-wrap"></div>
           </div>
+        </div>
 
-          <div id="mentee-email-field" style="display:none;" class="field">
-            <label for="emailMentee">Kenya Airways email</label>
-            <input type="email" id="emailMentee" readonly placeholder="Auto-filled after verification">
-          </div>
-          <div id="mentor-email-field" style="display:none;">
+        <!-- 3b: could not verify automatically -->
+        <div id="su-details" class="su-step" style="display:none;">
+          <div class="auth-step-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6l-8-3Z" /></svg></div>
+          <h2>Verify your identity</h2>
+          <span class="sub">Your email is confirmed, but it does not match the one HR holds for this staff number. Tell us who you are and the alumni office will check it against HR records.</span>
+          <form id="signup-details-form" novalidate>
             <div class="field">
-              <label for="emailMentor">Personal email</label>
-              <input type="email" id="emailMentor" placeholder="you@gmail.com">
-            </div>
-            <div class="field">
-              <label for="mentorYears">Years of experience at Kenya Airways</label>
-              <input type="number" id="mentorYears" min="0" max="50">
-            </div>
-          </div>
-
-          <div class="field">
-            <label for="username">Username</label>
-            <input type="text" id="username" name="username" autocomplete="username" placeholder="e.g. jwafula"
-              maxlength="30" required>
-            <p class="field-hint" id="username-status">Lowercase letters, numbers, dots or underscores. You can log in with this or your email.</p>
-          </div>
-
-          <div class="field">
-            <label for="password">Password</label>
-            <div style="position:relative;">
-              <input type="password" id="password" name="password" minlength="8" autocomplete="new-password" required>
-              <button type="button" id="toggle-password" class="btn-quiet"
-                style="position:absolute; right:6px; top:6px; padding:4px 8px;">Show</button>
-            </div>
-            <p class="field-hint">At least 8 characters, with letters and numbers.</p>
-          </div>
-          <div class="field">
-            <label for="confirmPassword">Confirm password</label>
-            <input type="password" id="confirmPassword" minlength="8" required>
-            <p class="field-hint" id="password-match-status"></p>
-          </div>
-
-          <div class="field">
-            <label for="mobileNumber">Mobile number</label>
-            <input type="text" id="mobileNumber" name="mobileNumber" placeholder="+254712345678">
-          </div>
-
-          <div class="field-row">
-            <div class="field">
-              <label for="country">Country</label>
-              <input type="text" id="country" name="country" placeholder="Kenya" required>
+              <label for="su-name">Full name, as HR knows it</label>
+              <input type="text" id="su-name" name="fullName" autocomplete="name" required>
             </div>
             <div class="field">
-              <label for="city">City</label>
-              <input type="text" id="city" name="city" placeholder="Nairobi" required>
+              <label for="su-phone">Phone number</label>
+              <input type="tel" id="su-phone" name="phone" autocomplete="tel" placeholder="0712 345 678" required>
+              <p class="field-hint">Ideally the number you used while at KQ. The office may call you on the number HR holds.</p>
             </div>
-          </div>
+            <div class="field">
+              <label for="su-pass-b">Create a password</label>
+              <input type="password" id="su-pass-b" name="password" autocomplete="new-password" required>
+              <p class="field-hint">At least 8 characters, with letters and numbers. You can log in once approved.</p>
+            </div>
+            <p id="su-details-error" style="color:var(--kq-red); font-size:0.85rem; display:none; margin-bottom:16px;"></p>
+            <button type="submit" class="btn btn-primary btn-block">Send for verification</button>
+          </form>
+        </div>
 
-          <div class="field"><label for="skills">Skills</label><textarea id="skills" name="skills"></textarea></div>
-          <div class="field"><label for="experience">Experience</label><textarea id="experience"
-              name="experience"></textarea></div>
-          <div class="field"><label for="interests">Career interests</label><textarea id="interests"
-              name="interests"></textarea></div>
-          <div class="field">
-            <label for="industry">Industry</label>
-            <select id="industry" name="industry">
-              <option>Aviation</option>
-              <option>Ground Operations</option>
-              <option>Logistics</option>
-              <option>Corporate / Support</option>
-              <option>Other</option>
-            </select>
-          </div>
+        <!-- Done: waiting for review -->
+        <div id="su-submitted" class="su-step" style="display:none;">
+          <div class="auth-step-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5" /></svg></div>
+          <h2>Thank you</h2>
+          <span class="sub" id="su-submitted-text">The alumni office will verify your details and email you, usually within two working days.</span>
+          <a href="login.html" class="btn btn-secondary btn-block" style="margin-top:18px;">Back to log in</a>
+        </div>
 
-          <p id="signup-error" style="color:var(--kq-red); font-size:0.85rem; display:none; margin-bottom:16px;"></p>
-          <button type="submit" class="btn btn-primary btn-block">Sign up</button>
-        </form>
-
-        <p class="auth-switch">Already have an account? <a href="login.html">Log in</a></p>
+        <!-- Link problem -->
+        <div id="su-invalid" class="su-step" style="display:none;">
+          <h2>This link no longer works</h2>
+          <span class="sub" id="su-invalid-text">It may have expired or already been used.</span>
+          <a href="signup.html" class="btn btn-primary btn-block" style="margin-top:18px;">Start again</a>
+        </div>
       </div>
     </div>
   </div>

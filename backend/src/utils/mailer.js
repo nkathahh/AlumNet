@@ -1,8 +1,7 @@
 const nodemailer = require('nodemailer');
 
 // Gmail SMTP using an app password (SMTP_USER and SMTP_PASS in .env).
-// Without them, emails are printed to the console instead, so the
-// app still works in development.
+// Without them, development emails are printed to the console instead.
 const transporter = process.env.SMTP_USER && process.env.SMTP_PASS
   ? nodemailer.createTransport({
     service: 'gmail',
@@ -10,13 +9,27 @@ const transporter = process.env.SMTP_USER && process.env.SMTP_PASS
   })
   : null;
 
+const isProduction = () => process.env.NODE_ENV === 'production';
+
 // The demo accounts use made-up addresses on real domains such as
-// kenya-airways.com. MAIL_DEV_REDIRECT sends every email to one inbox
-// you control, so no real person ever receives a test email.
+// kenya-airways.com. MAIL_DEV_REDIRECT sends every email to one inbox you
+// control. Outside production, nothing is ever sent without it, so a test
+// email can never reach a real person by accident.
 async function sendMail({ to, subject, text, html }) {
   const redirect = process.env.MAIL_DEV_REDIRECT;
   const finalTo = redirect || to;
   const finalSubject = redirect ? `[for ${to}] ${subject}` : subject;
+  const configured = Boolean(process.env.BREVO_API_KEY || transporter);
+
+  if (!configured || (!isProduction() && !redirect)) {
+    if (isProduction()) {
+      // Never print message bodies in production: they can contain sign-in links
+      console.warn(`[email not sent: email is not configured] to ${to}: ${subject}`);
+    } else {
+      console.log(`\n[email not sent: ${configured ? 'set MAIL_DEV_REDIRECT to send in development' : 'email not configured'}]\nTo: ${to}\nSubject: ${subject}\n${text}\n`);
+    }
+    return false;
+  }
 
   // Brevo's HTTPS API, for hosts that block outgoing SMTP (such as Render's free plan).
   // MAIL_FROM must be a sender address verified in Brevo.
@@ -34,11 +47,6 @@ async function sendMail({ to, subject, text, html }) {
     });
     if (!res.ok) throw new Error(`Brevo responded ${res.status}: ${await res.text()}`);
     return true;
-  }
-
-  if (!transporter) {
-    console.log(`\n[email not sent: email not configured]\nTo: ${finalTo}\nSubject: ${finalSubject}\n${text}\n`);
-    return false;
   }
 
   await transporter.sendMail({

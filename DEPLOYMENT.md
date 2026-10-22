@@ -119,7 +119,8 @@ If email is not set up, reset links appear in Render's **Logs** tab instead.
 
 ## 6. Check the live site
 
-1. Log in as each demo account, by email and by username.
+1. Log in as each demo account with its email. Turn on two-factor for the admin account first,
+   because the admin tools stay locked without it.
 2. As a mentee, open **Find a mentor**. The first request after the Space has been idle can
    take up to a minute.
 3. Use **Forgot password** and confirm the email arrives in your `MAIL_DEV_REDIRECT` inbox.

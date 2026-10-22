@@ -12,11 +12,25 @@ Strathmore University.
 
 ## Features
 
-- **Accounts:** registration validated against the staff directory, login with email or
-  username, Google sign-in for existing accounts, and role-based access (mentee, mentor, admin)
+- **Verified sign-up:** people enter only their staff number and email. If the email is the
+  one Kenya Airways HR holds (work email for current staff, personal email for former staff),
+  they set a password or use Google and are in. Otherwise the alumni office reviews the request
+  with the evidence already compared against HR (name, phone, attempts) and a risk level. The
+  reply is the same whatever is entered, so the form cannot be used to look up staff.
+- **Roles from HR, not a dropdown:** current staff are mentees and former staff are mentors.
+  The role is checked at every login and after every HR import, so a retiring employee becomes
+  a mentor automatically and their open mentee requests are closed.
+- **Sessions:** an HttpOnly cookie (not readable by page scripts), CSRF protection, log out
+  everywhere, and sessions that end at once on suspension, password change or HR changes
+- **Privacy:** privacy notice and consent at sign-up, download my data, delete my account,
+  automatic clean-up of old sign-up records, and mentee profiles visible only to mentors they
+  have contacted
+- **Admin tools:** identity verification queue, HR records import with a preview of changes,
+  a user table with role, department, last activity and 2FA, suspensions with a reason, and a
+  readable activity log ("Approved sign-up for Daniel Gitonga (KQ27651) as mentor")
 - **Account security:** password rules, change password, forgot password with single-use
   emailed links that expire after 30 minutes, two-factor authentication with an authenticator
-  app, and rate limiting on sign-in, code and reset endpoints
+  app and one-time backup codes (required for admins), and rate limiting on sign-in, code and reset endpoints
 - **Professional profiles:** headline, about, skills, experience, career interests, location,
   LinkedIn and a profile strength guide; a public profile view for other members
 - **Mentor matching:** mentors ranked by semantic similarity to the mentee's profile, with a
@@ -104,16 +118,18 @@ The first run downloads the embedding model (about 130 MB).
 Go to **http://localhost:4000**. Opening the HTML files directly from the folder still works
 for most pages, but Google sign-in only works when the app is opened through the server.
 
-To create an admin account: `node scripts/create-admin.js "Full Name" email@example.com password`
+To create an admin account: `node scripts/create-admin.js "Full Name" email@example.com password`.
+Admin tools stay locked until that admin turns on two-factor authentication in Account
+settings. For local development only, `ADMIN_2FA_REQUIRED=false` in `backend/.env` skips this.
 from the `backend` folder.
 
 ## Demo accounts
 
 | Role | Name | Login | Password |
 |---|---|---|---|
-| Mentee | Joyce | [email or username] | available on request |
-| Mentor | Brian | [email or username] | available on request |
-| Mentor | Ruth Njoroge | [email or username] | available on request |
+| Mentee | Joyce | [email] | available on request |
+| Mentor | Brian | [email] | available on request |
+| Mentor | Ruth Njoroge | [email] | available on request |
 | Admin | Admin | [email] | available on request |
 
 All demo data is synthetic and does not describe real Kenya Airways staff. Set
@@ -151,10 +167,11 @@ progress, and the full development and test results will follow.
 Every push and pull request to `main` runs `.github/workflows/ci.yml`. Each job starts an
 empty MySQL 8 database, builds it from `database/migrations` and tests the real code:
 
-- **Backend API tests** (`backend/tests/api.test.js`, 40 tests): registration and staff
-  verification, login by email or username, password rules, change and reset password,
-  single-use reset links, two-factor setup and sign-in, profile updates and privacy, access
-  control and rate limiting.
+- **Backend API tests** (`backend/tests/api.test.js`, 31 tests): sign-up by HR email match,
+  the alumni office review path with risk signals, impostor detection, roles from HR, HttpOnly
+  session cookies, CSRF protection, log out everywhere, suspension, single-use reset links,
+  two-factor with backup codes, admin 2FA requirement, HR import with retirement conversion,
+  profile privacy, data export and deletion, security headers and rate limiting.
 - **Recommendation service tests** (`ml-service/tests/test_app.py`): the API key check, input
   errors and a ranking check with the real BGE model on seeded synthetic profiles.
 

@@ -26,7 +26,7 @@ async function listEvents(req, res, next) {
     const { userId } = req.user;
     const [rows] = await pool.execute(
       `SELECT e.event_id, e.title, e.event_date, e.description, e.location, e.mode, e.capacity,
-              ANY_VALUE(u.name) AS organiser_name,
+              MAX(u.name) AS organiser_name,
               (MAX(a.user_id IS NOT NULL) = 1 OR e.created_by IS NULL) AS is_official,
               COUNT(r.registration_id) AS attendee_count,
               MAX(r.user_id = :userId) AS is_registered

@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Admin dashboard — AlumNet</title>
+    <title>Admin dashboard AlumNet</title>
     <link rel="stylesheet" href="css/style.css">
 </head>
 
@@ -29,6 +29,11 @@
         </aside>
 
         <main class="app-main">
+
+            <p class="st-banner" id="admin-2fa-required" style="display:none;">
+                Admin tools are locked until you turn on two-factor authentication.
+                <a href="settings.html" class="md-link">Go to Account settings</a>
+            </p>
 
             <!-- Kept for the user table code; the overview shows these numbers instead -->
             <div class="stat-row" id="stat-row" style="display:none;"></div>
@@ -104,25 +109,55 @@
             <div id="admin-tab-users" class="md" style="display:none;">
                 <header class="md-top">
                     <h1 class="md-greeting">User management</h1>
-                    <p class="md-sub">Search accounts and suspend or reactivate access.</p>
+                    <p class="md-sub">Roles come from HR records: current staff are mentees and former staff are mentors.</p>
                 </header>
-                <input type="text" id="admin-user-search" class="search-pill" placeholder="Search by name or email"
+                <input type="text" id="admin-user-search" class="search-pill" placeholder="Search by name, email, staff number or department"
                     style="margin-bottom:14px; width:100%; max-width:320px;">
                 <div class="table-card">
                     <table class="data-table">
                         <thead>
                             <tr>
                                 <th>Name</th>
-                                <th>Email</th>
                                 <th>Role</th>
+                                <th>Department</th>
                                 <th>Status</th>
-                                <th>Joined</th>
+                                <th>Last active</th>
+                                <th>2FA</th>
                                 <th></th>
                             </tr>
                         </thead>
                         <tbody id="admin-table-body"></tbody>
                     </table>
                 </div>
+            </div>
+
+            <!-- ================= Verification ================= -->
+            <div id="admin-tab-verification" class="md" style="display:none;">
+                <header class="md-top">
+                    <h1 class="md-greeting">Identity verification</h1>
+                    <p class="md-sub">Sign-ups whose email did not match HR records. Each one is compared with HR for you; lowest risk first. If unsure, phone the number HR holds, not the one entered.</p>
+                </header>
+                <div id="admin-verification-list"></div>
+            </div>
+
+            <!-- ================= HR records ================= -->
+            <div id="admin-tab-hr" class="md" style="display:none;">
+                <header class="md-top">
+                    <h1 class="md-greeting">HR records</h1>
+                    <p class="md-sub">Upload the latest staff list from Kenya Airways HR. Roles update from it: staff marked former become mentors and their open mentee requests are closed.</p>
+                </header>
+                <section class="md-panel">
+                    <div class="md-panel-head"><h2>Import a CSV file</h2></div>
+                    <div class="st-body">
+                        <p class="st-text">Columns: <code>staff_number, full_name, department, kq_email, personal_email, mobile_number, employment_status, alumni_eligible</code>. Status is <code>active</code> or <code>former</code>. You see the changes before anything is saved.</p>
+                        <div class="field">
+                            <label for="hr-file">CSV file</label>
+                            <input type="file" id="hr-file" accept=".csv,text/csv">
+                        </div>
+                        <p class="st-msg" id="hr-msg"></p>
+                        <div id="hr-preview"></div>
+                    </div>
+                </section>
             </div>
 
             <!-- ================= Events ================= -->
@@ -225,8 +260,7 @@
                                 <th>When</th>
                                 <th>Admin</th>
                                 <th>Action</th>
-                                <th>Target</th>
-                                <th>Description</th>
+                                <th>What happened</th>
                             </tr>
                         </thead>
                         <tbody id="admin-logs-body"></tbody>

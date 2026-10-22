@@ -12,17 +12,51 @@ const adminRoutes = require('./routes/admin.routes');
 const recommendationRoutes = require('./routes/recommendations.routes');
 const dashboardRoutes = require('./routes/dashboard.routes');
 const notificationsRoutes = require('./routes/notifications.routes');
+const { requireAppHeader } = require('./middleware/auth.middleware');
+const pool = require('./config/db');
 
 const app = express();
 
 // Needed behind a hosting proxy (Render) so rate limiting sees real client addresses
 app.set('trust proxy', 1);
 
-// CORS_ORIGIN can list allowed sites, comma-separated. When the frontend is
-// served by this same server (the default), no cross-origin calls are needed.
+// Security headers on every response. The content security policy only
+// allows scripts from AlumNet itself and Google's sign-in, so injected
+// script from anywhere else cannot run.
+app.use((req, res, next) => {
+  res.setHeader('Content-Security-Policy', [
+    "default-src 'self'",
+    "script-src 'self' https://accounts.google.com/gsi/client",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com/gsi/style",
+    "font-src 'self' https://fonts.gstatic.com",
+    "img-src 'self' data: https:",
+    "connect-src 'self' https://accounts.google.com/gsi/",
+    "frame-src https://accounts.google.com/gsi/",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'"
+  ].join('; '));
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  // Sign-in and reset links carry one-time tokens, so never pass page addresses on to other sites
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  if (process.env.NODE_ENV === 'production') {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+  next();
+});
+
+// The frontend is served by this same server, so no cross-origin access is
+// needed. CORS_ORIGIN can allow a separately hosted frontend.
 const allowedOrigins = (process.env.CORS_ORIGIN || '').split(',').map((o) => o.trim()).filter(Boolean);
-app.use(cors(allowedOrigins.length ? { origin: allowedOrigins } : {}));
+if (allowedOrigins.length) app.use(cors({ origin: allowedOrigins, credentials: true }));
+
+// HR imports can be larger than normal requests
+app.use('/api/admin/hr', express.json({ limit: '2mb' }));
 app.use(express.json({ limit: '100kb' }));
+app.use('/api', requireAppHeader);
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
@@ -50,6 +84,8 @@ app.get('/', (req, res) => res.redirect('/login.html'));
 app.use(express.static(FRONTEND_DIR, { extensions: ['html'] }));
 
 app.use((err, req, res, next) => {
+  if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'The request was not valid. Reload the page and try again.' });
+  if (err.type === 'entity.too.large') return res.status(413).json({ error: 'That is too much data to send at once.' });
   console.error(err);
   const status = err.status || 500;
   // Do not leak internal error details to users in production
@@ -58,6 +94,19 @@ app.use((err, req, res, next) => {
     : 'Something went wrong. Please try again.';
   res.status(status).json({ error: message });
 });
+
+// Data retention: remove sign-up attempts and reset links that are no longer needed
+async function cleanUpOldRecords() {
+  try {
+    await pool.query(`UPDATE signup_requests SET status = 'expired' WHERE status IN ('awaiting_email','pending_review') AND expires_at < NOW()`);
+    await pool.query(`DELETE FROM signup_requests WHERE status IN ('expired','rejected','completed','approved') AND created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)`);
+    await pool.query('DELETE FROM password_resets WHERE created_at < DATE_SUB(NOW(), INTERVAL 7 DAY)');
+  } catch (err) {
+    console.error('Clean-up skipped:', err.message);
+  }
+}
+cleanUpOldRecords();
+setInterval(cleanUpOldRecords, 12 * 60 * 60 * 1000).unref();
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log(`AlumNet running at http://localhost:${PORT}`));

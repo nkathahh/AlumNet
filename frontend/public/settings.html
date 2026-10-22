@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Account settings — AlumNet</title>
+    <title>Account settings AlumNet</title>
     <link rel="stylesheet" href="css/style.css">
 </head>
 
@@ -35,6 +35,8 @@
                     <p class="md-sub">Manage how you sign in and keep your account secure.</p>
                 </header>
 
+                <p class="st-banner" id="st-admin-2fa" style="display:none;">Admin tools stay locked until you turn on two-factor authentication below.</p>
+
                 <div class="md-grid">
                     <div class="md-col">
                         <section class="md-panel">
@@ -43,18 +45,10 @@
                                 <dl class="st-details">
                                     <div><dt>Name</dt><dd id="st-name">...</dd></div>
                                     <div><dt>Email</dt><dd id="st-email">...</dd></div>
+                                    <div><dt>Verification</dt><dd id="st-verified">...</dd></div>
+                                    <div><dt>Role</dt><dd id="st-role">...</dd></div>
                                     <div><dt>Member since</dt><dd id="st-created">...</dd></div>
                                 </dl>
-                                <form id="username-form" novalidate>
-                                    <div class="field">
-                                        <label for="st-username">Username</label>
-                                        <div class="st-inline">
-                                            <input type="text" id="st-username" maxlength="30" autocomplete="username">
-                                            <button type="submit" class="btn btn-secondary md-btn-sm">Save</button>
-                                        </div>
-                                        <p class="field-hint" id="username-msg">You can log in with your username or your email.</p>
-                                    </div>
-                                </form>
                             </div>
                         </section>
 
@@ -82,6 +76,36 @@
                                     <button type="submit" class="btn btn-primary md-btn-sm">Update password</button>
                                 </div>
                             </form>
+                        </section>
+
+                        <section class="md-panel">
+                            <div class="md-panel-head"><h2>Signed-in devices</h2></div>
+                            <div class="st-body">
+                                <p class="st-text">Lost a phone or used a shared computer? Log out everywhere ends every AlumNet session, including this one.</p>
+                                <p class="st-msg" id="sessions-msg"></p>
+                                <button class="btn btn-secondary md-btn-sm" id="logout-everywhere">Log out everywhere</button>
+                            </div>
+                        </section>
+
+                        <section class="md-panel" id="data-panel">
+                            <div class="md-panel-head"><h2>Your data</h2></div>
+                            <div class="st-body">
+                                <p class="st-text">Download a copy of everything AlumNet holds about you, or delete your account. See the <a href="privacy.html" class="md-link">privacy notice</a> for how your data is used.</p>
+                                <div class="st-actions" style="justify-content:flex-start; gap:10px;">
+                                    <button class="btn btn-secondary md-btn-sm" id="export-data">Download my data</button>
+                                </div>
+                                <details class="st-disclosure" id="delete-wrap">
+                                    <summary>Delete my account</summary>
+                                    <form id="delete-form" novalidate>
+                                        <p class="st-text">This removes your profile, skills and messages and ends any mentorships. It cannot be undone. Kenya Airways HR records are not affected.</p>
+                                        <div class="field"><label for="del-password">Password</label><input type="password" id="del-password" autocomplete="current-password"></div>
+                                        <div class="field" id="del-code-field" style="display:none;"><label for="del-code">Code from your authenticator app</label><input type="text" id="del-code" class="code-input" inputmode="numeric" maxlength="11" placeholder="000000"></div>
+                                        <label class="check-row"><input type="checkbox" id="del-confirm"><span>I understand my account will be permanently deleted.</span></label>
+                                        <p class="st-msg" id="del-msg"></p>
+                                        <button type="submit" class="btn btn-danger md-btn-sm">Delete my account</button>
+                                    </form>
+                                </details>
+                            </div>
                         </section>
                     </div>
 

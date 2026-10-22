@@ -1,9 +1,29 @@
 const axios = require('axios');
+const pool = require('../config/db');
+
+const MATCHING_FIELDS = ['skills', 'experience', 'career_interests'];
 
 async function getRecommendations(req, res, next) {
   try {
-    const { userId } = req.user;
-    const url = `${process.env.ML_SERVICE_URL}/recommend?mentee_id=${userId}`;
+    const { userId, role } = req.user;
+    if (role !== 'mentee') return res.status(403).json({ error: 'Mentor recommendations are for mentees' });
+
+    // Matching needs the three fields the model reads; say exactly what is missing
+    const [[profile]] = await pool.execute(
+      'SELECT skills, experience, career_interests FROM profiles WHERE user_id = :userId',
+      { userId }
+    );
+    const missing = MATCHING_FIELDS.filter((f) => !profile || !String(profile[f] || '').trim());
+    if (missing.length) {
+      return res.status(409).json({
+        code: 'profile_incomplete',
+        missing,
+        error: 'Add your skills, experience and career interests to see mentor matches.'
+      });
+    }
+
+    const base = (process.env.ML_SERVICE_URL || 'http://localhost:5000').replace(/\/$/, '');
+    const url = `${base}/recommend?mentee_id=${userId}`;
     // The shared key stops anyone else calling the ML service directly once it is online
     const headers = process.env.ML_API_KEY ? { 'X-API-Key': process.env.ML_API_KEY } : {};
     const response = await axios.get(url, { headers, timeout: 30000 });

@@ -115,7 +115,11 @@ def recommend():
         FROM mentors mt
         JOIN users u ON u.user_id = mt.user_id
         JOIN profiles p ON p.user_id = mt.user_id
+        LEFT JOIN staff_directory sd ON sd.staff_number = u.staff_number
         WHERE mt.user_id != %s
+          AND u.status = 'active'
+          -- Only people HR lists as former staff (or older accounts not linked to HR)
+          AND (sd.staff_number IS NULL OR (sd.employment_status = 'former' AND sd.alumni_eligible = 1))
     """, (mentee_id,))
     # Mentors with an empty profile can't be meaningfully compared, so leave them out
     mentors = [m for m in cur.fetchall() if profile_text(m)]
