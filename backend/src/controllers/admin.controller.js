@@ -89,7 +89,7 @@ async function toggleUserStatus(req, res, next) {
 
 async function listEvents(req, res, next) {
     try {
-        const [rows] = await pool.query('SELECT * FROM events ORDER BY event_date DESC');
+        const [rows] = await pool.query('SELECT e.*, (SELECT COUNT(*) FROM event_registrations r WHERE r.event_id = e.event_id) AS attendee_count FROM events e ORDER BY e.event_date DESC');
         res.json(rows);
     } catch (err) { next(err); }
 }
@@ -100,13 +100,17 @@ async function createEvent(req, res, next) {
     if (error) return res.status(400).json({ error });
 
     const { title, eventDate, description, mode, location, capacity } = req.body;
+    const target = await require('./events.controller').cleanTargeting(req.body);
+    if (target.error) return res.status(400).json({ error: target.error });
     const [result] = await pool.execute(
-      `INSERT INTO events (title, event_date, description, mode, location, capacity, created_by, status)
-       VALUES (:title, :eventDate, :description, :mode, :location, :capacity, :userId, 'approved')`,
+      `INSERT INTO events (title, event_date, description, topics, audience_departments, mode, location, capacity, created_by, status, reviewed_at)
+       VALUES (:title, :eventDate, :description, :topics, :audience, :mode, :location, :capacity, :userId, 'approved', NOW())`,
       {
         title: title.trim(),
         eventDate,
         description: description || null,
+        topics: target.topics,
+        audience: target.audience,
         mode,
         location: location.trim(),
         capacity: capacity ? Number(capacity) : null,
@@ -115,6 +119,7 @@ async function createEvent(req, res, next) {
     );
 
     await logAdminAction(req.user.userId, 'create_event', 'events', result.insertId, `Created event "${title.trim()}"`, title.trim());
+    require('../utils/alerts').queueAlerts('event', result.insertId);
 
     res.status(201).json({ eventId: result.insertId });
   } catch (err) {
@@ -163,30 +168,22 @@ async function reviewEvent(req, res, next) {
   }
 }
 
-async function deleteEvent(req, res, next) {
+// The alumni office edits an event (fixing a typo, a new venue); registered people are told
+async function updateEvent(req, res, next) {
     try {
-        const { id } = req.params;
-
-        // deleting the event also deletes its registrations
-        const [[event]] = await pool.execute('SELECT title FROM events WHERE event_id = :id', { id });
-        if (!event) return res.status(404).json({ error: 'Event not found' });
-        const [registrants] = await pool.execute(
-            'SELECT user_id FROM event_registrations WHERE event_id = :id',
-            { id }
-        );
-
-        await pool.execute('DELETE FROM events WHERE event_id = :id', { id });
-        await logAdminAction(req.user.userId, 'delete_event', 'events', id, `Deleted event "${event.title}"`, event.title);
-
-        await notifyMany(
-            registrants.map((r) => r.user_id),
-            'event_cancelled',
-            `"${event.title}" has been cancelled by the organisers.`,
-            'events.html'
-        );
-
-        res.json({ success: true });
+        const { saveEventEdit } = require('./events.controller');
+        const r = await saveEventEdit({ id: Number(req.params.id), body: req.body, userId: req.user.userId, isAdmin: true });
+        if (r.error) return res.status(r.status).json({ error: r.error });
+        await logAdminAction(req.user.userId, 'edit_event', 'events', req.params.id, `Edited event "${String(req.body.title || '').trim()}"`, String(req.body.title || '').trim());
+        res.json(r.body);
     } catch (err) { next(err); }
+}
+
+// Kept for older screens: "deleting" an event now cancels it, so the record,
+// its registrations and the reason stay as evidence instead of being erased
+async function deleteEvent(req, res, next) {
+    req.body = { reason: (req.body && req.body.reason) || null };
+    return require('./events.controller').cancelEvent(req, res, next);
 }
 async function listPendingOpportunities(req, res, next) {
     try {
@@ -423,10 +420,9 @@ async function previewHrImport(req, res, next) {
     } catch (err) { next(err); }
 }
 
-async function applyHrImport(req, res, next) {
-    try {
-        const diff = await diffHr(req.body.rows);
-        if (diff.error) return res.status(400).json({ error: diff.error });
+async function applyHrRows(rows, adminId, note = '') {
+        const diff = await diffHr(rows);
+        if (diff.error) return { status: 400, error: diff.error };
         const { result, checked } = diff;
         const conn = await pool.getConnection();
         try {
@@ -469,8 +465,78 @@ async function applyHrImport(req, res, next) {
 
         const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
         const summary = `${result.added.length} new, ${result.updated.length} updated, ${result.retiring.length} now former staff, ${plural(result.invalid.length, 'row')} skipped`;
-        await logAdminAction(req.user.userId, 'import_hr', 'staff_directory', 0, `Imported HR update: ${summary}`, 'HR records');
-        res.json({ ...result, summary });
+        await logAdminAction(adminId, 'import_hr', 'staff_directory', 0, `Imported HR update: ${summary}${note}`, 'HR records');
+        return { status: 200, body: { ...result, summary } };
+}
+
+const activeAdmins = async () => (await pool.query(
+  "SELECT u.user_id FROM admins a JOIN users u ON u.user_id = a.user_id WHERE u.status = 'active'"
+))[0].map((r) => r.user_id);
+
+/*
+ * An HR import decides who can sign in and who becomes a mentor, so one
+ * person should not be able to do it alone. With two or more admins, the
+ * import waits for a different admin to approve it (the "four eyes" rule).
+ * With a single admin there is nobody to ask, so it applies and the log
+ * says no second check was possible.
+ */
+async function applyHrImport(req, res, next) {
+    try {
+        const diff = await diffHr(req.body.rows);
+        if (diff.error) return res.status(400).json({ error: diff.error });
+        const admins = await activeAdmins();
+        const r = diff.result;
+        const summary = `${r.added.length} new, ${r.updated.length} updated, ${r.retiring.length} now former staff, ${r.invalid.length} skipped`;
+        if (admins.length >= 2) {
+            const [ins] = await pool.execute(
+              'INSERT INTO hr_import_requests (requested_by, rows_json, summary) VALUES (:by, :rows, :summary)',
+              { by: req.user.userId, rows: JSON.stringify(req.body.rows), summary }
+            );
+            await logAdminAction(req.user.userId, 'request_hr_import', 'hr_import_requests', ins.insertId, `Asked for a second admin to approve an HR update: ${summary}`, 'HR records');
+            await notifyMany(admins.filter((id) => id !== req.user.userId), 'hr_import_waiting',
+              `An HR update (${summary}) is waiting for a second admin to approve it.`, 'admin.html#hr');
+            return res.status(202).json({ waitingForSecondAdmin: true, requestId: ins.insertId, summary });
+        }
+        const out = await applyHrRows(req.body.rows, req.user.userId, ' (only one admin, so no second check was possible)');
+        if (out.error) return res.status(out.status).json({ error: out.error });
+        res.json(out.body);
+    } catch (err) { next(err); }
+}
+
+async function listHrImportRequests(req, res, next) {
+    try {
+        const [rows] = await pool.query(
+          `SELECT r.request_id, r.summary, r.created_at, r.requested_by, u.name AS requested_by_name
+           FROM hr_import_requests r JOIN users u ON u.user_id = r.requested_by
+           WHERE r.status = 'waiting' ORDER BY r.created_at`
+        );
+        res.json(rows.map((r) => ({ ...r, mine: r.requested_by === req.user.userId })));
+    } catch (err) { next(err); }
+}
+
+async function decideHrImport(req, res, next) {
+    try {
+        const id = Number(req.params.id);
+        const decision = req.body.decision;
+        if (!['approve', 'reject'].includes(decision)) return res.status(400).json({ error: 'Choose approve or reject' });
+        const [[request]] = await pool.execute("SELECT * FROM hr_import_requests WHERE request_id = :id AND status = 'waiting'", { id });
+        if (!request) return res.status(404).json({ error: 'This HR update is not waiting any more' });
+        if (request.requested_by === req.user.userId) return res.status(403).json({ error: 'A different admin must approve an HR update you uploaded' });
+        // Claim it first, so two admins cannot both apply it
+        const [claim] = await pool.execute(
+          "UPDATE hr_import_requests SET status = :state, decided_by = :by, decided_at = NOW() WHERE request_id = :id AND status = 'waiting'",
+          { state: decision === 'approve' ? 'applied' : 'rejected', by: req.user.userId, id }
+        );
+        if (!claim.affectedRows) return res.status(409).json({ error: 'Another admin has just decided this' });
+        await createNotification(request.requested_by, 'hr_import_decided',
+          `Your HR update (${request.summary}) was ${decision === 'approve' ? 'approved and applied' : 'rejected'}.`, 'admin.html#hr');
+        if (decision === 'reject') {
+            await logAdminAction(req.user.userId, 'reject_hr_import', 'hr_import_requests', id, `Rejected an HR update: ${request.summary}`, 'HR records');
+            return res.json({ message: 'Rejected. Nothing was changed.' });
+        }
+        const out = await applyHrRows(JSON.parse(request.rows_json), req.user.userId, ' (second admin approval)');
+        if (out.error) return res.status(out.status).json({ error: out.error });
+        res.json(out.body);
     } catch (err) { next(err); }
 }
 
@@ -479,7 +545,7 @@ module.exports = {
   getStats, listUsers, toggleUserStatus,
   listSignupRequests, reviewSignupRequest,
   previewHrImport, applyHrImport,
-  listEvents, createEvent, deleteEvent,
+  listEvents, createEvent, updateEvent, deleteEvent, listHrImportRequests, decideHrImport,
   listPendingEvents, reviewEvent,
   listPendingOpportunities, reviewOpportunity,
   listActivityLogs

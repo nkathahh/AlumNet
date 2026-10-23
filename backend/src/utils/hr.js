@@ -68,7 +68,7 @@ async function endOpenMentorships(conn, userId, side, reason) {
  */
 async function resolveRole(userId) {
   const [[u]] = await pool.execute(
-    `SELECT u.user_id, u.name, u.staff_number, sd.employment_status, sd.alumni_eligible,
+    `SELECT u.user_id, u.name, u.staff_number, u.department, sd.department AS hr_department, sd.employment_status, sd.alumni_eligible,
             ad.user_id AS is_admin, me.user_id AS is_mentee, mo.user_id AS is_mentor
      FROM users u
      LEFT JOIN staff_directory sd ON sd.staff_number = u.staff_number
@@ -79,6 +79,10 @@ async function resolveRole(userId) {
     { userId }
   );
   if (!u) return null;
+  // HR is the source of truth for the department too, even if the record was fixed by hand
+  if (u.hr_department && u.hr_department !== u.department) {
+    await pool.execute('UPDATE users SET department = :d WHERE user_id = :userId', { d: u.hr_department, userId });
+  }
   if (u.is_admin) return 'admin';
 
   // Accounts not linked to an HR record (older demo data) keep their table role

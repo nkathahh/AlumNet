@@ -16,7 +16,7 @@
         <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
         <div class="topbar-actions">
             <label class="theme-switch" title="Toggle dark mode">
-                <input type="checkbox" id="theme-toggle-checkbox">
+                <input type="checkbox" id="theme-toggle-checkbox" aria-label="Dark mode">
                 <span class="switch-track"><span class="switch-thumb"></span></span>
             </label>
             <button id="logout-btn" class="icon-btn" aria-label="Log out" title="Log out">⏻</button>
@@ -42,6 +42,20 @@
                     <button class="tab" data-event-filter="proposals" id="proposals-tab" style="display:none;">My proposals</button>
                 </div>
                 <button class="btn btn-primary" id="propose-event-btn" style="display:none;">Propose an event</button>
+            </div>
+            <div class="opportunity-filters" id="event-filters">
+                <input type="search" id="event-search" class="search-pill" placeholder="Search title, topic, venue or host" aria-label="Search events">
+                <select id="event-format" class="select-pill" aria-label="Format">
+                    <option value="">Any format</option>
+                    <option value="in_person">In person</option>
+                    <option value="virtual">Virtual</option>
+                </select>
+                <select id="event-when" class="select-pill" aria-label="When">
+                    <option value="">Any date</option>
+                    <option value="7">In the next 7 days</option>
+                    <option value="30">In the next 30 days</option>
+                    <option value="90">In the next 3 months</option>
+                </select>
             </div>
             <div class="event-grid" id="event-grid"></div>
             <div id="my-proposals" style="display:none;"></div>

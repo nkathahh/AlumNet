@@ -16,7 +16,7 @@
         <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
         <div class="topbar-actions">
             <label class="theme-switch" title="Toggle dark mode">
-                <input type="checkbox" id="theme-toggle-checkbox">
+                <input type="checkbox" id="theme-toggle-checkbox" aria-label="Dark mode">
                 <span class="switch-track"><span class="switch-thumb"></span></span>
             </label>
             <button id="logout-btn" class="icon-btn" aria-label="Log out" title="Log out">⏻</button>
@@ -44,7 +44,7 @@
             </div>
             <div class="opportunity-filters" id="opp-filters">
                 <input type="search" id="opp-search" class="search-pill" placeholder="Search title, company or keyword">
-                <select id="opp-industry" class="select-pill">
+                <select id="opp-industry" class="select-pill" aria-label="Industry">
                     <option value="">All industries</option>
                     <option>Aviation</option>
                     <option>Ground Operations</option>
@@ -52,7 +52,7 @@
                     <option>Corporate / Support</option>
                     <option>Other</option>
                 </select>
-                <select id="opp-type" class="select-pill">
+                <select id="opp-type" class="select-pill" aria-label="Type">
                     <option value="">All types</option>
                     <option value="full_time">Full-time</option>
                     <option value="part_time">Part-time</option>
@@ -64,9 +64,25 @@
                 <select id="opp-poster" class="select-pill" aria-label="Posted by">
                     <option value="">Anyone</option>
                 </select>
+                <select id="opp-sort" class="select-pill" aria-label="Sort by" style="display:none;">
+                    <option value="fit">Best fit for me</option>
+                    <option value="newest">Newest</option>
+                </select>
             </div>
             <div class="filter-chip-row" id="opp-poster-chip"></div>
+            <div id="opp-recommended"></div>
             <div id="opportunities-list"></div>
+            <div class="opportunity-filters" id="my-posts-filters" style="display:none;">
+                <input type="search" id="mine-search" class="search-pill" placeholder="Search your posts" aria-label="Search your posts">
+                <select id="mine-status" class="select-pill" aria-label="Status">
+                    <option value="">Any status</option>
+                    <option value="approved">Live</option>
+                    <option value="pending">Waiting for review</option>
+                    <option value="changes_requested">Changes requested</option>
+                    <option value="rejected">Not approved</option>
+                    <option value="closed">Closed</option>
+                </select>
+            </div>
             <div id="my-posts" style="display:none;"></div>
         </main>
     </div>

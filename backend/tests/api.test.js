@@ -95,6 +95,8 @@ before(async () => {
 after(async () => {
   if (server) server.kill();
   if (db) await db.end();
+  // Background jobs are also run directly from these tests through the app's own pool
+  if (require.cache[require.resolve('../src/config/db')]) await require('../src/config/db').end();
 });
 
 const state = {};
@@ -338,6 +340,10 @@ test('a reset link works once, then the new password works', async () => {
 
 test('two-factor sign-in accepts an app code or a one-time backup code', async () => {
   const setup = await state.joyce.call('POST', '/auth/2fa/setup');
+  // The secret is stored encrypted, so a copy of the database cannot make codes
+  const [[stored]] = await db.execute("SELECT u.totp_secret FROM users u WHERE u.email = :e", { e: JOYCE.email });
+  assert.match(stored.totp_secret, /^v1:/);
+  assert.ok(!stored.totp_secret.includes(setup.body.secret));
   const on = await state.joyce.call('POST', '/auth/2fa/enable', { code: authenticator.generate(setup.body.secret) });
   const backup = on.body.backupCodes[0];
 
@@ -600,8 +606,11 @@ test('the admin can ask for changes; the poster edits and it goes back through t
   assert.equal(resent.status, 200);
   const queue = await state.admin.call('GET', '/admin/moderation');
   assert.ok(findItem(queue, state.peterPost).lane_reasons.some((x) => /Resubmitted/.test(x)));
+  // Still waiting for review: a further edit is allowed and it stays in the queue
   const twice = await state.peter.me.call('PUT', `/opportunities/${state.peterPost}`, clean('Safety Officer'));
-  assert.equal(twice.status, 409);
+  assert.equal(twice.status, 200);
+  const [[still]] = await db.execute('SELECT approval_status FROM career_opportunities WHERE opportunity_id = :id', { id: state.peterPost });
+  assert.equal(still.approval_status, 'pending');
 });
 
 test('a rejection needs a reason, and the poster is told it', async () => {
@@ -654,6 +663,10 @@ test('a trusted poster on a known site is published straight away, but only when
 });
 
 test('too many posts in a day are held, however trusted the account', async () => {
+  // The alumni office sets the limit (default 5); 3 here, as Tess already posted 3 today
+  assert.equal((await state.admin.call('PUT', '/admin/moderation/settings', { burstPerDay: 1 })).status, 400);
+  assert.equal((await state.admin.call('PUT', '/admin/moderation/settings', { burstPerDay: 3 })).status, 200);
+  assert.equal((await state.admin.call('GET', '/admin/moderation')).body.autoApprove, true);
   const burst = await state.tess.me.call('POST', '/opportunities', clean('Fourth Post Today'));
   assert.equal(burst.body.published, false);
   const queue = await state.admin.call('GET', '/admin/moderation');
@@ -662,6 +675,7 @@ test('too many posts in a day are held, however trusted the account', async () =
   assert.ok(item.lane_reasons.some((x) => /post number 4 in the last 24 hours/.test(x)));
   // Spread the earlier posts out so the next tests are not affected
   await db.execute('UPDATE career_opportunities SET submitted_at = DATE_SUB(NOW(), INTERVAL 2 DAY) WHERE posted_by = :id', { id: state.tess.id });
+  await state.admin.call('PUT', '/admin/moderation/settings', { burstPerDay: 5 });
 });
 
 test('taking down an auto-approved post removes the poster\'s trust', async () => {
@@ -904,6 +918,312 @@ test('the directory is rate limited per account', async () => {
   assert.equal(last.status, 429);
 });
 
+/* ---------------- Smart events and opportunities (Module 4) ---------------- */
+
+test('skill matching and fit bands turn similarity into plain words', () => {
+  const { skillCoverage, bandFor } = require('../src/utils/fit');
+  const c = skillCoverage('Microsoft Excel, dangerous goods, team leadership, SAP', 'Excel, Dangerous goods regulations, leadership of ramp teams');
+  assert.deepEqual(c.have, ['Microsoft Excel', 'dangerous goods', 'team leadership']);
+  assert.deepEqual(c.missing, ['SAP']);
+  assert.equal(bandFor(80).label, 'Strong fit');
+  assert.equal(bandFor(65).label, 'Good fit');
+  assert.equal(bandFor(30).label, 'Some overlap');
+});
+
+const opp = (title, requiredSkills) => ({
+  title, company: 'Jambojet', opportunityType: 'full_time', location: 'Nairobi', requiredSkills,
+  description: 'Join the operations team at JKIA. Apply on the careers page.',
+  applyLink: 'https://www.jambojet.com/careers', closingDate: nextMonth()
+});
+async function publish(poster, body) {
+  const r = await poster.me.call('POST', '/opportunities', body);
+  assert.equal(r.status, 201);
+  const d = await state.admin.call('POST', `/admin/moderation/opportunity/${r.body.opportunityId}/decision`, { decision: 'approved' });
+  assert.equal(d.status, 200);
+  await wait(250);
+  return r.body.opportunityId;
+}
+
+test('opportunities list up to 8 required skills', async () => {
+  const tooMany = await state.wanjiku.me.call('POST', '/opportunities', opp('Too many skills', 'a,b,c,d,e,f,g,h,i'));
+  assert.equal(tooMany.status, 400);
+});
+
+test('a well-matched mentee gets an alert when a post goes live; others and opted-out members do not', async () => {
+  const fits = await makeMember('Alert Fit', 'alert.fit@example.org', 'mentee');
+  await fits.me.call('PUT', '/profile/me', { skills: 'Excel, dangerous goods, ramp safety', experience: 'Cargo agent', careerInterests: 'Cargo operations' });
+  const noFit = await makeMember('Alert NoFit', 'alert.nofit@example.org', 'mentee');
+  await noFit.me.call('PUT', '/profile/me', { skills: 'Piano, painting', experience: 'Music teacher', careerInterests: 'Art' });
+  const optedOut = await makeMember('Alert Off', 'alert.off@example.org', 'mentee');
+  await optedOut.me.call('PUT', '/profile/me', { skills: 'Excel, dangerous goods, ramp safety', experience: 'Cargo agent', careerInterests: 'Cargo' });
+  assert.equal((await optedOut.me.call('PUT', '/auth/account/alerts', { opportunities: false })).status, 200);
+  assert.equal((await optedOut.me.call('GET', '/auth/account')).body.alerts.opportunities, false);
+  state.alertFit = fits;
+
+  const id = await publish(state.wanjiku, opp('Cargo Agent', 'Excel, dangerous goods, customer service'));
+  const got = (await fits.me.call('GET', '/notifications')).body.filter((n) => n.type === 'opportunity_alert');
+  assert.equal(got.length, 1);
+  assert.match(got[0].message, /You have 2 of 3 skills it asks for/);
+  assert.equal(got[0].link, `opportunities.html?open=${id}`);
+  assert.equal((await noFit.me.call('GET', '/notifications')).body.some((n) => n.type === 'opportunity_alert'), false);
+  assert.equal((await optedOut.me.call('GET', '/notifications')).body.some((n) => n.type === 'opportunity_alert'), false);
+
+  // The list shows the checklist and a band, without the matching service
+  const list = await fits.me.call('GET', '/opportunities');
+  const card = list.body.find((o) => o.opportunity_id === id);
+  assert.deepEqual(card.skills_have, ['Excel', 'dangerous goods']);
+  assert.deepEqual(card.skills_missing, ['customer service']);
+  assert.equal(card.fit.label, 'Good fit');
+  assert.ok(card.fit_reasons[0].startsWith('You have 2 of 3'));
+});
+
+test('nobody gets more than 3 alerts a week', async () => {
+  for (const t of ['Cargo Agent II', 'Cargo Agent III', 'Cargo Agent IV']) {
+    await publish(state.wanjiku, opp(t, 'Excel, dangerous goods, ramp safety'));
+  }
+  const alerts = (await state.alertFit.me.call('GET', '/notifications')).body.filter((n) => n.type === 'opportunity_alert');
+  assert.equal(alerts.length, 3);
+});
+
+test('events can target departments and topics, and explain why they suit someone', async () => {
+  const bad = await state.admin.call('POST', '/admin/events', {
+    title: 'Bad audience', eventDate: new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 16), mode: 'in_person',
+    location: 'Pride Centre', audienceDepartments: ['Not A Department']
+  });
+  assert.equal(bad.status, 400);
+
+  const cargo = await makeMember('Cargo Staffer', 'cargo.staffer@example.org', 'mentee');
+  await db.execute("UPDATE users SET department = 'Cargo & Logistics' WHERE user_id = :id", { id: cargo.id });
+  await cargo.me.call('PUT', '/profile/me', { skills: 'Cargo handling', experience: 'Two years in cargo', careerInterests: 'Leadership in cargo operations' });
+  const other = await makeMember('Other Staffer', 'other.staffer@example.org', 'mentee');
+
+  const made = await state.admin.call('POST', '/admin/events', {
+    title: 'Cargo leadership breakfast', eventDate: new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 16),
+    mode: 'in_person', location: 'Pride Centre, Embakasi', description: 'Breakfast with former cargo leaders.',
+    topics: 'Leadership, Cargo operations', audienceDepartments: ['Cargo & Logistics']
+  });
+  assert.equal(made.status, 201);
+  await wait(250);
+  const alert = (await cargo.me.call('GET', '/notifications')).body.find((n) => n.type === 'event_alert');
+  assert.ok(alert);
+  assert.match(alert.message, /leadership/i);
+  assert.equal((await other.me.call('GET', '/notifications')).body.some((n) => n.type === 'event_alert'), false);
+
+  const mine = (await cargo.me.call('GET', '/events')).body.find((e) => e.event_id === made.body.eventId);
+  assert.equal(mine.for_me, true);
+  assert.ok(mine.fit_reasons.includes('For Cargo & Logistics staff'));
+  const theirs = (await other.me.call('GET', '/events')).body.find((e) => e.event_id === made.body.eventId);
+  assert.equal(theirs.for_me, false);
+  state.cargoEventCapacityTest = { cargo, other };
+});
+
+test('two people cannot take the last seat at the same moment', async () => {
+  const made = await state.admin.call('POST', '/admin/events', {
+    title: 'One seat only', eventDate: new Date(Date.now() + 9 * 864e5).toISOString().slice(0, 16),
+    mode: 'in_person', location: 'Pride Centre', capacity: 1
+  });
+  const { cargo, other } = state.cargoEventCapacityTest;
+  const results = await Promise.all([cargo, other].map((m) => m.me.call('POST', `/events/${made.body.eventId}/register`)));
+  assert.deepEqual(results.map((r) => r.status).sort(), [201, 409]);
+  const [[{ n }]] = await db.execute('SELECT COUNT(*) AS n FROM event_registrations WHERE event_id = :id', { id: made.body.eventId });
+  assert.equal(n, 1);
+});
+
+/* ---------------- Editing live posts and events ---------------- */
+
+const inDays = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 16);
+async function liveCommunityEvent(organiser, body) {
+  const made = await organiser.me.call('POST', '/events', body);
+  assert.equal(made.status, 201);
+  const d = await state.admin.call('POST', `/admin/moderation/event/${made.body.eventId}/decision`, { decision: 'approved' });
+  assert.equal(d.status, 200);
+  return made.body.eventId;
+}
+
+test('an organiser sees no fit label on their own event, and can edit the venue; registered people are told', async () => {
+  const host = await makeMember('Host Mentor', 'host.mentor@example.org', 'mentor');
+  const guest = await makeMember('Guest Mentee', 'guest.mentee@example.org', 'mentee');
+  const base = { title: 'Ramp safety talk', eventDate: inDays(12), mode: 'in_person', location: 'Pride Centre, Embakasi', capacity: 20, description: 'Safety on the ramp.', topics: 'Safety' };
+  const id = await liveCommunityEvent(host, base);
+  const own = (await host.me.call('GET', '/events')).body.find((e) => e.event_id === id);
+  assert.equal(own.is_mine, true);
+  assert.equal(own.fit, null);
+
+  assert.equal((await guest.me.call('POST', `/events/${id}/register`)).status, 201);
+  const edit = await host.me.call('PUT', `/events/${id}`, { ...base, location: 'KQ Training Centre, Embakasi' });
+  assert.equal(edit.status, 200);
+  assert.equal(edit.body.published, true);
+  const live = (await guest.me.call('GET', '/events')).body.find((e) => e.event_id === id);
+  assert.equal(live.location, 'KQ Training Centre, Embakasi');
+  assert.ok(live.edited_at);
+  const note = (await guest.me.call('GET', '/notifications')).body.find((n) => n.type === 'event_changed');
+  assert.match(note.message, /venue/);
+
+  // Capacity cannot drop below the people already registered
+  await db.execute('INSERT INTO event_registrations (event_id, user_id) VALUES (:id, :u)', { id, u: host.id });
+  const tooSmall = await host.me.call('PUT', `/events/${id}`, { ...base, capacity: 1 });
+  assert.equal(tooSmall.status, 400);
+  state.liveEdit = { host, guest, id, base };
+});
+
+test('changing a live event to a meeting link on an unknown site sends it back for review first', async () => {
+  const { host, guest, id, base } = state.liveEdit;
+  const edit = await host.me.call('PUT', `/events/${id}`, { ...base, mode: 'virtual', location: 'https://meet.unknown-site.example/abc' });
+  assert.equal(edit.status, 200);
+  assert.equal(edit.body.published, false);
+  const [[row]] = await db.execute('SELECT status, lane_reasons FROM events WHERE event_id = :id', { id });
+  assert.equal(row.status, 'pending');
+  assert.match(row.lane_reasons, /Edited after it was live/);
+  assert.equal((await guest.me.call('GET', '/events')).body.some((e) => e.event_id === id), false);
+  const held = (await guest.me.call('GET', '/notifications')).body.filter((n) => n.type === 'event_changed');
+  assert.ok(held.some((n) => /Your place is kept/.test(n.message)));
+
+  // Once approved, registered people hear what changed
+  await state.admin.call('POST', `/admin/moderation/event/${id}/decision`, { decision: 'approved' });
+  const after = (await guest.me.call('GET', '/notifications')).body.filter((n) => n.type === 'event_changed');
+  assert.ok(after.some((n) => /format/.test(n.message) && /meeting link/.test(n.message)));
+});
+
+test('an organiser can cancel their event and registered people are told', async () => {
+  const { host, guest, id } = state.liveEdit;
+  const r = await host.me.call('POST', `/events/${id}/cancel`, { reason: 'Speaker unwell' });
+  assert.equal(r.status, 200);
+  assert.equal((await guest.me.call('GET', '/events')).body.some((e) => e.event_id === id), false);
+  const note = (await guest.me.call('GET', '/notifications')).body.find((n) => n.type === 'event_cancelled');
+  assert.match(note.message, /Speaker unwell/);
+  // ...and by email, not only in the app
+  await wait(200);
+  assert.match(serverLog, /To: guest\.mentee@example\.org\s+Subject: Cancelled: Ramp safety talk/);
+  // An admin "delete" keeps the record as cancelled instead of erasing it
+  const official = await state.admin.call('POST', '/admin/events', { title: 'Delete me', eventDate: inDays(15), mode: 'in_person', location: 'Pride Centre' });
+  assert.equal((await state.admin.call('DELETE', `/admin/events/${official.body.eventId}`)).status, 200);
+  const [[kept]] = await db.execute('SELECT status FROM events WHERE event_id = :id', { id: official.body.eventId });
+  assert.equal(kept.status, 'cancelled');
+  const other = await makeMember('Not The Host', 'not.host@example.org', 'mentor');
+  assert.equal((await other.me.call('POST', `/events/${id}/cancel`)).status, 404);
+});
+
+test('a live opportunity stays live after a clean edit, goes back for review after a risky one, and can be closed', async () => {
+  const poster = await makeMember('Edit Poster', 'edit.poster@example.org', 'mentor');
+  const body = opp('Ramp supervisor', 'Ramp safety, Team leadership');
+  const id = await publish(poster, body);
+
+  const clean = await poster.me.call('PUT', `/opportunities/${id}`, { ...body, description: body.description + ' Closing date extended.' });
+  assert.equal(clean.status, 200);
+  assert.equal(clean.body.published, true);
+
+  const risky = await poster.me.call('PUT', `/opportunities/${id}`, { ...body, description: 'Pay a registration fee of KSh 2,000 via M-Pesa to be considered.' });
+  assert.equal(risky.status, 200);
+  assert.equal(risky.body.published, false);
+  const [[row]] = await db.execute('SELECT approval_status FROM career_opportunities WHERE opportunity_id = :id', { id });
+  assert.equal(row.approval_status, 'pending');
+
+  await state.admin.call('POST', `/admin/moderation/opportunity/${id}/decision`, { decision: 'approved' });
+  assert.equal((await poster.me.call('POST', `/opportunities/${id}/close`)).status, 200);
+  const list = (await state.admin.call('GET', '/opportunities')).body;
+  assert.equal(list.some((o) => o.opportunity_id === id), false);
+  assert.equal((await poster.me.call('PUT', `/opportunities/${id}`, body)).status, 409);
+});
+
+test('a full event has a waiting list; the first person in line gets a freed place and is told', async () => {
+  const made = await state.admin.call('POST', '/admin/events', { title: 'Tiny workshop', eventDate: inDays(20), mode: 'in_person', location: 'Pride Centre', capacity: 1 });
+  const id = made.body.eventId;
+  const a = await makeMember('Seat Holder', 'seat.holder@example.org', 'mentee');
+  const b = await makeMember('First Waiter', 'first.waiter@example.org', 'mentee');
+  const c = await makeMember('Second Waiter', 'second.waiter@example.org', 'mentee');
+  assert.equal((await b.me.call('POST', `/events/${id}/waitlist`)).status, 409); // a place is still free
+  assert.equal((await a.me.call('POST', `/events/${id}/register`)).status, 201);
+  assert.equal((await b.me.call('POST', `/events/${id}/waitlist`)).body.position, 1);
+  await wait(5);
+  assert.equal((await c.me.call('POST', `/events/${id}/waitlist`)).body.position, 2);
+  const seen = (await c.me.call('GET', '/events')).body.find((e) => e.event_id === id);
+  assert.equal(seen.waitlist_position, 2);
+
+  assert.equal((await a.me.call('DELETE', `/events/${id}/register`)).status, 200);
+  const bView = (await b.me.call('GET', '/events')).body.find((e) => e.event_id === id);
+  assert.equal(bView.is_registered, true);
+  assert.ok((await b.me.call('GET', '/notifications')).body.some((n) => n.type === 'event_waitlist_place'));
+  const cView = (await c.me.call('GET', '/events')).body.find((e) => e.event_id === id);
+  assert.equal(cView.is_registered, false);
+  assert.equal(cView.waitlist_position, 1);
+
+  // More room: the admin raises the capacity and the next person gets in
+  await state.admin.call('PUT', `/admin/events/${id}`, { title: 'Tiny workshop', eventDate: inDays(20), mode: 'in_person', location: 'Pride Centre', capacity: 2 });
+  assert.equal((await c.me.call('GET', '/events')).body.find((e) => e.event_id === id).is_registered, true);
+});
+
+test('when a scam is rejected, other live posts using the same website are taken down for review', async () => {
+  const one = await makeMember('Live Poster', 'live.poster@example.org', 'mentor');
+  const two = await makeMember('Scam Poster', 'scam.poster@example.org', 'mentor');
+  const liveId = await publish(one, { ...opp('Ramp lead', 'Ramp safety'), applyLink: 'https://jobs.shady-recruiters.example/ramp' });
+  const scam = await two.me.call('POST', '/opportunities', { ...opp('Cabin crew', 'Customer care'), applyLink: 'https://jobs.shady-recruiters.example/apply' });
+  const r = await state.admin.call('POST', `/admin/moderation/opportunity/${scam.body.opportunityId}/decision`, { decision: 'rejected', reason: 'asks_for_payment' });
+  assert.equal(r.status, 200);
+  await wait(400);
+  const [[row]] = await db.execute('SELECT approval_status, moderation_lane, lane_reasons FROM career_opportunities WHERE opportunity_id = :id', { id: liveId });
+  assert.equal(row.approval_status, 'pending');
+  assert.equal(row.moderation_lane, 'hold');
+  assert.match(row.lane_reasons, /blocked as a scam/);
+  const note = (await one.me.call('GET', '/notifications')).body.find((n) => /being checked again/.test(n.message));
+  assert.ok(note);
+  assert.doesNotMatch(note.message, /shady/);
+});
+
+test('registered people get one reminder the day before, in the app and by email', async () => {
+  const made = await state.admin.call('POST', '/admin/events', { title: 'Reminder breakfast', eventDate: inDays(3), mode: 'in_person', location: 'Pride Centre' });
+  const id = made.body.eventId;
+  const m = await makeMember('Reminded Member', 'reminded.member@example.org', 'mentee');
+  await m.me.call('POST', `/events/${id}/register`);
+  await db.execute('UPDATE events SET event_date = DATE_ADD(NOW(), INTERVAL 20 HOUR) WHERE event_id = :id', { id });
+  const { sendEventReminders } = require('../src/utils/eventReminders');
+  await sendEventReminders();
+  await sendEventReminders(); // a second run sends nothing more
+  const notes = (await m.me.call('GET', '/notifications')).body.filter((n) => n.type === 'event_reminder');
+  assert.equal(notes.length, 1);
+  assert.match(notes[0].message, /Reminder breakfast/);
+});
+
+test('in the last day before an event, a freed place is offered to everyone waiting instead of given out', async () => {
+  const made = await state.admin.call('POST', '/admin/events', { title: 'Last minute seat', eventDate: inDays(3), mode: 'in_person', location: 'Pride Centre', capacity: 1 });
+  const id = made.body.eventId;
+  const holder = await makeMember('Late Holder', 'late.holder@example.org', 'mentee');
+  const waiter = await makeMember('Late Waiter', 'late.waiter@example.org', 'mentee');
+  await holder.me.call('POST', `/events/${id}/register`);
+  await waiter.me.call('POST', `/events/${id}/waitlist`);
+  await db.execute('UPDATE events SET event_date = DATE_ADD(NOW(), INTERVAL 5 HOUR) WHERE event_id = :id', { id });
+  await holder.me.call('DELETE', `/events/${id}/register`);
+  const view = (await waiter.me.call('GET', '/events')).body.find((e) => e.event_id === id);
+  assert.equal(view.is_registered, false);
+  assert.ok((await waiter.me.call('GET', '/notifications')).body.some((n) => n.type === 'event_place_free'));
+  await wait(200);
+  assert.match(serverLog, /To: late\.waiter@example\.org\s+Subject: A place is free: Last minute seat/);
+  assert.equal(view.waitlist_position, 1);
+  assert.equal((await waiter.me.call('POST', `/events/${id}/register`)).status, 201);
+});
+
+test('mentees can save mentors to a shortlist', async () => {
+  const mentee = await makeMember('Shortlister', 'shortlister@example.org', 'mentee');
+  const mentor = await makeMember('Shortlisted Mentor', 'shortlisted.mentor@example.org', 'mentor');
+  assert.equal((await mentee.me.call('POST', `/mentors/${mentor.id}/save`)).status, 201);
+  const saved = await mentee.me.call('GET', '/mentors/saved');
+  assert.deepEqual(saved.body.map((c) => c.mentor_id), [mentor.id]);
+  assert.equal(saved.body[0].saved, true);
+  assert.equal((await mentee.me.call('POST', '/mentors/999999/save')).status, 404);
+  assert.equal((await mentor.me.call('POST', `/mentors/${mentor.id}/save`)).status, 403);
+  await mentee.me.call('DELETE', `/mentors/${mentor.id}/save`);
+  assert.equal((await mentee.me.call('GET', '/mentors/saved')).body.length, 0);
+});
+
+test('the department comes from HR at sign-in, even if the account says otherwise', async () => {
+  // Like Mark Thuo's account, linked to his HR record by hand with an old department
+  const m = await makeMember('Hand Linked', 'hand.linked@example.org', 'mentee');
+  await db.execute("UPDATE users SET staff_number = 'KQ30957', department = 'Flight Operations' WHERE user_id = :id", { id: m.id });
+  const again = client();
+  assert.equal((await again.call('POST', '/auth/login', { email: 'hand.linked@example.org', password: 'Passw0rd1' })).status, 200);
+  const [[after]] = await db.execute('SELECT department FROM users WHERE user_id = :id', { id: m.id });
+  assert.equal(after.department, 'Cabin Services');
+});
+
 /* ---------------- HR import and retirement ---------------- */
 
 test('an HR import previews changes, then a retired mentee becomes a mentor', async () => {
@@ -936,6 +1256,30 @@ test('someone HR marks as not eligible cannot sign in', async () => {
   ] });
   const r = await client().call('POST', '/auth/login', { email: GEORGE.email, password: 'Passw0rd1' });
   assert.equal(r.status, 403);
+});
+
+test('with two admins, an HR import waits for the other admin, who cannot be the uploader', async () => {
+  // A second admin account (it only needs to exist for the rule to apply)
+  const second = await makeMember('Second Admin', 'second.admin@example.org', 'mentee');
+  await db.execute('INSERT INTO admins (user_id) VALUES (:id)', { id: second.id });
+  const rows = [{ staff_number: 'KQ88888', full_name: 'Four Eyes', department: 'Finance', kq_email: 'four.eyes@kenya-airways.com', employment_status: 'active' }];
+
+  const asked = await state.admin.call('POST', '/admin/hr/apply', { rows });
+  assert.equal(asked.status, 202);
+  assert.equal(asked.body.waitingForSecondAdmin, true);
+  const [[none]] = await db.execute("SELECT COUNT(*) AS n FROM staff_directory WHERE staff_number = 'KQ88888'");
+  assert.equal(Number(none.n), 0);
+  const own = await state.admin.call('POST', `/admin/hr/requests/${asked.body.requestId}/decision`, { decision: 'approve' });
+  assert.equal(own.status, 403);
+
+  // An upload by the other admin can be approved, and then it applies
+  const [ins] = await db.execute('INSERT INTO hr_import_requests (requested_by, rows_json, summary) VALUES (:by, :rows, :s)', { by: second.id, rows: JSON.stringify(rows), s: '1 new' });
+  const ok = await state.admin.call('POST', `/admin/hr/requests/${ins.insertId}/decision`, { decision: 'approve' });
+  assert.equal(ok.status, 200);
+  const [[added]] = await db.execute("SELECT COUNT(*) AS n FROM staff_directory WHERE staff_number = 'KQ88888'");
+  assert.equal(Number(added.n), 1);
+  assert.equal((await state.admin.call('POST', `/admin/hr/requests/${ins.insertId}/decision`, { decision: 'approve' })).status, 404);
+  await db.execute('DELETE FROM admins WHERE user_id = :id', { id: second.id });
 });
 
 /* ---------------- Data rights ---------------- */
@@ -994,4 +1338,7 @@ test('repeated failed logins are rate limited', async () => {
   let last;
   for (let i = 0; i < 12; i++) last = await client().call('POST', '/auth/login', { email: 'ghost@example.org', password: 'wrong' });
   assert.equal(last.status, 429);
+  // Counted in the database, so restarting the server does not reset it
+  const [[row]] = await db.execute("SELECT hits FROM rate_limits WHERE rl_key LIKE 'sign-in:%' ORDER BY hits DESC LIMIT 1");
+  assert.ok(row.hits >= 10);
 });

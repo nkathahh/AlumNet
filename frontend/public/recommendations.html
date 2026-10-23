@@ -17,7 +17,7 @@
     <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
     <div class="topbar-actions">
       <label class="theme-switch" title="Toggle dark mode">
-        <input type="checkbox" id="theme-toggle-checkbox">
+        <input type="checkbox" id="theme-toggle-checkbox" aria-label="Dark mode">
         <span class="switch-track"><span class="switch-thumb"></span></span>
       </label>
       <button id="logout-btn" class="icon-btn" aria-label="Log out" title="Log out">⏻</button>
@@ -43,6 +43,14 @@
         </div>
         <div class="mentor-list" id="mentor-list"></div>
         <button type="button" class="btn-quiet" id="recs-more" style="display:none;"></button>
+      </section>
+
+      <section class="fm-section" id="saved-mentors" style="display:none;">
+        <div class="section-heading fm-heading">
+          <h2>Your shortlist</h2>
+          <span class="md-muted st-small" id="saved-count"></span>
+        </div>
+        <div class="fm-grid" id="saved-results"></div>
       </section>
 
       <section class="fm-section" id="mentor-directory">

@@ -1,8 +1,8 @@
 const pool = require('../config/db');
-const { createNotification } = require('../utils/notify');
+const { createNotification, notifyMany } = require('../utils/notify');
 const { parseFlags } = require('./safety.controller');
 const {
-  REJECTION_REASONS, SCAM_REASON, getSetting, posterTrust, learnFromApproval, learnFromScam
+  REJECTION_REASONS, SCAM_REASON, getSetting, posterTrust, learnFromApproval, learnFromScam, burstLimit, BURST_RANGE
 } = require('../utils/moderation');
 
 // The two kinds of post that go through moderation, described once
@@ -70,7 +70,13 @@ async function applyDecision({ kind, id, decision, reason, note, adminId, automa
   // Learning from people's decisions; automatic approvals teach nothing
   const link = post[k.link];
   if (newState === 'approved' && adminId) await learnFromApproval(link, adminId);
-  if (newState === 'rejected' && reason === SCAM_REASON) await learnFromScam(link, adminId, post.title);
+  // Going live: tell the few members it fits well
+  if (newState === 'approved') require('../utils/alerts').queueAlerts(kind, id);
+  if (newState === 'rejected' && reason === SCAM_REASON) {
+    await learnFromScam(link, adminId, post.title);
+    // Other live posts using the same website, email or link come down too
+    setImmediate(() => require('../utils/recheck').recheckLivePosts().catch((err) => console.error('Re-check failed:', err.message)));
+  }
 
   const title = post.title;
   const who = post.owner_name ? ` by ${post.owner_name}` : '';
@@ -98,6 +104,17 @@ async function applyDecision({ kind, id, decision, reason, note, adminId, automa
       take_down: `Your ${k.label} "${title}" was taken down: ${why}.`
     }[decision];
     await createNotification(post.owner_id, `${kind}_${newState}`, message, k.page);
+  }
+
+  // An edited live event that went back for review: tell people already registered how it ended
+  if (kind === 'event' && decision !== 'changes_requested') {
+    const { tellRegistrants } = require('../utils/eventNotice');
+    if (newState === 'approved' && post.change_summary) {
+      await tellRegistrants({ eventId: id, ownerId: post.owner_id, type: 'event_changed', message: post.change_summary, link: `events.html?open=${id}`, subject: `Change to ${title}` });
+    } else if (newState === 'rejected') {
+      await tellRegistrants({ eventId: id, ownerId: post.owner_id, type: 'event_cancelled', message: `"${title}" is no longer going ahead.`, link: 'events.html', subject: `Cancelled: ${title}` });
+    }
+    if (post.change_summary) await pool.execute('UPDATE events SET change_summary = NULL WHERE event_id = :id', { id });
   }
   return { status: 200, state: newState };
 }
@@ -166,6 +183,7 @@ async function getQueue(req, res, next) {
       items,
       autoApproved,
       autoApprove: (await getSetting('auto_approve', 'off')) === 'on',
+      burstPerDay: await burstLimit(),
       reasons: REJECTION_REASONS,
       stale: items.filter((i) => i.waiting_hours >= 48).length
     });
@@ -200,14 +218,28 @@ async function approveClean(req, res, next) {
 
 async function setAutoApprove(req, res, next) {
   try {
-    const on = req.body.autoApprove === true;
-    await pool.execute(
-      `INSERT INTO app_settings (setting_key, setting_value, updated_by) VALUES ('auto_approve', :value, :adminId)
+    const save = (key, value) => pool.execute(
+      `INSERT INTO app_settings (setting_key, setting_value, updated_by) VALUES (:key, :value, :adminId)
        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_by = VALUES(updated_by)`,
-      { value: on ? 'on' : 'off', adminId: req.user.userId }
+      { key, value, adminId: req.user.userId }
     );
-    await lazyLog()(req.user.userId, 'settings', 'app_settings', 0, `Turned the fast lane ${on ? 'on' : 'off'}`, 'Fast lane');
-    res.json({ autoApprove: on });
+    const out = {};
+    if (req.body.autoApprove !== undefined) {
+      const on = req.body.autoApprove === true;
+      await save('auto_approve', on ? 'on' : 'off');
+      await lazyLog()(req.user.userId, 'settings', 'app_settings', 0, `Turned the fast lane ${on ? 'on' : 'off'}`, 'Fast lane');
+      out.autoApprove = on;
+    }
+    if (req.body.burstPerDay !== undefined) {
+      const n = Number(req.body.burstPerDay);
+      if (!Number.isInteger(n) || n < BURST_RANGE.min || n > BURST_RANGE.max) {
+        return res.status(400).json({ error: `Choose a whole number from ${BURST_RANGE.min} to ${BURST_RANGE.max}` });
+      }
+      await save('burst_per_day', String(n));
+      await lazyLog()(req.user.userId, 'settings', 'app_settings', 0, `Set the daily post limit before posts are held to ${n}`, 'Daily post limit');
+      out.burstPerDay = n;
+    }
+    res.json(out);
   } catch (err) { next(err); }
 }
 

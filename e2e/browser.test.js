@@ -1,0 +1,193 @@
+/*
+ * Browser checks that the API tests cannot do:
+ *
+ * 1. Stored XSS. Every field a member can type into is filled with script
+ *    payloads, then every page that shows that text is opened in a real
+ *    browser as each role. The test fails if a payload runs (window.__xss
+ *    is set or a dialog opens) or if it is injected into the page at all,
+ *    even where the Content Security Policy stops it from running. This
+ *    checks that escapeHTML is used everywhere text is turned into HTML.
+ * 2. Accessibility. axe-core checks the main pages against WCAG 2.1 A and AA
+ *    and the test fails on any "critical" or "serious" problem.
+ *
+ * Run: npm test (from this folder), with the same DB_* variables as the API
+ * tests. DB_NAME must end in "_test". The backend's packages must be installed.
+ */
+const { test, before, after } = require('node:test');
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const { spawn } = require('node:child_process');
+const { createRequire } = require('node:module');
+const mysql = require('mysql2/promise');
+const { chromium } = require('playwright');
+const { default: AxeBuilder } = require('@axe-core/playwright');
+
+if (!String(process.env.DB_NAME || '').endsWith('_test')) {
+  console.error('Refusing to run: DB_NAME must end in "_test" so real data is never touched.');
+  process.exit(1);
+}
+
+const backendRequire = createRequire(path.join(__dirname, '..', 'backend', 'package.json'));
+const bcrypt = backendRequire('bcrypt');
+
+const PORT = process.env.E2E_PORT || 4998;
+const ROOT = `http://localhost:${PORT}`;
+const PASSWORD = 'Passw0rd1';
+const P1 = '"><img src=x onerror="window.__xss=1">';
+const P2 = '<script>window.__xss=1</script>';
+const P3 = "'><svg onload=window.__xss=1>";
+const PAYLOAD = `${P1}${P2}${P3}`;
+
+let server; let db; let browser; let serverLog = '';
+const ids = {};
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function member(name, email, role) {
+  const hash = await bcrypt.hash(PASSWORD, 4);
+  const [r] = await db.execute(
+    `INSERT INTO users (name, email, password_hash, status, email_verified_at, onboarded_at, privacy_accepted_at, department)
+     VALUES (:name, :email, :hash, 'active', NOW(), NOW(), NOW(), 'Human Resources')`,
+    { name, email, hash }
+  );
+  const table = { mentor: 'mentors', mentee: 'mentees', admin: 'admins' }[role];
+  await db.execute(`INSERT INTO ${table} (user_id) VALUES (:id)`, { id: r.insertId });
+  if (role !== 'admin') await db.execute('INSERT INTO profiles (user_id) VALUES (:id)', { id: r.insertId });
+  return r.insertId;
+}
+
+async function page(email) {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const pg = await context.newPage();
+  pg.problems = [];
+  pg.on('dialog', async (d) => { pg.problems.push(`dialog: ${d.message()}`); await d.dismiss(); });
+  pg.on('pageerror', (e) => pg.problems.push(`page error: ${e.message}`));
+  await pg.goto(`${ROOT}/login.html`);
+  await pg.fill('#email', email);
+  await pg.fill('#password', PASSWORD);
+  await pg.click('#login-form button[type=submit]');
+  await pg.waitForURL((u) => !u.pathname.endsWith('login.html'));
+  return pg;
+}
+
+// Calls the API from inside the page, with its session cookie
+const api = (pg, method, route, body) => pg.evaluate(async ([m, r, b]) => {
+  const res = await fetch(`/api${r}`, {
+    method: m, credentials: 'include',
+    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'AlumNet' },
+    body: b ? JSON.stringify(b) : undefined
+  });
+  return { status: res.status, body: await res.json().catch(() => null) };
+}, [method, route, body]);
+
+async function visit(pg, url, after) {
+  await pg.goto(ROOT + url);
+  await pg.waitForLoadState('networkidle');
+  if (after) await after(pg);
+  await wait(300);
+  const fired = await pg.evaluate(() => window.__xss === 1);
+  assert.equal(fired, false, `A script payload ran on ${url}`);
+  // The Content Security Policy blocks inline scripts, so a payload could be
+  // injected without running. Check the page itself for injected elements too.
+  const injected = await pg.evaluate(() => [
+    ...document.querySelectorAll('img[src="x"], svg[onload], [onerror], [onload]'),
+    ...[...document.querySelectorAll('script:not([src])')].filter((el) => el.textContent.includes('__xss'))
+  ].map((el) => el.outerHTML.slice(0, 80)));
+  assert.deepEqual(injected, [], `Text was turned into HTML on ${url}`);
+  assert.deepEqual(pg.problems.filter((p) => p.startsWith('dialog')), [], `A dialog opened on ${url}`);
+}
+
+before(async () => {
+  db = await mysql.createConnection({
+    host: process.env.DB_HOST || '127.0.0.1', port: process.env.DB_PORT || 3306,
+    user: process.env.DB_USER, password: process.env.DB_PASSWORD, database: process.env.DB_NAME, namedPlaceholders: true
+  });
+  server = spawn(process.execPath, [path.join(__dirname, '..', 'backend', 'src', 'server.js')], {
+    env: {
+      ...process.env, NODE_ENV: 'test', PORT: String(PORT), JWT_SECRET: 'e2e-secret', APP_URL: ROOT,
+      ADMIN_2FA_REQUIRED: 'false', ML_SERVICE_URL: 'http://127.0.0.1:1', SMTP_USER: '', SMTP_PASS: '', BREVO_API_KEY: '', MAIL_DEV_REDIRECT: ''
+    },
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  server.stdout.on('data', (d) => { serverLog += d; });
+  server.stderr.on('data', (d) => { serverLog += d; });
+  for (let i = 0; i < 50; i++) {
+    try { if ((await fetch(`${ROOT}/health`)).ok) break; } catch { /* not up yet */ }
+    await wait(200);
+  }
+  browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
+
+  ids.admin = await member('E2E Admin', 'e2e.admin@example.org', 'admin');
+  ids.mentor = await member(`Mentor ${P1}`, 'e2e.mentor@example.org', 'mentor');
+  ids.mentee = await member(`Mentee ${P3}`, 'e2e.mentee@example.org', 'mentee');
+});
+
+after(async () => {
+  if (browser) await browser.close();
+  if (server) server.kill();
+  if (db) await db.end();
+});
+
+test('script typed into any field never runs, on any page, for any role', async () => {
+  const mentor = await page('e2e.mentor@example.org');
+  const mentee = await page('e2e.mentee@example.org');
+  const admin = await page('e2e.admin@example.org');
+
+  // Every free-text field members fill in
+  const profile = { headline: `Head ${PAYLOAD}`, bio: `Bio ${PAYLOAD}`, skills: `Excel, ${P1}, ${P2}`, experience: `Exp ${PAYLOAD}`, careerInterests: `Goals ${PAYLOAD}`, city: `Nairobi ${P3}` };
+  assert.equal((await api(mentor, 'PUT', '/profile/me', { ...profile, availabilityNote: `Free ${PAYLOAD}` })).status, 200);
+  assert.equal((await api(mentee, 'PUT', '/profile/me', profile)).status, 200);
+
+  const opp = await api(mentor, 'POST', '/opportunities', {
+    title: `Role ${P1}`, company: `Co ${P2}`, opportunityType: 'full_time', industry: 'Aviation', location: `JKIA ${P3}`,
+    description: `About ${PAYLOAD}`, applyLink: 'https://careers.kenya-airways.com/x', closingDate: new Date(Date.now() + 20 * 864e5).toISOString().slice(0, 10),
+    requiredSkills: `Excel, ${P1}`
+  });
+  assert.equal(opp.status, 201);
+  const event = await api(mentor, 'POST', '/events', {
+    title: `Event ${P1}`, eventDate: new Date(Date.now() + 9 * 864e5).toISOString().slice(0, 16), mode: 'in_person',
+    location: `Venue ${P2}`, description: `About ${PAYLOAD}`, topics: `Excel, ${P3}`, capacity: 10
+  });
+  assert.equal(event.status, 201);
+  await api(admin, 'POST', `/admin/moderation/opportunity/${opp.body.opportunityId}/decision`, { decision: 'approved' });
+  await api(admin, 'POST', `/admin/moderation/event/${event.body.eventId}/decision`, { decision: 'approved' });
+  await api(mentee, 'POST', `/events/${event.body.eventId}/register`);
+  const req = await api(mentee, 'POST', '/mentorship-requests', { mentorId: ids.mentor, message: `Please mentor me ${PAYLOAD}` });
+  assert.equal(req.status, 201);
+  await api(mentee, 'POST', '/safety/reports', { targetType: 'opportunity', targetId: opp.body.opportunityId, reason: 'misleading', details: `Odd ${PAYLOAD}` });
+  // A second, edited event so change notices with the title are shown too
+  await api(mentor, 'PUT', `/events/${event.body.eventId}`, {
+    title: `Event ${P1}`, eventDate: new Date(Date.now() + 10 * 864e5).toISOString().slice(0, 16), mode: 'in_person',
+    location: `New venue ${P2}`, description: `About ${PAYLOAD}`, topics: `Excel, ${P3}`, capacity: 10
+  });
+
+  for (const url of ['/mentee-dashboard.html', '/recommendations.html', `/opportunities.html?open=${opp.body.opportunityId}`,
+    '/events.html', '/notifications.html', '/requests.html', `/profile.html?id=${ids.mentor}`, '/settings.html']) {
+    await visit(mentee, url);
+  }
+  for (const url of ['/mentor-dashboard.html', '/requests.html', '/events.html', `/profile.html?id=${ids.mentee}`, '/notifications.html']) {
+    await visit(mentor, url);
+  }
+  await visit(mentor, '/events.html', (pg) => pg.click('[data-event-filter=proposals]'));
+  await visit(mentor, '/opportunities.html', (pg) => pg.click('text=My posts'));
+  await visit(mentor, '/opportunities.html', (pg) => pg.click('[data-open-opp], .opportunity-card >> nth=0').catch(() => null));
+  for (const tab of ['overview', 'verification', 'reports', 'users', 'hr', 'events', 'opportunities', 'logs']) {
+    await visit(admin, `/admin.html#${tab}`, async (pg) => { await pg.click(`[data-admin-tab=${tab}]`); await wait(400); });
+  }
+});
+
+test('the main pages have no serious accessibility problems (WCAG 2.1 AA, axe-core)', async () => {
+  const mentee = await page('e2e.mentee@example.org');
+  const results = [];
+  const check = async (pg, url) => {
+    await pg.goto(ROOT + url);
+    await pg.waitForLoadState('networkidle');
+    const r = await new AxeBuilder({ page: pg }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+    for (const v of r.violations) if (['critical', 'serious'].includes(v.impact)) results.push(`${url}: ${v.id} (${v.nodes.length}) ${v.help}`);
+  };
+  const anon = await (await browser.newContext()).newPage();
+  for (const url of ['/login.html', '/signup.html', '/forgot-password.html']) await check(anon, url);
+  for (const url of ['/mentee-dashboard.html', '/recommendations.html', '/opportunities.html', '/events.html', '/notifications.html', '/profile.html', '/settings.html']) {
+    await check(mentee, url);
+  }
+  assert.deepEqual(results, [], `Accessibility problems:\n${results.join('\n')}`);
+});

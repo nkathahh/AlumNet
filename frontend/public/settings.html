@@ -16,7 +16,7 @@
         <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
         <div class="topbar-actions">
             <label class="theme-switch" title="Toggle dark mode">
-                <input type="checkbox" id="theme-toggle-checkbox">
+                <input type="checkbox" id="theme-toggle-checkbox" aria-label="Dark mode">
                 <span class="switch-track"><span class="switch-thumb"></span></span>
             </label>
             <button id="logout-btn" class="icon-btn" aria-label="Log out" title="Log out">⏻</button>
@@ -84,6 +84,16 @@
                                 <p class="st-text">Lost a phone or used a shared computer? Log out everywhere ends every AlumNet session, including this one.</p>
                                 <p class="st-msg" id="sessions-msg"></p>
                                 <button class="btn btn-secondary md-btn-sm" id="logout-everywhere">Log out everywhere</button>
+                            </div>
+                        </section>
+
+                        <section class="md-panel" id="alerts-panel">
+                            <div class="md-panel-head"><h2>Alerts</h2></div>
+                            <div class="st-body">
+                                <p class="st-text">AlumNet only tells you about posts that fit your profile well, and never more than 3 a week.</p>
+                                <label class="check-row" id="alert-opps-row"><input type="checkbox" id="alert-opps"><span>New opportunities that match my skills and goals</span></label>
+                                <label class="check-row"><input type="checkbox" id="alert-events"><span>Events that match my interests or department</span></label>
+                                <p class="st-msg" id="alerts-msg"></p>
                             </div>
                         </section>
 

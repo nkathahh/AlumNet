@@ -288,7 +288,7 @@ async function updateSidebar() {
     const res = await fetch(`${API_BASE}/profile/me`, { headers: { Authorization: `Bearer ${token}` } });
     if (!res.ok) return;
     const data = await res.json();
-    el.innerHTML = `${data.name}<br>${data.department || ''}`;
+    el.innerHTML = `${escapeHTML(data.name)}<br>${escapeHTML(data.department || '')}`;
   } catch { }
 }
 
@@ -778,7 +778,7 @@ function matchBreakdownHTML(b) {
         <div class="mb-row" title="${v === null ? 'Not enough information on one of the profiles' : label + ' similarity'}">
           <span class="mb-label">${label}</span>
           <span class="mb-track"><span class="mb-fill" style="width:${v ?? 0}%"></span></span>
-          <span class="mb-value">${v === null ? 'n/a' : Math.round(v) + '%'}</span>
+          <span class="mb-value">${v === null ? 'n/a' : (v >= 72 ? 'Strong' : v >= 62 ? 'Good' : 'Some')}</span>
         </div>`).join('')}
     </div>`;
 }
@@ -792,7 +792,7 @@ function apiMentorCardHTML(m, alreadyRequested) {
         <div class="mentor-name-row">
           <span class="mentor-name" style="cursor:pointer; text-decoration:underline;" data-action="view-profile" data-mentor-id="${m.mentor_id}">${escapeHTML(m.name)}</span>
           ${m.verified ? verifiedBadgeHTML('Verified former KQ staff') : ''}
-          <span class="match-score">${m.score}% match</span>
+          ${m.fit ? fitPillHTML(m.fit) : `<span class="match-score">${m.score}% match</span>`}
         </div>
         ${m.headline ? `<div class="req-headline" style="margin-bottom:4px;">${escapeHTML(m.headline)}</div>` : ''}
         <div class="mentor-meta" style="margin:0 0 8px;">
@@ -802,6 +802,7 @@ function apiMentorCardHTML(m, alreadyRequested) {
         ${matchBreakdownHTML(m.breakdown)}
       </div>
       <div class="mentor-actions">
+        ${saveButtonHTML(m)}
         <button class="btn ${alreadyRequested ? 'btn-secondary' : 'btn-primary'}" data-action="request" data-mentor-id="${m.mentor_id}" data-mentor-name="${escapeHTML(m.name)}" ${alreadyRequested ? 'disabled' : ''}>
           ${alreadyRequested ? 'Requested' : 'Request'}
         </button>
@@ -812,12 +813,7 @@ function apiMentorCardHTML(m, alreadyRequested) {
 function wireMentorCardActions(list) {
   const token = localStorage.getItem('alumnet_token');
 
-  list.querySelectorAll('[data-action="bookmark"]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      btn.classList.toggle('saved');
-      // TODO: POST/DELETE /api/bookmarks/:mentorId
-    });
-  });
+  wireSaveButtons(list);
 
   list.querySelectorAll('[data-action="request"]').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -880,7 +876,7 @@ async function renderRequests() {
 
     list.querySelectorAll('[data-action]').forEach((btn) => {
       btn.addEventListener('click', async () => {
-        if (btn.dataset.action === 'end' && !confirm('End this mentorship?')) return;
+        if (btn.dataset.action === 'end' && !(await askConfirm('End this mentorship?', 'You can both still see the history. The other person is told.', { confirmText: 'End mentorship', danger: true }))) return;
         btn.closest('.request-card').querySelectorAll('button').forEach((b) => (b.disabled = true));
 
         try {
@@ -903,10 +899,10 @@ async function renderRequests() {
             });
           }
 
-          if (!res.ok) { const err = await res.json(); alert(err.error || 'Action failed'); }
+          if (!res.ok) { const err = await res.json(); toast(err.error || 'Action failed'); }
           load();
         } catch {
-          alert('Could not reach the server.');
+          toast('Could not reach the server.');
         }
       });
     });
@@ -1225,7 +1221,7 @@ async function openMentorProfile(mentorId) {
   const token = localStorage.getItem('alumnet_token');
   const res = await fetch(`${API_BASE}/profile/${mentorId}`, { headers: { Authorization: `Bearer ${token}` } });
   const data = await res.json();
-  if (!res.ok) { alert(data.error || 'Could not load profile'); return; }
+  if (!res.ok) { toast(data.error || 'Could not load profile'); return; }
 
   const meta = [
     data.department,
@@ -1306,46 +1302,137 @@ async function renderEvents() {
   }
 }
 
-function drawEvents() {
+
+/* Long lists show 12 at a time with a "Show more" button, so the page stays
+   quick and readable with hundreds of posts */
+const LIST_STEP = 12;
+const listShown = { events: LIST_STEP, opportunities: LIST_STEP };
+function wantsMore(arg) { return Boolean(arg && arg.more === true); }
+function showMoreHTML(kind, shown, total) {
+  return total > shown
+    ? `<div class="list-more"><button type="button" class="btn btn-secondary md-btn-sm" data-show-more="${kind}">Show more (${total - shown} more)</button></div>`
+    : '';
+}
+
+function drawEvents(arg) {
+  listShown.events = wantsMore(arg) ? listShown.events + LIST_STEP : LIST_STEP;
   const grid = document.getElementById('event-grid');
   if (!grid) return;
   const token = localStorage.getItem('alumnet_token');
-  const list = eventFilter === 'mine' ? allEvents.filter((e) => e.is_registered) : allEvents;
+  const base = eventFilter === 'mine' ? allEvents.filter((e) => e.is_registered) : allEvents;
+  const list = base.filter(eventMatchesFilters);
+  const searching = eventFiltersActive();
 
+  if (!list.length && searching && base.length) {
+    grid.innerHTML = '<p style="color:var(--slate); padding:20px 4px;">No events match your search. <button type="button" class="link-btn" data-clear-event-filters>Clear the search</button></p>';
+    grid.querySelector('[data-clear-event-filters]').onclick = clearEventFilters;
+    return;
+  }
   if (!list.length) {
     grid.innerHTML = `<p style="color:var(--slate); padding:20px 4px;">${eventFilter === 'mine' ? "You haven't registered for any upcoming events." : 'No upcoming events yet.'
       }</p>`;
     return;
   }
 
-  grid.innerHTML = list.map(eventCardHTML).join('');
+  // "Recommended for you": up to three that fit well, shown first on All events
+  // While searching, results are simply in date order
+  const ordered = eventFilter === 'all' && !searching
+    ? [...list].sort((a, b) => {
+      const pa = a.fit && ['strong', 'good'].includes(a.fit.band) ? 1 : 0;
+      const pb = b.fit && ['strong', 'good'].includes(b.fit.band) ? 1 : 0;
+      return pb - pa || (pa && pb ? b.rank - a.rank : new Date(a.event_date) - new Date(b.event_date));
+    })
+    : list;
+  const recCount = eventFilter === 'all' && !searching ? Math.min(3, ordered.filter((e) => e.fit && ['strong', 'good'].includes(e.fit.band)).length) : 0;
+  grid.innerHTML = (recCount ? `<div class="events-rec-label">Recommended for you</div>` : '')
+    + ordered.slice(0, recCount).map(eventCardHTML).join('')
+    + (recCount && ordered.length > recCount ? '<div class="events-rec-label">All upcoming events</div>' : '')
+    + ordered.slice(recCount, recCount + listShown.events).map(eventCardHTML).join('')
+    + showMoreHTML('events', recCount + listShown.events, ordered.length);
+  const moreEvents = grid.querySelector('[data-show-more="events"]');
+  if (moreEvents) moreEvents.onclick = () => drawEvents({ more: true });
+  const target = new URLSearchParams(location.search).get('open');
+  if (target && document.getElementById(`event-${target}`)) {
+    const card = document.getElementById(`event-${target}`);
+    card.classList.add('event-highlight');
+    card.scrollIntoView({ block: 'center' });
+    history.replaceState(null, '', 'events.html');
+  }
 
   grid.querySelectorAll('[data-event-action]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       btn.disabled = true;
-      const registering = btn.dataset.eventAction === 'register';
+      const action = btn.dataset.eventAction;
+      const route = { register: ['POST', 'register'], cancel: ['DELETE', 'register'], waitlist: ['POST', 'waitlist'], unwait: ['DELETE', 'waitlist'] }[action];
+      const done = { register: 'You are registered. It is in My events.', cancel: 'Your registration is cancelled.', unwait: 'You have left the waiting list.' }[action];
       try {
-        const r = await fetch(`${API_BASE}/events/${btn.dataset.eventId}/register`, {
-          method: registering ? 'POST' : 'DELETE',
+        const r = await fetch(`${API_BASE}/events/${btn.dataset.eventId}/${route[1]}`, {
+          method: route[0],
           headers: { Authorization: `Bearer ${token}` }
         });
-        if (!r.ok) {
-          const err = await r.json();
-          alert(err.error || 'Action failed');
-        }
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok) toast(body.error || 'Could not do that. Please try again.');
+        else toast(done || body.message);
         renderEvents();
       } catch {
-        alert('Could not reach the server.');
+        toast('Could not reach the server.');
         btn.disabled = false;
       }
     });
   });
+  grid.querySelectorAll('[data-own-edit]').forEach((btn) => {
+    btn.onclick = () => openProposeEventModal({ ...allEvents.find((x) => String(x.event_id) === btn.dataset.ownEdit), status: 'approved' });
+  });
+  grid.querySelectorAll('[data-own-cancel]').forEach((btn) => {
+    btn.onclick = () => openCancelEventDialog(allEvents.find((x) => String(x.event_id) === btn.dataset.ownCancel));
+  });
+  grid.querySelectorAll('[data-ics]').forEach((btn) => {
+    btn.onclick = () => downloadEventICS(allEvents.find((x) => String(x.event_id) === btn.dataset.ics));
+  });
+}
+
+// "Add to calendar": an .ics file that Google, Outlook and Apple calendars open
+function downloadEventICS(e) {
+  if (!e) return;
+  const stamp = (d) => new Date(d).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const text = (v) => String(v || '').replace(/\\/g, '\\\\').replace(/[,;]/g, (c) => `\\${c}`).replace(/\r?\n/g, '\\n');
+  const start = new Date(e.event_date);
+  const end = new Date(start.getTime() + 2 * 3600 * 1000); // events have no end time yet; two hours is assumed
+  const where = e.mode === 'virtual' ? (e.location || 'Online (link on AlumNet)') : e.location;
+  const ics = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//AlumNet//Kenya Airways Alumni//EN', 'BEGIN:VEVENT',
+    `UID:alumnet-event-${e.event_id}@alumnet`, `DTSTAMP:${stamp(Date.now())}`, `DTSTART:${stamp(start)}`, `DTEND:${stamp(end)}`,
+    `SUMMARY:${text(e.title)}`, `LOCATION:${text(where)}`,
+    `DESCRIPTION:${text((e.description || '') + '\n\nDetails and changes: ' + location.origin + '/events.html?open=' + e.event_id)}`,
+    'END:VEVENT', 'END:VCALENDAR'
+  ].join('\r\n');
+  const url = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${String(e.title).replace(/[^a-z0-9]+/gi, '-').toLowerCase().slice(0, 40) || 'event'}.ics`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// Events happen on Nairobi time; alumni abroad also see the time where they are
+const KQ_TZ = 'Africa/Nairobi';
+function eventWhen(value) {
+  const d = new Date(value);
+  const date = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: KQ_TZ });
+  const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: KQ_TZ });
+  let mine = '';
+  try {
+    const here = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const fmt = (tz) => d.toLocaleString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' });
+    if (here && fmt(here) !== fmt(KQ_TZ)) mine = ` (${d.toLocaleString('en-GB', { timeZone: here, weekday: 'short', hour: '2-digit', minute: '2-digit' })} your time)`;
+  } catch { /* older browsers: Nairobi time only */ }
+  return { date, time: `${time} Nairobi time${mine}` };
 }
 
 function eventCardHTML(e) {
-  const d = new Date(e.event_date);
-  const date = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
-  const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const { date, time } = eventWhen(e.event_date);
   const full = e.capacity !== null && e.attendee_count >= e.capacity;
   const attendance = e.capacity !== null
     ? `${e.attendee_count} / ${e.capacity} attending`
@@ -1362,34 +1449,94 @@ function eventCardHTML(e) {
   }
 
   let button;
-  if (e.is_registered) {
-    button = `<button class="btn btn-secondary btn-block" data-event-action="cancel" data-event-id="${e.event_id}">Cancel registration</button>`;
+  if (e.is_mine) {
+    button = `<div class="event-own-actions">
+        <button class="btn btn-secondary btn-block" data-own-edit="${e.event_id}">Edit event</button>
+        <button class="btn-quiet st-small" data-own-cancel="${e.event_id}">Cancel event</button>
+      </div>`;
+  } else if (e.is_registered) {
+    button = `<div class="event-own-actions">
+        <button class="btn btn-secondary btn-block" data-event-action="cancel" data-event-id="${e.event_id}">Cancel registration</button>
+        <button type="button" class="btn-quiet st-small" data-ics="${e.event_id}">Add to my calendar</button>
+      </div>`;
+  } else if (!full && e.waitlist_position) {
+    button = `<div class="event-own-actions">
+        <div class="event-place-free">A place is free now. Register before someone else does.</div>
+        <button class="btn btn-primary btn-block" data-event-action="register" data-event-id="${e.event_id}">Register</button>
+      </div>`;
+  } else if (full && e.waitlist_position) {
+    button = `<div class="event-own-actions">
+        <div class="md-muted st-small">Full. You are number ${Number(e.waitlist_position)} on the waiting list.</div>
+        <button class="btn-quiet st-small" data-event-action="unwait" data-event-id="${e.event_id}">Leave the waiting list</button>
+      </div>`;
   } else if (full) {
-    button = '<button class="btn btn-secondary btn-block" disabled>Event full</button>';
+    button = `<button class="btn btn-secondary btn-block" data-event-action="waitlist" data-event-id="${e.event_id}">Full: join the waiting list${e.waitlist_count ? ` (${Number(e.waitlist_count)} waiting)` : ''}</button>`;
   } else {
     button = `<button class="btn btn-primary btn-block" data-event-action="register" data-event-id="${e.event_id}">Register</button>`;
   }
 
   return `
-    <div class="event-card">
+    <div class="event-card" id="event-${e.event_id}">
       <div class="event-card-top">
         <span class="event-badge ${e.is_official ? 'official' : 'community'}">${e.is_official ? 'Official' : 'Community'}</span>
+        ${e.is_mine ? '<span class="event-badge mine">Your event</span>' : ''}
+        ${e.edited_at ? `<span class="md-muted st-small" title="Changed ${escapeHTML(new Date(e.edited_at).toLocaleString('en-GB'))}">Updated</span>` : ''}
       </div>
       <div class="date">${date} · ${time}</div>
       <h3>${escapeHTML(e.title)}</h3>
+      ${e.fit && ['strong', 'good'].includes(e.fit.band) ? fitPillHTML(e.fit) : ''}
       <p>${escapeHTML(e.description || '')}</p>
+      ${e.topics_list && e.topics_list.length ? `<div class="pf-chips" style="margin-bottom:8px;">${e.topics_list.map((t) => `<span class="pf-chip">${escapeHTML(t)}</span>`).join('')}</div>` : ''}
+      ${e.fit_reasons && e.fit_reasons.length ? `<div class="fit-why">${e.fit_reasons.map(escapeHTML).join(' · ')}</div>` : ''}
+      ${e.audience && e.audience.length && !e.for_me ? `<div class="md-muted st-small">Mainly for ${escapeHTML(e.audience.join(', '))} staff, but everyone is welcome.</div>` : ''}
       <div class="event-meta">
         <div>${where}</div>
         <div>Hosted by ${host}</div>
         <div>${attendance}</div>
       </div>
       ${button}
-      ${e.is_official ? '' : `<button type="button" class="btn-quiet st-small event-report" data-report-event="${e.event_id}" data-title="${escapeHTML(e.title)}">Report this event</button>`}
+      ${e.is_official || e.is_mine ? '' : `<button type="button" class="btn-quiet st-small event-report" data-report-event="${e.event_id}" data-title="${escapeHTML(e.title)}">Report this event</button>`}
     </div>`;
+}
+
+// Search and filters for the events list (and the organiser's proposals)
+function eventFilterValues() {
+  return {
+    q: ((document.getElementById('event-search') || {}).value || '').trim().toLowerCase(),
+    format: (document.getElementById('event-format') || {}).value || '',
+    when: (document.getElementById('event-when') || {}).value || ''
+  };
+}
+function eventFiltersActive() {
+  const f = eventFilterValues();
+  return Boolean(f.q || f.format || f.when);
+}
+function eventMatchesFilters(e) {
+  const f = eventFilterValues();
+  if (f.format && e.mode !== f.format) return false;
+  if (f.when) {
+    const days = (new Date(e.event_date) - Date.now()) / 864e5;
+    if (days > Number(f.when)) return false;
+  }
+  if (!f.q) return true;
+  const text = [e.title, e.description, e.topics, e.location, e.organiser_name, e.is_official ? 'official alumni office' : 'community']
+    .filter(Boolean).join(' ').toLowerCase();
+  return f.q.split(/\s+/).every((w) => text.includes(w));
+}
+function clearEventFilters() {
+  ['event-search', 'event-format', 'event-when'].forEach((id) => { const el = document.getElementById(id); if (el) el.value = ''; });
+  drawEvents();
+  if (myProposalRows.length) drawMyProposals();
 }
 
 // Runs once per page load: filter tabs, and the propose button for mentors only
 function wireEventsPage() {
+  ['event-search', 'event-format', 'event-when'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener(id === 'event-search' ? 'input' : 'change', () => {
+      if (eventFilter === 'proposals') drawMyProposals(); else drawEvents();
+    });
+  });
   const tabs = document.querySelectorAll('[data-event-filter]');
   tabs.forEach((tab) => {
     tab.addEventListener('click', () => {
@@ -1413,19 +1560,30 @@ function wireEventsPage() {
   }
 }
 
-function openProposeEventModal(existing = null) {
+function openProposeEventModal(existing = null, opts = {}) {
   // Called straight from a click handler, the argument is the click event, not a post
   if (!existing || !existing.event_id) existing = null;
+  const asAdmin = Boolean(opts.admin);
+  const live = existing && existing.status === 'approved';
+  const heading = !existing ? 'Propose an event' : existing.status === 'changes_requested' ? 'Edit and resubmit' : 'Edit event';
+  const intro = !existing
+    ? 'Community events are reviewed by the admin before other members can see them.'
+    : existing.review_note && existing.status === 'changes_requested'
+      ? 'The alumni office asked: ' + escapeHTML(existing.review_note)
+      : live
+        ? `${Number(existing.attendee_count) ? `${Number(existing.attendee_count)} registered ${Number(existing.attendee_count) === 1 ? 'person' : 'people'} will be told if the date, time, format or venue changes. ` : ''}${asAdmin ? '' : 'Changing the meeting link to a new site, or anything the scam checks pick up, sends it back to the alumni office before it is live again.'}`
+        : 'Your proposal is still waiting for review. Your changes replace it.';
+  const submitText = !existing ? 'Submit for review' : existing.status === 'changes_requested' ? 'Resubmit for review' : 'Save changes';
   const token = localStorage.getItem('alumnet_token');
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop';
   backdrop.innerHTML = `
     <div class="modal-card">
-      <h3>${existing ? 'Edit and resubmit' : 'Propose an event'}</h3>
-      <div class="modal-meta">${existing && existing.review_note ? 'The alumni office asked: ' + escapeHTML(existing.review_note) : 'Community events are reviewed by the admin before other members can see them.'}</div>
+      <h3>${heading}</h3>
+      <div class="modal-meta">${intro}</div>
       <form id="propose-event-form" novalidate>
         <div class="field"><label for="peTitle">Title</label><input type="text" id="peTitle"></div>
-        <div class="field"><label for="peDate">Date and time</label><input type="datetime-local" id="peDate"></div>
+        <div class="field"><label for="peDate">Date and time (Nairobi time)</label><input type="datetime-local" id="peDate"></div>
         <div class="field-row">
           <div class="field">
             <label for="peMode">Format</label>
@@ -1441,6 +1599,7 @@ function openProposeEventModal(existing = null) {
           <input type="text" id="peLocation" placeholder="e.g. Pride Centre, Embakasi">
         </div>
         <div class="field"><label for="peDescription">Description</label><textarea id="peDescription"></textarea></div>
+        ${targetingFieldsHTML('pe')}
         <p id="pe-error" style="color:var(--kq-red); font-size:0.85rem; display:none; margin-bottom:12px;"></p>
         <div style="display:flex; gap:10px;">
           <button type="submit" class="btn btn-primary">Submit for review</button>
@@ -1461,9 +1620,11 @@ function openProposeEventModal(existing = null) {
     backdrop.querySelector('#peLocationLabel').textContent = virtual ? 'Meeting link' : 'Venue';
     backdrop.querySelector('#peLocation').placeholder = virtual ? 'https://...' : 'e.g. Pride Centre, Embakasi';
   });
+  fillAudience(backdrop.querySelector('#peAudience'), existing && existing.audience_departments ? existing.audience_departments.split(', ') : []);
   if (existing) {
-    const d = new Date(existing.event_date);
-    const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    backdrop.querySelector('#peTopics').value = existing.topics || '';
+    // The form is in Nairobi time, whatever time zone the browser is in
+    const local = new Date(existing.event_date).toLocaleString('sv-SE', { timeZone: 'Africa/Nairobi' }).replace(' ', 'T').slice(0, 16);
     backdrop.querySelector('#peTitle').value = existing.title || '';
     backdrop.querySelector('#peDate').value = local;
     modeSel.value = existing.mode || 'in_person';
@@ -1471,8 +1632,8 @@ function openProposeEventModal(existing = null) {
     backdrop.querySelector('#peLocation').value = existing.location || '';
     backdrop.querySelector('#peCapacity').value = existing.capacity || '';
     backdrop.querySelector('#peDescription').value = existing.description || '';
-    backdrop.querySelector('#propose-event-form button[type="submit"]').textContent = 'Resubmit for review';
   }
+  backdrop.querySelector('#propose-event-form button[type="submit"]').textContent = submitText;
 
   backdrop.querySelector('#propose-event-form').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -1485,11 +1646,13 @@ function openProposeEventModal(existing = null) {
       mode: modeSel.value,
       location: backdrop.querySelector('#peLocation').value,
       capacity: backdrop.querySelector('#peCapacity').value || null,
-      description: backdrop.querySelector('#peDescription').value
+      description: backdrop.querySelector('#peDescription').value,
+      topics: backdrop.querySelector('#peTopics').value,
+      audienceDepartments: readAudience(backdrop.querySelector('#peAudience'))
     };
 
     try {
-      const res = await fetch(existing ? `${API_BASE}/events/${existing.event_id}` : `${API_BASE}/events`, {
+      const res = await fetch(existing ? `${API_BASE}${asAdmin ? '/admin' : ''}/events/${existing.event_id}` : `${API_BASE}/events`, {
         method: existing ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(payload)
@@ -1502,10 +1665,32 @@ function openProposeEventModal(existing = null) {
       }
       close();
       renderMyProposals();
+      if (typeof renderEvents === 'function' && document.getElementById('event-grid')) renderEvents();
+      if (asAdmin) { renderAdminEvents(); renderAdminLogs(); }
       showPostWarnings(result);
     } catch {
       errorEl.textContent = 'Could not reach the server.';
       errorEl.style.display = 'block';
+    }
+  });
+}
+
+// Organisers and the alumni office call off an event; registered people are told
+function openCancelEventDialog(event, { admin = false } = {}) {
+  const n = Number(event.attendee_count) || 0;
+  openDialog({
+    title: 'Cancel this event?',
+    confirmText: 'Cancel event',
+    danger: true,
+    bodyHTML: `<p class="st-text"><strong>${escapeHTML(event.title)}</strong>. ${n ? `${n} registered ${n === 1 ? 'person' : 'people'} will be told it is off.` : 'Nobody has registered yet.'} This cannot be undone.</p>
+      <div class="field"><label for="cancel-reason">Reason (optional, shown to registered people)</label>
+      <input type="text" id="cancel-reason" maxlength="255" placeholder="e.g. The speaker is unwell"></div>`,
+    onConfirm: async (dlg) => {
+      const r = await apiSend('POST', `${admin ? '/admin' : ''}/events/${event.event_id}/cancel`, { reason: dlg.querySelector('#cancel-reason').value });
+      if (!r.ok) return r.data.error || 'Could not cancel the event';
+      toast(r.data.message || 'Event cancelled.');
+      if (admin) { renderAdminEvents(); renderAdminLogs(); } else { renderMyProposals(); if (document.getElementById('event-grid')) renderEvents(); }
+      return null;
     }
   });
 }
@@ -1523,6 +1708,24 @@ async function renderMyProposals() {
       mount.innerHTML = mdEmpty('calendar', 'No proposals yet', 'Use Propose an event to suggest a meet-up, talk or workshop for the network.');
       return;
     }
+    myProposalRows = rows;
+    drawMyProposals();
+  } catch {
+    mount.innerHTML = '';
+  }
+}
+
+let myProposalRows = [];
+function drawMyProposals() {
+  const mount = document.getElementById('my-proposals');
+  if (!mount) return;
+  const rows = myProposalRows.filter(eventMatchesFilters);
+  if (!rows.length) {
+    mount.innerHTML = '<p style="color:var(--slate); padding:20px 4px;">None of your proposals match. <button type="button" class="link-btn" data-clear-event-filters>Clear the search</button></p>';
+    mount.querySelector('[data-clear-event-filters]').onclick = clearEventFilters;
+    return;
+  }
+  {
     mount.innerHTML = `
       ${rows.map((p) => `
         <div class="request-card request-card-rich">
@@ -1531,18 +1734,24 @@ async function renderMyProposals() {
             <span style="font-size:0.82rem; color:var(--slate);">
               ${new Date(p.event_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
             </span>
+            ${p.status === 'cancelled' && p.cancel_reason ? `<div class="req-message"><span class="md-muted st-small">Reason</span><br>${escapeHTML(p.cancel_reason)}</div>` : ''}
             ${postReviewNoteHTML(p.status, p)}
           </div>
           <div class="post-side">
             ${postStatusHTML(p.status === 'approved' && new Date(p.event_date) < new Date() ? 'past' : p.status, p)}
+            ${p.status === 'approved' && new Date(p.event_date) >= new Date() ? `<span class="md-muted st-small">${Number(p.attendee_count)} registered</span>` : ''}
             ${p.status === 'changes_requested' ? `<button class="btn btn-primary md-btn-sm" data-edit-event="${p.event_id}">Edit and resubmit</button>` : ''}
+            ${['pending', 'approved'].includes(p.status) && new Date(p.event_date) >= new Date() ? `
+              <button class="btn btn-secondary md-btn-sm" data-edit-event="${p.event_id}">Edit</button>
+              <button class="btn-quiet st-small" data-cancel-event="${p.event_id}">Cancel event</button>` : ''}
           </div>
         </div>`).join('')}`;
     mount.querySelectorAll('[data-edit-event]').forEach((btn) => {
       btn.onclick = () => openProposeEventModal(rows.find((r) => String(r.event_id) === btn.dataset.editEvent));
     });
-  } catch {
-    mount.innerHTML = '';
+    mount.querySelectorAll('[data-cancel-event]').forEach((btn) => {
+      btn.onclick = () => openCancelEventDialog(rows.find((r) => String(r.event_id) === btn.dataset.cancelEvent));
+    });
   }
 }
 
@@ -1667,13 +1876,17 @@ async function renderOpportunities() {
         .map(([id, name]) => `<option value="${id}">${escapeHTML(name)}</option>`).join('');
       if ([...seen.keys()].map(String).includes(String(wanted))) posterSel.value = String(wanted);
     }
+    const sortSel = document.getElementById('opp-sort');
+    if (sortSel) sortSel.style.display = data.some((o) => o.fit) ? '' : 'none';
     drawOpportunities();
+    openFromLink(allOpportunities, 'opportunity_id', openOpportunityModal);
   } catch {
     list.innerHTML = '<p style="color:var(--kq-red); padding:20px 4px;">Could not reach the server.</p>';
   }
 }
 
-function drawOpportunities() {
+function drawOpportunities(arg) {
+  listShown.opportunities = wantsMore(arg) ? listShown.opportunities + LIST_STEP : LIST_STEP;
   const list = document.getElementById('opportunities-list');
   if (!list) return;
 
@@ -1710,7 +1923,30 @@ function drawOpportunities() {
     return;
   }
 
-  list.innerHTML = filtered.map(opportunityCardHTML).join('');
+  // Current staff see the closest fits first, with a short "Recommended" strip
+  const sortSel = document.getElementById('opp-sort');
+  if (sortSel && sortSel.value === 'fit' && filtered.some((o) => o.rank !== undefined)) filtered.sort((a, b) => b.rank - a.rank);
+  const recMount = document.getElementById('opp-recommended');
+  if (recMount) {
+    const picks = allOpportunities.filter((o) => o.fit && ['strong', 'good'].includes(o.fit.band) && !o.is_mine)
+      .sort((a, b) => b.rank - a.rank).slice(0, 3);
+    recMount.innerHTML = picks.length && !q && !industry && !type && !poster ? `
+      <div class="section-heading fm-heading"><h2>Recommended for you</h2><span class="md-muted st-small">Closest to your skills and goals.</span></div>
+      <div class="rec-strip">${picks.map((o) => `
+        <button type="button" class="rec-card" data-view-opp="${o.opportunity_id}">
+          ${fitPillHTML(o.fit)}
+          <strong>${escapeHTML(o.title)}</strong>
+          <span class="md-muted st-small">${escapeHTML(o.company || '')}</span>
+          ${o.fit_reasons && o.fit_reasons[0] ? `<span class="fit-why">${escapeHTML(o.fit_reasons[0])}</span>` : ''}
+        </button>`).join('')}</div>` : '';
+    recMount.querySelectorAll('[data-view-opp]').forEach((b) => {
+      b.onclick = () => openOpportunityModal(allOpportunities.find((o) => String(o.opportunity_id) === b.dataset.viewOpp));
+    });
+  }
+  list.innerHTML = filtered.slice(0, listShown.opportunities).map(opportunityCardHTML).join('')
+    + showMoreHTML('opportunities', listShown.opportunities, filtered.length);
+  const moreOpps = list.querySelector('[data-show-more="opportunities"]');
+  if (moreOpps) moreOpps.onclick = () => drawOpportunities({ more: true });
   list.querySelectorAll('[data-filter-poster]').forEach((btn) => {
     btn.addEventListener('click', () => {
       document.getElementById('opp-poster').value = btn.dataset.filterPoster;
@@ -1736,10 +1972,12 @@ function opportunityCardHTML(o) {
           ${o.industry ? `<span class="tag">${escapeHTML(o.industry)}</span>` : ''}
           ${closing.soon ? `<span class="tag closing-soon">${closing.text}</span>` : ''}
           ${o.is_mine ? '<span class="tag tag-mine">Your post</span>' : ''}
+          ${fitPillHTML(o.fit)}
         </div>
         <h3 style="font-size:1rem; margin:8px 0 2px;">${escapeHTML(o.title)}</h3>
         <div class="opp-company">${escapeHTML(o.company || '')}${o.location ? ' · ' + escapeHTML(o.location) : ''}</div>
         <p class="mentor-blurb">${escapeHTML(truncate(o.description, 160))}</p>
+        ${o.fit_reasons && o.fit_reasons.length ? `<div class="fit-why">${o.fit_reasons.map(escapeHTML).join(' · ')}</div>` : ''}
         <div class="mentor-meta">Posted by ${o.is_mine ? 'you' : `<button type="button" class="link-btn" data-filter-poster="${o.posted_by}" title="Show only posts by ${escapeHTML(o.posted_by_name)}">${escapeHTML(o.posted_by_name)}</button>`}${!closing.soon && closing.text ? ' · ' + closing.text : ''}</div>
       </div>
       <button class="btn btn-secondary" data-view-opp="${o.opportunity_id}">View</button>
@@ -1759,9 +1997,11 @@ function openOpportunityModal(o) {
       <h3>${escapeHTML(o.title)}</h3>
       <div class="modal-meta">${escapeHTML(o.company || '')}${o.location ? ' · ' + escapeHTML(o.location) : ''}</div>
       <div class="modal-section"><div class="label">Type</div><div class="value">${escapeHTML(OPPORTUNITY_TYPES[o.opportunity_type] || 'Opportunity')}${o.industry ? ' · ' + escapeHTML(o.industry) : ''}</div></div>
+      ${o.fit ? `<div class="modal-section">${fitPillHTML(o.fit)}</div>` : ''}
       <div class="modal-section"><div class="label">Description</div><div class="value" style="white-space:pre-line;">${escapeHTML(o.description || '')}</div></div>
+      ${o.skills_have ? skillsChecklistHTML(o.skills_have, o.skills_missing, o.my_skills || []) : (o.required_skills ? `<div class="modal-section"><div class="label">Skills it asks for</div><div class="value">${escapeHTML(o.required_skills)}</div></div>` : '')}
       ${closing.text ? `<div class="modal-section"><div class="label">Closing date</div><div class="value">${closing.text}</div></div>` : ''}
-      <div class="modal-section"><div class="label">Posted by</div><div class="value">${escapeHTML(o.posted_by_name)}${o.posted_by_department ? ', ' + escapeHTML(o.posted_by_department) : ''}</div></div>
+      <div class="modal-section"><div class="label">Posted by</div><div class="value">${escapeHTML(o.posted_by_name)}${o.posted_by_department ? ', formerly ' + escapeHTML(o.posted_by_department) : ''}${o.edited_at ? ` <span class="md-muted st-small">· updated ${escapeHTML(new Date(o.edited_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }))}</span>` : ''}</div></div>
       ${href
       ? `<a class="btn btn-primary btn-block" href="${escapeHTML(href)}" target="_blank" rel="noopener" style="margin-bottom:10px;">${isEmail ? 'Apply by email' : 'Apply now'}</a>`
       : '<p class="mentor-meta" style="margin-bottom:10px;">No application link was provided.</p>'}
@@ -1775,7 +2015,7 @@ function openOpportunityModal(o) {
 
 // Runs once per page load: filters, plus posting for mentors
 function wireOpportunitiesPage() {
-  ['opp-search', 'opp-industry', 'opp-type', 'opp-poster'].forEach((id) => {
+  ['opp-search', 'opp-industry', 'opp-type', 'opp-poster', 'opp-sort'].forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('input', drawOpportunities);
   });
@@ -1790,9 +2030,17 @@ function wireOpportunitiesPage() {
       tabsEl.querySelectorAll('[data-opp-view]').forEach((t) => t.classList.toggle('active', t.dataset.oppView === view));
       document.getElementById('opp-filters').style.display = view === 'all' ? '' : 'none';
       document.getElementById('opp-poster-chip').style.display = view === 'all' ? '' : 'none';
+      document.getElementById('opp-recommended').style.display = view === 'all' ? '' : 'none';
       document.getElementById('opportunities-list').style.display = view === 'all' ? '' : 'none';
       document.getElementById('my-posts').style.display = view === 'mine' ? '' : 'none';
+      const tools = document.getElementById('my-posts-filters');
+      if (tools) tools.style.display = view === 'mine' && tools.dataset.hasPosts ? '' : 'none';
     };
+    const mineSearch = document.getElementById('mine-search');
+    if (mineSearch) {
+      mineSearch.addEventListener('input', drawMyPosts);
+      document.getElementById('mine-status').addEventListener('change', drawMyPosts);
+    }
     tabsEl.querySelectorAll('[data-opp-view]').forEach((t) => t.addEventListener('click', () => show(t.dataset.oppView)));
     show(location.hash === '#mine' ? 'mine' : 'all');
     renderMyPosts();
@@ -1811,8 +2059,14 @@ function openPostOpportunityModal(existing = null) {
   backdrop.className = 'modal-backdrop';
   backdrop.innerHTML = `
     <div class="modal-card">
-      <h3>${existing ? 'Edit and resubmit' : 'Post an opportunity'}</h3>
-      <div class="modal-meta">${existing && existing.review_note ? 'The alumni office asked: ' + escapeHTML(existing.review_note) : 'Opportunities are reviewed by the admin before they appear to the network.'}</div>
+      <h3>${!existing ? 'Post an opportunity' : existing.approval_status === 'changes_requested' ? 'Edit and resubmit' : 'Edit post'}</h3>
+      <div class="modal-meta">${!existing
+        ? 'Opportunities are reviewed by the admin before they appear to the network.'
+        : existing.approval_status === 'changes_requested' && existing.review_note
+          ? 'The alumni office asked: ' + escapeHTML(existing.review_note)
+          : existing.approval_status === 'approved'
+            ? 'Small changes such as a new closing date stay live. Changing the application link to a new site, or anything the scam checks pick up, sends it back to the alumni office first.'
+            : 'Your post is still waiting for review. Your changes replace it.'}</div>
       <form id="post-opp-form" novalidate>
         <div class="field"><label for="poTitle">Role title</label><input type="text" id="poTitle" placeholder="e.g. Cabin Safety Trainer"></div>
         <div class="field"><label for="poCompany">Company or department</label><input type="text" id="poCompany" placeholder="e.g. KQ Training Academy"></div>
@@ -1832,6 +2086,8 @@ function openPostOpportunityModal(existing = null) {
         </div>
         <div class="field"><label for="poLink">Application link or contact email</label><input type="text" id="poLink" placeholder="https://... or name@example.com"></div>
         <div class="field"><label for="poDescription">Description</label><textarea id="poDescription" placeholder="What the role involves and who it suits"></textarea></div>
+        <div class="field"><label for="poSkills">Skills it asks for (up to 8, separated by commas)</label><input type="text" id="poSkills" placeholder="e.g. Dangerous goods, Excel, team leadership">
+          <p class="field-hint">Staff see which of these they already have, and well-matched staff get an alert.</p></div>
         <p id="po-error" style="color:var(--kq-red); font-size:0.85rem; display:none; margin-bottom:12px;"></p>
         <div style="display:flex; gap:10px;">
           <button type="submit" class="btn btn-primary">Submit for review</button>
@@ -1849,8 +2105,8 @@ function openPostOpportunityModal(existing = null) {
     set('#poTitle', existing.title); set('#poCompany', existing.company); set('#poType', existing.opportunity_type);
     set('#poIndustry', existing.industry); set('#poLocation', existing.location);
     set('#poClosing', existing.closing_date ? String(existing.closing_date).slice(0, 10) : '');
-    set('#poLink', existing.apply_link); set('#poDescription', existing.description);
-    backdrop.querySelector('#post-opp-form button[type="submit"]').textContent = 'Resubmit for review';
+    set('#poLink', existing.apply_link); set('#poDescription', existing.description); set('#poSkills', existing.required_skills);
+    backdrop.querySelector('#post-opp-form button[type="submit"]').textContent = existing.approval_status === 'changes_requested' ? 'Resubmit for review' : 'Save changes';
   }
 
   backdrop.querySelector('#post-opp-form').addEventListener('submit', async (e) => {
@@ -1866,7 +2122,8 @@ function openPostOpportunityModal(existing = null) {
       location: backdrop.querySelector('#poLocation').value,
       closingDate: backdrop.querySelector('#poClosing').value,
       applyLink: backdrop.querySelector('#poLink').value,
-      description: backdrop.querySelector('#poDescription').value
+      description: backdrop.querySelector('#poDescription').value,
+      requiredSkills: backdrop.querySelector('#poSkills').value
     };
 
     try {
@@ -1910,6 +2167,7 @@ function postStatusHTML(state, p) {
   if (state === 'closed') return '<span class="request-status ended">Closed</span>';
   if (state === 'past') return '<span class="request-status ended">Took place</span>';
   if (state === 'changes_requested') return '<span class="request-status pending">Changes requested</span>';
+  if (state === 'cancelled') return '<span class="request-status ended">Cancelled</span>';
   return '<span class="request-status declined">Not approved</span>';
 }
 function postReviewNoteHTML(state, p) {
@@ -1931,18 +2189,54 @@ async function renderMyPosts() {
     if (!res.ok) { mount.innerHTML = ''; return; }
     const count = document.getElementById('my-posts-count');
     if (count) count.textContent = rows.length ? rows.length : '';
+    const tools = document.getElementById('my-posts-filters');
+    if (tools) tools.dataset.hasPosts = rows.length ? '1' : '';
     if (!rows.length) {
       mount.innerHTML = mdEmpty('briefcase', 'You have not posted anything yet', 'Use Post opportunity to share a role with current Kenya Airways staff.');
+      if (tools) tools.style.display = 'none';
       return;
     }
-    const waiting = rows.filter((p) => p.approval_status === 'pending').length;
-    const toFix = rows.filter((p) => p.approval_status === 'changes_requested').length;
+    if (tools && document.getElementById('my-posts').style.display !== 'none') tools.style.display = '';
+    myPostRows = rows;
+    drawMyPosts();
+  } catch {
+    mount.innerHTML = '';
+  }
+}
+
+// What state a post is in, in the words the poster sees
+function myPostState(p) {
+  if (p.approval_status === 'approved' && (p.closed_at || closingLabel(p.closing_date).closed)) return 'closed';
+  return p.approval_status;
+}
+
+let myPostRows = [];
+function drawMyPosts() {
+  const mount = document.getElementById('my-posts');
+  if (!mount) return;
+  const q = ((document.getElementById('mine-search') || {}).value || '').trim().toLowerCase();
+  const state = (document.getElementById('mine-status') || {}).value || '';
+  const all = myPostRows;
+  const rows = all.filter((p) => (!state || myPostState(p) === state)
+    && (!q || [p.title, p.company, p.location, p.description, p.required_skills].filter(Boolean).join(' ').toLowerCase().includes(q)));
+  {
+    if (!rows.length) {
+      mount.innerHTML = `<p class="md-muted" style="padding:16px 4px;">None of your posts match. <button type="button" class="link-btn" id="mine-clear">Clear the search</button></p>`;
+      document.getElementById('mine-clear').onclick = () => {
+        document.getElementById('mine-search').value = '';
+        document.getElementById('mine-status').value = '';
+        drawMyPosts();
+      };
+      return;
+    }
+    const waiting = all.filter((p) => p.approval_status === 'pending').length;
+    const toFix = all.filter((p) => p.approval_status === 'changes_requested').length;
     const summary = [
       toFix ? `${toFix} need${toFix === 1 ? 's' : ''} changes from you` : '',
       waiting ? `${waiting} ${waiting === 1 ? 'is' : 'are'} waiting for review` : ''
     ].filter(Boolean).join(' and ');
     mount.innerHTML = `
-      <p class="md-muted st-small" style="margin:0 0 12px;">Every post you have made, in every state.${summary ? ' ' + summary.charAt(0).toUpperCase() + summary.slice(1) + '.' : ''}</p>
+      <p class="md-muted st-small" style="margin:0 0 12px;">${rows.length === all.length ? 'Every post you have made, in every state.' : `Showing ${rows.length} of your ${all.length} posts.`}${summary ? ' ' + summary.charAt(0).toUpperCase() + summary.slice(1) + '.' : ''}</p>
       ${rows.map((p) => `
         <div class="request-card request-card-rich">
           <div class="req-main">
@@ -1953,13 +2247,31 @@ async function renderMyPosts() {
             ${postReviewNoteHTML(p.approval_status, p)}
           </div>
           <div class="post-side">
-            ${postStatusHTML(p.approval_status === 'approved' && closingLabel(p.closing_date).closed ? 'closed' : p.approval_status, p)}
+            ${postStatusHTML(myPostState(p), p)}
             ${p.approval_status === 'changes_requested' ? `<button class="btn btn-primary md-btn-sm" data-edit-post="${p.opportunity_id}">Edit and resubmit</button>` : ''}
-            ${p.approval_status === 'approved' && !closingLabel(p.closing_date).closed ? `<button class="btn btn-secondary md-btn-sm" data-view-mine="${p.opportunity_id}">View</button>` : ''}
+            ${p.approval_status === 'approved' && !p.closed_at && !closingLabel(p.closing_date).closed ? `<button class="btn btn-secondary md-btn-sm" data-view-mine="${p.opportunity_id}">View</button>` : ''}
+            ${['pending', 'approved'].includes(p.approval_status) && !p.closed_at && !closingLabel(p.closing_date).closed ? `<button class="btn btn-secondary md-btn-sm" data-edit-post="${p.opportunity_id}">Edit</button>` : ''}
+            ${p.approval_status === 'approved' && !p.closed_at && !closingLabel(p.closing_date).closed ? `<button class="btn-quiet st-small" data-close-post="${p.opportunity_id}">Role filled? Close it</button>` : ''}
           </div>
         </div>`).join('')}`;
     mount.querySelectorAll('[data-edit-post]').forEach((btn) => {
       btn.onclick = () => openPostOpportunityModal(rows.find((r) => String(r.opportunity_id) === btn.dataset.editPost));
+    });
+    mount.querySelectorAll('[data-close-post]').forEach((btn) => {
+      const post = rows.find((r) => String(r.opportunity_id) === btn.dataset.closePost);
+      btn.onclick = () => openDialog({
+        title: 'Close this post?',
+        confirmText: 'Close post',
+        bodyHTML: `<p class="st-text"><strong>${escapeHTML(post.title)}</strong> will stop showing to staff straight away. Use this when the role is filled or no longer open. You can still see it here.</p>`,
+        onConfirm: async () => {
+          const r = await apiSend('POST', `/opportunities/${post.opportunity_id}/close`);
+          if (!r.ok) return r.data.error || 'Could not close the post';
+          toast('Closed. It no longer shows to staff.');
+          renderMyPosts();
+          renderOpportunities();
+          return null;
+        }
+      });
     });
     mount.querySelectorAll('[data-view-mine]').forEach((btn) => {
       btn.onclick = () => {
@@ -1967,8 +2279,6 @@ async function renderMyPosts() {
         if (live) openOpportunityModal(live);
       };
     });
-  } catch {
-    mount.innerHTML = '';
   }
 }
 
@@ -2036,11 +2346,12 @@ function wireAdminActions(tbody) {
       const suspending = btn.dataset.suspended === '0';
       let reason = '';
       if (suspending) {
-        reason = prompt(`Why are you suspending ${btn.dataset.name}? They will see this reason.`, '');
+        reason = await askDialog({
+          title: `Suspend ${btn.dataset.name}?`, text: 'They are logged out at once and will see this reason.', confirmText: 'Suspend', danger: true,
+          input: { label: 'Reason', placeholder: 'e.g. Posted a fake job asking for fees', required: 'Give a short reason so the member knows why.' }
+        });
         if (reason === null) return;
-        reason = reason.trim();
-        if (!reason) { alert('Give a short reason so the member knows why.'); return; }
-      } else if (!confirm(`Reactivate ${btn.dataset.name}?`)) {
+      } else if (!(await askConfirm(`Reactivate ${btn.dataset.name}?`, 'They can sign in again straight away.', { confirmText: 'Reactivate' }))) {
         return;
       }
       btn.disabled = true;
@@ -2051,11 +2362,11 @@ function wireAdminActions(tbody) {
           body: JSON.stringify({ reason })
         });
         const result = await res.json();
-        if (!res.ok) { alert(result.error || 'Action failed'); btn.disabled = false; return; }
+        if (!res.ok) { toast(result.error || 'Action failed'); btn.disabled = false; return; }
         renderAdminTable();
         renderAdminLogs();
       } catch {
-        alert('Could not reach the server.');
+        toast('Could not reach the server.');
         btn.disabled = false;
       }
     });
@@ -2121,7 +2432,7 @@ async function renderAdminVerification() {
       const note = document.getElementById(`vr-note-${id}`).value.trim();
       const msg = document.getElementById(`vr-msg-${id}`);
       if (btn.dataset.decision === 'rejected' && !note) { setMsg(msg, 'Add a short note saying why you are rejecting.'); return; }
-      if (btn.dataset.decision === 'approved' && !confirm('Approve this person? Their account is created from the HR record.')) return;
+      if (btn.dataset.decision === 'approved' && !(await askConfirm('Approve this person?', 'Their account is created from the HR record.', { confirmText: 'Approve' }))) return;
       btn.closest('.vr-card').querySelectorAll('button').forEach((b) => (b.disabled = true));
       const { ok, data } = await apiSend('PATCH', `/admin/signup-requests/${id}/review`, { decision: btn.dataset.decision, note });
       if (!ok) {
@@ -2224,7 +2535,45 @@ function wireHrImport() {
       if (!r.ok) { setMsg(msg, r.data.error); btn.disabled = false; btn.textContent = 'Apply changes'; return; }
       preview.innerHTML = '';
       input.value = '';
-      setMsg(msg, `Done: ${r.data.summary}.`, true);
+      if (r.data.waitingForSecondAdmin) {
+        setMsg(msg, `Sent for approval: ${r.data.summary}. Another admin must approve it before anything changes.`, true);
+      } else {
+        setMsg(msg, `Done: ${r.data.summary}.`, true);
+        renderAdminTable();
+      }
+      renderHrRequests();
+      renderAdminLogs();
+    };
+  });
+  renderHrRequests();
+}
+
+// HR updates uploaded by one admin, waiting for another to approve
+async function renderHrRequests() {
+  const panel = document.getElementById('hr-requests-panel');
+  const mount = document.getElementById('hr-requests');
+  if (!panel || !mount) return;
+  const { ok, data } = await apiSend('GET', '/admin/hr/requests');
+  if (!ok || !data.length) { panel.style.display = 'none'; return; }
+  panel.style.display = '';
+  mount.innerHTML = data.map((r) => `
+    <div class="request-card request-card-rich">
+      <div class="req-main"><strong>${escapeHTML(r.summary)}</strong><br>
+        <span class="md-muted st-small">Uploaded by ${r.mine ? 'you' : escapeHTML(r.requested_by_name)} · ${escapeHTML(timeAgo(r.created_at))}</span></div>
+      <div class="post-side">${r.mine
+        ? '<span class="md-muted st-small">Waiting for another admin</span>'
+        : `<button class="btn btn-primary md-btn-sm" data-hr-decide="approve" data-id="${r.request_id}">Approve and apply</button>
+           <button class="btn-quiet st-small" data-hr-decide="reject" data-id="${r.request_id}">Reject</button>`}</div>
+    </div>`).join('');
+  mount.querySelectorAll('[data-hr-decide]').forEach((btn) => {
+    btn.onclick = async () => {
+      const approve = btn.dataset.hrDecide === 'approve';
+      if (!(await askConfirm(approve ? 'Approve and apply this HR update?' : 'Reject this HR update?',
+        approve ? 'Roles change straight away. Staff marked former become mentors.' : 'Nothing will be changed. The uploader is told.',
+        { confirmText: approve ? 'Approve and apply' : 'Reject', danger: !approve }))) return;
+      const r = await apiSend('POST', `/admin/hr/requests/${btn.dataset.id}/decision`, { decision: btn.dataset.hrDecide });
+      toast(r.ok ? (r.data.summary ? `Applied: ${r.data.summary}.` : r.data.message) : (r.data.error || 'Could not do that'));
+      renderHrRequests();
       renderAdminTable();
       renderAdminLogs();
     };
@@ -2258,6 +2607,8 @@ function showAdminTab(name) {
   });
   if (location.hash !== `#${name}`) history.replaceState(null, '', `#${name}`);
   window.scrollTo(0, 0);
+  // Fresh data each time a tab opens, so admins never act on an old list
+  if (name === 'events' && typeof renderAdminEvents === 'function') renderAdminEvents();
 }
 
 function wireAdminTabs() {
@@ -2289,30 +2640,36 @@ async function renderAdminEvents() {
   const events = await res.json();
   if (!res.ok) { tbody.innerHTML = `<tr><td colspan="5">${escapeHTML(events.error)}</td></tr>`; return; }
 
+  const STATUS_WORDS = { approved: 'Live', pending: 'Waiting for review', rejected: 'Not approved', changes_requested: 'Changes requested', cancelled: 'Cancelled' };
+  const upcoming = (e) => new Date(e.event_date) >= new Date();
   tbody.innerHTML = events.map((e) => `
     <tr>
       <td>${escapeHTML(e.title)}</td>
-      <td>${new Date(e.event_date).toLocaleString('en-GB')}</td>
-      <td>${escapeHTML(e.description || '')}</td>
-      <td><span class="request-status ${e.status}">${e.status}</span></td>
-      <td><button class="btn btn-secondary" data-delete-event="${e.event_id}">Delete</button></td>
+      <td>${new Date(e.event_date).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}</td>
+      <td>${Number(e.attendee_count) || 0}${e.capacity ? ' / ' + e.capacity : ''}</td>
+      <td><span class="request-status ${e.status}">${e.status === 'approved' && !upcoming(e) ? 'Took place' : (STATUS_WORDS[e.status] || e.status)}</span></td>
+      <td class="admin-event-actions">${e.status === 'approved' && upcoming(e) ? `
+        <button class="btn btn-secondary md-btn-sm" data-edit-admin-event="${e.event_id}">Edit</button>
+        <button class="btn-quiet st-small" data-cancel-admin-event="${e.event_id}">Cancel</button>` : ''}</td>
     </tr>`).join('');
 
-  tbody.querySelectorAll('[data-delete-event]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      if (!confirm('Delete this event?')) return;
-      await fetch(`${API_BASE}/admin/events/${btn.dataset.deleteEvent}`, {
-        method: 'DELETE', headers: { Authorization: `Bearer ${token}` }
-      });
-      renderAdminEvents();
-      renderAdminLogs();
-    });
+  const find = (id) => events.find((x) => String(x.event_id) === id);
+  tbody.querySelectorAll('[data-edit-admin-event]').forEach((btn) => {
+    btn.onclick = () => openProposeEventModal(find(btn.dataset.editAdminEvent), { admin: true });
+  });
+  tbody.querySelectorAll('[data-cancel-admin-event]').forEach((btn) => {
+    btn.onclick = () => openCancelEventDialog(find(btn.dataset.cancelAdminEvent), { admin: true });
   });
 }
 
 function wireAdminEventForm() {
   const form = document.getElementById('create-event-form');
   if (!form) return;
+  const targeting = document.getElementById('event-targeting');
+  if (targeting) {
+    targeting.innerHTML = targetingFieldsHTML('ae');
+    fillAudience(document.getElementById('aeAudience'));
+  }
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const token = localStorage.getItem('alumnet_token');
@@ -2325,7 +2682,9 @@ function wireAdminEventForm() {
       description: document.getElementById('eventDescription').value,
       mode: document.getElementById('eventMode').value,
       location: document.getElementById('eventLocation').value,
-      capacity: document.getElementById('eventCapacity').value || null
+      capacity: document.getElementById('eventCapacity').value || null,
+      topics: (document.getElementById('aeTopics') || {}).value || '',
+      audienceDepartments: document.getElementById('aeAudience') ? readAudience(document.getElementById('aeAudience')) : []
     };
 
     const res = await fetch(`${API_BASE}/admin/events`, {
@@ -2337,6 +2696,8 @@ function wireAdminEventForm() {
     if (res.ok) {
       form.reset();
       document.getElementById('eventDescription').value = '';
+      if (document.getElementById('aeAudience')) fillAudience(document.getElementById('aeAudience'));
+      toast('Event created. Members it suits will get an alert.');
       renderAdminEvents();
       renderAdminLogs();
     } else if (errorEl) {
@@ -2946,7 +3307,7 @@ async function renderMenteeDashboard() {
             <div class="md-item-title">${escapeHTML(m.name || 'Mentor')}</div>
             <div class="md-item-meta">${escapeHTML(m.department || '')}${m.years_of_experience ? ` · ${m.years_of_experience} yrs experience` : ''}</div>
           </div>
-          ${m.score !== undefined ? `<span class="md-pill match">${m.score}% match</span>` : ''}
+          ${m.fit ? fitPillHTML(m.fit) : ''}
           <a href="recommendations.html" class="btn btn-secondary md-btn-sm">View</a>
         </div>`).join('')
     : profileReady
@@ -3214,9 +3575,27 @@ async function renderAccountSettings() {
     }
   };
 
+  // ---------- Alerts ----------
+  const alertsPanel = document.getElementById('alerts-panel');
+  if (alertsPanel) {
+    if (account.role === 'admin') alertsPanel.style.display = 'none';
+    // Opportunities are for current staff, so mentors only choose event alerts
+    if (account.role === 'mentor') document.getElementById('alert-opps-row').style.display = 'none';
+    const opps = document.getElementById('alert-opps');
+    const evs = document.getElementById('alert-events');
+    opps.checked = account.alerts ? account.alerts.opportunities : true;
+    evs.checked = account.alerts ? account.alerts.events : true;
+    const save = async () => {
+      const { ok, data } = await apiSend('PUT', '/auth/account/alerts', { opportunities: opps.checked, events: evs.checked });
+      setMsg(document.getElementById('alerts-msg'), ok ? 'Saved.' : data.error, ok);
+    };
+    opps.onchange = save;
+    evs.onchange = save;
+  }
+
   // ---------- Sessions ----------
   document.getElementById('logout-everywhere').onclick = async () => {
-    if (!confirm('Log out of AlumNet on every device, including this one?')) return;
+    if (!(await askConfirm('Log out everywhere?', 'This logs you out of AlumNet on every device, including this one.', { confirmText: 'Log out everywhere' }))) return;
     const { ok, data } = await apiSend('POST', '/auth/logout-everywhere');
     if (!ok) { setMsg(document.getElementById('sessions-msg'), data.error); return; }
     clearSession();
@@ -3239,7 +3618,7 @@ async function renderAccountSettings() {
       a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     } catch {
-      alert('Could not download your data. Try again.');
+      toast('Could not download your data. Try again.');
     } finally {
       btn.disabled = false;
     }
@@ -3551,6 +3930,42 @@ const REPORT_REASONS = {
 };
 
 // A small accessible dialog. onConfirm returns an error message to keep it open.
+/* Confirm and text questions in the app's own dialog, instead of the
+   browser's alert, confirm and prompt boxes (which look like an error,
+   cannot be styled and block the page). Resolves true/false or the text. */
+function askDialog({ title, text, confirmText = 'Confirm', danger = false, input = null }) {
+  return new Promise((resolve) => {
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    backdrop.innerHTML = `
+      <div class="modal-card dlg" role="dialog" aria-modal="true" aria-labelledby="ask-title">
+        <h3 id="ask-title">${escapeHTML(title)}</h3>
+        ${text ? `<p class="st-text">${escapeHTML(text)}</p>` : ''}
+        ${input ? `<div class="field"><label for="ask-input">${escapeHTML(input.label)}</label><input type="text" id="ask-input" maxlength="255" placeholder="${escapeHTML(input.placeholder || '')}"></div>` : ''}
+        <p class="st-msg dlg-msg"></p>
+        <div class="dlg-actions">
+          <button type="button" class="btn btn-secondary" data-ask="no">Cancel</button>
+          <button type="button" class="btn ${danger ? 'btn-danger' : 'btn-primary'}" data-ask="yes">${escapeHTML(confirmText)}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(backdrop);
+    const field = backdrop.querySelector('#ask-input');
+    const done = (value) => { backdrop.remove(); document.removeEventListener('keydown', onKey); resolve(value); };
+    const onKey = (e) => { if (e.key === 'Escape') done(input ? null : false); };
+    document.addEventListener('keydown', onKey);
+    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) done(input ? null : false); });
+    backdrop.querySelector('[data-ask="no"]').onclick = () => done(input ? null : false);
+    backdrop.querySelector('[data-ask="yes"]').onclick = () => {
+      if (!input) return done(true);
+      const v = field.value.trim();
+      if (input.required && !v) { setMsg(backdrop.querySelector('.dlg-msg'), input.required); field.focus(); return; }
+      done(v);
+    };
+    (field || backdrop.querySelector('[data-ask="yes"]')).focus();
+  });
+}
+const askConfirm = (title, text, opts = {}) => askDialog({ title, text, ...opts });
+
 function openDialog({ title, bodyHTML, confirmText = 'Confirm', danger = false, onOpen, onConfirm }) {
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop';
@@ -3667,7 +4082,9 @@ function openRequestDialog(mentorId, mentorName, onSent) {
 // Shown to people who post, so honest mistakes can be fixed before review
 function showPostWarnings(result) {
   const warnings = (result && result.warnings) || [];
-  if (result && result.published) { toast('Published. Your post is live now.'); return; }
+  if (result && result.published) { toast(result.message || 'Published. Your post is live now.'); return; }
+  // An edit to a live post that has to be checked again
+  if (result && !result.needsCloserReview && /^Saved\./.test(result.message || '') && !warnings.length) { toast(result.message); return; }
   if (result && result.needsCloserReview) {
     openDialog({
       title: 'Submitted for a closer review',
@@ -3787,7 +4204,7 @@ async function renderAdminReports() {
       const note = document.getElementById(`rp-note-${key}`).value.trim();
       const msg = document.getElementById(`rp-msg-${key}`);
       if (btn.dataset.action !== 'dismiss' && !note) { setMsg(msg, 'Add a short note on what you found.'); return; }
-      if (btn.dataset.action === 'suspend_user' && !confirm('Suspend this member? They are logged out at once and their open mentorships close.')) return;
+      if (btn.dataset.action === 'suspend_user' && !(await askConfirm('Suspend this member?', 'They are logged out at once and their open mentorships close.', { confirmText: 'Suspend', danger: true }))) return;
       btn.closest('.vr-card').querySelectorAll('button').forEach((b) => (b.disabled = true));
       const { ok, data } = await apiSend('POST', '/admin/reports/resolve', { targetType, targetId: Number(targetId), action: btn.dataset.action, note });
       if (!ok) {
@@ -3936,13 +4353,24 @@ async function renderModeration() {
     ? 'On: trusted posters on known websites with no warnings are published straight away.'
     : 'Off: every post waits for an admin.';
   toggle.onchange = async () => {
-    if (toggle.checked && !confirm('Turn on the fast lane? Only trusted posters with two-factor on, using a website you have approved before and with no warnings, will skip the queue.')) {
+    if (toggle.checked && !(await askConfirm('Turn on the fast lane?', 'Only trusted posters with two-factor on, using a website you have approved before and with no warnings, will skip the queue.', { confirmText: 'Turn on' }))) {
       toggle.checked = false; return;
     }
     await apiSend('PUT', '/admin/moderation/settings', { autoApprove: toggle.checked });
     renderModeration();
     renderAdminLogs();
   };
+
+  // How many posts one account can make in a day before the rest are held
+  const burst = document.getElementById('burst-limit');
+  if (burst) {
+    burst.value = data.burstPerDay;
+    document.getElementById('burst-save').onclick = async () => {
+      const r = await apiSend('PUT', '/admin/moderation/settings', { burstPerDay: Number(burst.value) });
+      setMsg(document.getElementById('burst-msg'), r.ok ? `Saved. After ${Number(burst.value)} posts in 24 hours, any more from that account are held for you.` : r.data.error, r.ok);
+      if (r.ok) renderAdminLogs();
+    };
+  }
 
   drawModerationQueue();
 
@@ -4026,7 +4454,7 @@ function drawModerationQueue() {
   bulk.style.display = clean.length ? 'inline-flex' : 'none';
   bulk.textContent = `Approve all ${clean.length} with no warnings`;
   bulk.onclick = async () => {
-    if (!confirm(`Approve ${clean.length} post${clean.length === 1 ? '' : 's'} with no warnings, no reports and nothing held? Each is logged separately.`)) return;
+    if (!(await askConfirm(`Approve ${clean.length} post${clean.length === 1 ? '' : 's'}?`, 'Only posts with no warnings, no reports and nothing held. Each is logged separately.', { confirmText: 'Approve all' }))) return;
     const { ok, data } = await apiSend('POST', '/admin/moderation/approve-clean');
     if (ok) toast(`Approved ${data.approved}.`);
     refreshModeration();
@@ -4044,7 +4472,7 @@ function drawModerationQueue() {
         if (btn.dataset.mod === 'approved') {
           btn.disabled = true;
           const { ok, data } = await apiSend('POST', `/admin/moderation/${kind}/${id}/decision`, { decision: 'approved' });
-          if (!ok) { alert(data.error || 'Could not approve.'); btn.disabled = false; return; }
+          if (!ok) { toast(data.error || 'Could not approve.'); btn.disabled = false; return; }
           toast('Approved and published.');
           refreshModeration();
           return;
@@ -4118,6 +4546,7 @@ function directoryCardHTML(m) {
       ${m.skills_preview && m.skills_preview.length ? `<div class="pf-chips fm-chips">${[...new Set([...(m.related_skills || []), ...m.skills_preview])].slice(0, 4).map((x) => `<span class="pf-chip ${(m.related_skills || []).includes(x) ? 'pf-chip-hit' : ''}">${escapeHTML(x)}</span>`).join('')}</div>` : ''}
       ${availabilityHTML(m)}
       <div class="fm-card-actions">
+        ${saveButtonHTML(m)}
         <button type="button" class="btn btn-secondary md-btn-sm" data-dir-profile="${m.mentor_id}">View profile</button>
         <button type="button" class="btn ${requested || !m.available ? 'btn-secondary' : 'btn-primary'} md-btn-sm" data-dir-request="${m.mentor_id}" data-name="${escapeHTML(m.name)}" ${requested || !m.available ? 'disabled' : ''}>
           ${requested ? 'Requested' : m.available ? 'Request' : 'Unavailable'}
@@ -4163,6 +4592,7 @@ async function loadDirectory(pushHistory = true) {
     : mdEmpty('search', 'No mentors match', state.available === '0' ? 'Try fewer filters or different words.' : 'Try fewer filters, or untick "Only mentors with a free place" to include mentors who are full.');
 
   results.querySelectorAll('[data-dir-profile]').forEach((b) => { b.onclick = () => openMentorProfile(b.dataset.dirProfile); });
+  wireSaveButtons(results);
   results.querySelectorAll('[data-dir-request]').forEach((b) => {
     b.onclick = () => openRequestDialog(b.dataset.dirRequest, b.dataset.name, () => {
       dirRequested.add(Number(b.dataset.dirRequest));
@@ -4198,6 +4628,57 @@ async function loadDirectory(pushHistory = true) {
   });
 }
 
+// A star that fills in when saved, drawn as an icon so it looks the same on every device
+function saveButtonInner(saved) {
+  return `<svg class="save-star" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 3.2l2.7 5.5 6.1.9-4.4 4.3 1 6.1L12 17.1 6.6 20l1-6.1-4.4-4.3 6.1-.9z" fill="${saved ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg><span>${saved ? 'Saved' : 'Save'}</span>`;
+}
+function saveButtonHTML(m) {
+  if (localStorage.getItem('alumnet_role') !== 'mentee') return '';
+  return `<button type="button" class="fm-save ${m.saved ? 'is-saved' : ''}" data-dir-save="${m.mentor_id}" aria-pressed="${m.saved ? 'true' : 'false'}" title="${m.saved ? 'Remove from your shortlist' : 'Save to your shortlist'}">${saveButtonInner(m.saved)}</button>`;
+}
+
+// Saving a mentor to the shortlist, from any mentor card
+function wireSaveButtons(root) {
+  root.querySelectorAll('[data-dir-save]').forEach((b) => {
+    b.onclick = async () => {
+      const saving = b.getAttribute('aria-pressed') !== 'true';
+      b.disabled = true;
+      const r = await apiSend(saving ? 'POST' : 'DELETE', `/mentors/${b.dataset.dirSave}/save`);
+      b.disabled = false;
+      if (!r.ok) { toast(r.data.error || 'Could not save that mentor'); return; }
+      // Every card for this mentor on the page (recommended, shortlist, directory) changes together
+      document.querySelectorAll(`[data-dir-save="${b.dataset.dirSave}"]`).forEach((x) => {
+        x.setAttribute('aria-pressed', saving ? 'true' : 'false');
+        x.classList.toggle('is-saved', saving);
+        x.innerHTML = saveButtonInner(saving);
+      });
+      toast(saving ? 'Saved to your shortlist.' : 'Removed from your shortlist.');
+      renderSavedMentors();
+    };
+  });
+}
+
+async function renderSavedMentors() {
+  const section = document.getElementById('saved-mentors');
+  if (!section) return;
+  const list = await mdGet('/mentors/saved');
+  if (!list || !list.length) { section.style.display = 'none'; return; }
+  section.style.display = '';
+  document.getElementById('saved-count').textContent = `${list.length} saved. Compare them before you choose whom to ask.`;
+  const grid = document.getElementById('saved-results');
+  grid.innerHTML = list.map(directoryCardHTML).join('');
+  grid.querySelectorAll('[data-dir-profile]').forEach((b) => { b.onclick = () => openMentorProfile(b.dataset.dirProfile); });
+  grid.querySelectorAll('[data-dir-request]').forEach((b) => {
+    b.onclick = () => openRequestDialog(b.dataset.dirRequest, b.dataset.name, () => {
+      dirRequested.add(Number(b.dataset.dirRequest));
+      updateRequestsNote();
+      renderSavedMentors();
+      loadDirectory(false);
+    });
+  });
+  wireSaveButtons(grid);
+}
+
 async function updateRequestsNote() {
   const rows = await mdGet('/mentorship-requests');
   if (!rows) return;
@@ -4231,5 +4712,69 @@ async function wireMentorDirectory() {
     if (!document.getElementById('dir-q').value) { document.getElementById('dir-sort').value = 'experience'; reload(); }
   });
   await loadDirectory(false);
+  renderSavedMentors();
   if (location.hash === '#browse') document.getElementById('mentor-directory').scrollIntoView({ block: 'start' });
+}
+
+
+/* --------------------------------------------------------------------
+   Fit in words (Module 4): bands instead of raw similarity numbers
+   -------------------------------------------------------------------- */
+
+function fitPillHTML(fit) {
+  if (!fit) return '';
+  return `<span class="fit-pill fit-${fit.band}" title="How closely this matches your skills, experience and goals">${escapeHTML(fit.label)}</span>`;
+}
+
+function skillsChecklistHTML(have, missing, mySkills = []) {
+  if (!(have && have.length) && !(missing && missing.length)) return '';
+  // Show what was compared, so a surprising result can be explained and fixed
+  const compared = mySkills.length
+    ? `<p class="md-muted st-small">Compared with the skills on your profile: ${escapeHTML(mySkills.join(', '))}. <a href="profile.html#edit">Update your skills</a></p>`
+    : '<p class="md-muted st-small">Your profile lists no skills yet, so nothing could be ticked. <a href="profile.html#edit">Add your skills</a></p>';
+  return `
+    <div class="modal-section"><div class="label">Skills it asks for: you have ${have.length} of ${have.length + missing.length}</div>
+      <ul class="vr-signals" style="margin-top:6px;">
+        ${have.map((x) => `<li class="ok">${escapeHTML(x)}</li>`).join('')}
+        ${missing.map((x) => `<li class="bad">${escapeHTML(x)} <span class="md-muted st-small">to build</span></li>`).join('')}
+      </ul>
+      ${compared}
+      ${missing.length ? '<p class="md-muted st-small">A mentor with these skills could help: search for them on <a href="recommendations.html">Find a mentor</a>.</p>' : ''}
+    </div>`;
+}
+
+// Opens a post or event from an alert link such as opportunities.html?open=12
+function openFromLink(list, idKey, opener) {
+  const id = new URLSearchParams(location.search).get('open');
+  if (!id) return;
+  const item = list.find((x) => String(x[idKey]) === id);
+  history.replaceState(null, '', location.pathname.split('/').pop());
+  if (item) opener(item);
+}
+
+
+/* Event targeting: topics and the departments it is mainly for */
+let departmentsCache = null;
+async function departmentsList() {
+  if (!departmentsCache) departmentsCache = (await mdGet('/events/departments')) || [];
+  return departmentsCache;
+}
+
+function targetingFieldsHTML(prefix) {
+  return `
+    <div class="field"><label for="${prefix}Topics">Topics (up to 6, separated by commas)</label>
+      <input type="text" id="${prefix}Topics" placeholder="e.g. Leadership, Retirement planning, Cargo"></div>
+    <div class="field"><label>Mainly for (optional)</label>
+      <div class="dept-picks" id="${prefix}Audience"><span class="md-muted st-small">Loading departments...</span></div>
+      <p class="field-hint">Leave all unticked for everyone. Staff in the ticked departments get it recommended and may get an alert. Everyone can still see it.</p></div>`;
+}
+
+async function fillAudience(container, selected = []) {
+  const depts = await departmentsList();
+  container.innerHTML = depts.map((d) => `
+    <label class="dept-pick"><input type="checkbox" value="${escapeHTML(d)}" ${selected.includes(d) ? 'checked' : ''}><span>${escapeHTML(d)}</span></label>`).join('');
+}
+
+function readAudience(container) {
+  return [...container.querySelectorAll('input:checked')].map((i) => i.value);
 }

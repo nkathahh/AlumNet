@@ -40,7 +40,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: npm
           cache-dependency-path: backend/package-lock.json
 
@@ -48,9 +48,14 @@ jobs:
         working-directory: backend
         run: npm ci
 
+      # Fails the build if a package the live app uses has a known high or critical vulnerability
+      - name: Check packages for known vulnerabilities
+        working-directory: backend
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Check JavaScript syntax
         run: |
-          for f in $(find backend/src backend/tests -name '*.js') frontend/public/js/main.js; do
+          for f in $(find backend/src backend/tests e2e -name '*.js' -not -path '*/node_modules/*') frontend/public/js/main.js; do
             node --check "$f"
           done
 
@@ -77,6 +82,54 @@ jobs:
         with:
           name: backend-test-results
           path: backend/backend-test-results.xml
+
+  browser:
+    name: Browser checks (XSS and accessibility)
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: alumnet_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install dependencies
+        run: |
+          (cd backend && npm ci)
+          (cd e2e && npm ci && npx playwright install --with-deps chromium)
+
+      - name: Build the database from the migrations
+        run: |
+          for f in database/migrations/*.sql; do
+            mysql -h 127.0.0.1 -P 3306 -uroot -proot alumnet_test < "$f"
+          done
+
+      - name: Run browser checks
+        working-directory: e2e
+        run: |
+          node --test \
+            --test-reporter=spec --test-reporter-destination=stdout \
+            --test-reporter=junit --test-reporter-destination=browser-test-results.xml \
+            browser.test.js
+
+      - name: Save test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-test-results
+          path: e2e/browser-test-results.xml
 
   ml-service:
     name: Recommendation service tests
@@ -110,6 +163,13 @@ jobs:
         run: |
           pip install torch==2.4.1 --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements-deploy.txt -r requirements-test.txt
+
+      # Known vulnerabilities in the Python packages, reported (not yet failing the build)
+      - name: Check packages for known vulnerabilities
+        working-directory: ml-service
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements-deploy.txt || echo "::warning::pip-audit found issues, see the log"
 
       - name: Cache the embedding model
         uses: actions/cache@v4

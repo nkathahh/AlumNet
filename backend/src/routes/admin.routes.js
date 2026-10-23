@@ -17,12 +17,16 @@ router.patch('/signup-requests/:id/review', admin.reviewSignupRequest);
 
 router.post('/hr/preview', admin.previewHrImport);
 router.post('/hr/apply', admin.applyHrImport);
+router.get('/hr/requests', admin.listHrImportRequests);
+router.post('/hr/requests/:id/decision', admin.decideHrImport);
 
 router.get('/events/pending', admin.listPendingEvents);
 router.patch('/events/:id/review', admin.reviewEvent);
 router.get('/events', admin.listEvents);
 router.post('/events', admin.createEvent);
 router.delete('/events/:id', admin.deleteEvent);
+router.put('/events/:id', admin.updateEvent);
+router.post('/events/:id/cancel', require('../controllers/events.controller').cancelEvent);
 
 router.get('/opportunities/pending', admin.listPendingOpportunities);
 router.patch('/opportunities/:id/review', admin.reviewOpportunity);

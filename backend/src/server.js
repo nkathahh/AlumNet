@@ -104,12 +104,38 @@ async function cleanUpOldRecords() {
     await pool.query(`DELETE FROM signup_requests WHERE status IN ('expired','rejected','completed','approved') AND created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)`);
     await pool.query('DELETE FROM password_resets WHERE created_at < DATE_SUB(NOW(), INTERVAL 7 DAY)');
     await require('./controllers/mentorship.controller').expireStaleRequests();
+    // Kept only as long as they are useful (see the retention table in the README)
+    await pool.query('DELETE FROM notifications WHERE is_read = 1 AND created_at < DATE_SUB(NOW(), INTERVAL 180 DAY)');
+    await pool.query('DELETE FROM alerts_sent WHERE sent_at < DATE_SUB(NOW(), INTERVAL 90 DAY)');
+    await require('./utils/rateLimit').pruneRateLimits();
+    await require('./utils/recheck').recheckLivePosts();
   } catch (err) {
     console.error('Clean-up skipped:', err.message);
   }
 }
 cleanUpOldRecords();
+
+// Two-factor secrets saved before encryption was added are encrypted once at start-up
+async function sealOldTwoFactorSecrets() {
+  try {
+    const { seal, open, needsReseal } = require('./utils/secretBox');
+    // Plain secrets, and secrets sealed with an older key, are sealed with the current key
+    const [all] = await pool.query('SELECT user_id, totp_secret FROM users WHERE totp_secret IS NOT NULL');
+    const rows = all.filter((r) => needsReseal(r.totp_secret));
+    for (const r of rows) {
+      await pool.execute('UPDATE users SET totp_secret = :s WHERE user_id = :id AND totp_secret = :old', { s: seal(open(r.totp_secret)), id: r.user_id, old: r.totp_secret });
+    }
+    if (rows.length) console.log(`Encrypted ${rows.length} two-factor secret${rows.length === 1 ? '' : 's'}`);
+  } catch (err) {
+    console.error('Two-factor secret encryption skipped:', err.message);
+  }
+}
+sealOldTwoFactorSecrets();
 setInterval(cleanUpOldRecords, 12 * 60 * 60 * 1000).unref();
+// Event reminders the day before, checked every hour
+const remindEvents = () => require('./utils/eventReminders').sendEventReminders().catch((err) => console.error('Event reminders skipped:', err.message));
+remindEvents();
+setInterval(remindEvents, 60 * 60 * 1000).unref();
 // Remind admins about posts waiting more than 48 hours (never auto-approves)
 setInterval(() => require('./controllers/moderation.controller').remindStale(), 12 * 60 * 60 * 1000).unref();
 

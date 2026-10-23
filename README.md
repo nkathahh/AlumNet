@@ -76,8 +76,37 @@ Strathmore University.
   breakdown of how skills, experience and goals contribute to each match
 - **Mentorship requests:** send, accept, decline, withdraw and end
 - **Alumni events:** official events from admins and community events proposed by mentors,
-  with registration, capacity limits and admin approval
-- **Career opportunities:** posted by mentors, approved by admins, filterable by type
+  with registration, capacity limits, admin approval, topics and an optional list of the
+  departments an event is mainly for
+- **Career opportunities:** posted by mentors with the skills they ask for, approved by admins,
+  filterable by type and poster, with a "My posts" tab for the poster
+- **Fit for me:** mentees see a fit label on each opportunity (Strong fit, Good fit, Some
+  overlap) worked out from the BGE model and the skills they already have, plus a checklist
+  ("You have 3 of 5 skills it asks for") showing what is missing. Events are recommended by
+  topic, department and the model. Labels are used instead of percentages because similarity
+  scores are not probabilities.
+- **Targeted alerts:** when a post is approved, members it fits well get one notification
+  linking straight to it. Nobody gets more than 3 alerts a week, and alerts can be switched
+  off in Settings.
+- **Editing live posts and events:** posters can fix a typo, extend a closing date, move a
+  venue or close a filled role. Safe edits stay live and registered people are told when the
+  date, time, format or venue changes. Changing a link to a site not approved before, or
+  anything the scam checks pick up, sends it back to the alumni office first, so an approved
+  post cannot be swapped for a scam. Organisers can cancel their event with a reason.
+  Registered people are told in the app and by email.
+- **Waiting list:** a full event offers a waiting list. When someone cancels or the organiser
+  adds places, the next person in line gets the place automatically and is told. In the last
+  24 hours, a freed place is offered to everyone waiting instead, so it is not given to someone
+  who may not see the message in time.
+- **Event reminders and calendars:** everyone registered gets a reminder the day before, in the
+  app and by email, and can add any event they registered for to their own calendar (.ics).
+- **Search:** events can be searched by title, topic, venue or host and filtered by format and
+  date; posters can search their own posts and filter them by status. Long lists show 12 at a
+  time.
+- **Mentor shortlist:** mentees can save mentors and compare them before asking, since only 5
+  requests can wait at once.
+- **Nairobi time:** event times are shown in Nairobi time, with the viewer's own time added for
+  alumni abroad. The server stores and compares times in Nairobi time wherever it is hosted.
 - **Notifications:** for requests, approvals, event changes and security changes
 - **Dashboards:** a home page for each role with live stats and action items
 - **Admin console:** overview, user suspension, event management, content moderation and an
@@ -114,7 +143,7 @@ AlumNet/
 
 ### Requirements
 
-- Node.js 18 or later
+- Node.js 22 or later (24 LTS recommended)
 - Python 3.10 or later
 - MySQL 8.0
 
@@ -185,9 +214,34 @@ All demo data is synthetic and does not describe real Kenya Airways staff. Set
   step the server issues a 5-minute token that only the code check accepts.
 - Google sign-in verifies Google's signed ID token on the server and only logs in accounts
   that already exist, so staff-number verification at registration cannot be skipped.
-- Repeated failed attempts on sign-in, codes and resets are rate limited per address.
+- Two-factor secrets are encrypted in the database with AES-256-GCM (key in `TOTP_ENC_KEY`),
+  so a copy of the database alone cannot produce sign-in codes. Backup codes are hashed.
+- Repeated failed attempts on sign-in, codes and resets are rate limited. The counters are kept
+  in the database, so a restart does not reset them.
+- Every page has a Content Security Policy that blocks inline scripts, and all member text is
+  escaped before it is shown. A browser test (`e2e/browser.test.js`) types script payloads into
+  every field and fails if any page turns them into HTML.
+- Live posts are checked again twice a day and straight after a scam rejection: a post whose
+  website, email or link has since been blocked is hidden until an admin looks at it. An
+  approved post cannot be edited into a scam, because risky edits go back to review.
+- When there are two or more admins, an HR import needs a second admin to approve it.
+- Deleting an event cancels it and keeps the record, so nothing an admin does erases evidence.
+- `npm audit` runs in CI and fails the build on a known high or critical vulnerability in the
+  packages the app uses.
 - The ML service accepts requests only with a shared API key once it is online.
 - Security changes (password, two-factor) create a notification for the account owner.
+
+### How long data is kept
+
+| Data | Kept for |
+|---|---|
+| Unfinished or refused sign-up requests | 30 days |
+| Password reset links | 7 days |
+| Read notifications | 180 days |
+| Record of alerts sent (to limit them to 3 a week) | 90 days |
+| Rate limit counters | 1 day after they expire |
+| Mentor profile vectors | until the profile changes or the account is deleted |
+| Account, profile and posts | until the member deletes their account |
 
 ## Evaluation
 
@@ -206,7 +260,7 @@ progress, and the full development and test results will follow.
 Every push and pull request to `main` runs `.github/workflows/ci.yml`. Each job starts an
 empty MySQL 8 database, builds it from `database/migrations` and tests the real code:
 
-- **Backend API tests** (`backend/tests/api.test.js`, 62 tests): sign-up by HR email match,
+- **Backend API tests** (`backend/tests/api.test.js`, 79 tests): sign-up by HR email match,
   the alumni office review path with risk signals, impostor detection, roles from HR, HttpOnly
   session cookies, CSRF protection, log out everywhere, suspension, single-use reset links,
   two-factor with backup codes, admin 2FA requirement, HR import with retirement conversion,
@@ -214,11 +268,16 @@ empty MySQL 8 database, builds it from `database/migrations` and tests the real 
   contact sharing after acceptance, moderation lanes and trust, request changes and resubmit,
   learning from approvals and scam rejections, the mentor directory and its filters, gender
   consent, mentor capacity (including two accepts at the same moment), request expiry, search
-  fallback, filter counts, paging, removal of embeddings on account deletion, security headers
+  fallback, filter counts, paging, removal of embeddings on account deletion, skill coverage and
+  fit labels, event targeting, alert limits and opt-out, editing live posts and events, the waiting list, event reminders, the mentor shortlist, encrypted two-factor secrets, second-admin
+  approval of HR imports, re-checking live posts after a scam, security headers
   and rate limiting.
+- **Browser checks** (`e2e/browser.test.js`): script payloads in every field members can type
+  into, checked on every page for every role, and an axe-core accessibility check (WCAG 2.1 AA)
+  of the main pages. CI also runs `npm audit` and `pip-audit`.
 - **Recommendation service tests** (`ml-service/tests/test_app.py`): the API key check, input
   errors, a ranking check with the real BGE model on seeded synthetic profiles, the embedding
-  cache and search by meaning.
+  cache, search by meaning and scoring of opportunities and events.
 
 Results appear as a tick or cross next to each commit on GitHub, and each run keeps the
 test reports as downloadable artifacts.
@@ -241,23 +300,25 @@ screenshots are in Chapter 5 of the project report.
 ## Known limitations and outstanding defects
 
 - **Evaluation incomplete:** relevance labelling and the final test run are still to be done.
-  Current evidence comes from the pilot runs.
+  The fit band limits (72 and 62) are provisional until then.
+- **No usability study yet:** the interface follows usability heuristics and passes the
+  automated accessibility check (axe-core, WCAG 2.1 AA) on the main pages, but it has not been
+  tested with real users (System Usability Scale).
 - **Known ranking error:** for one mentee (Joyce), a mentor with strong skills overlap
   (Catherine) ranks above the better overall fit (Brian). Field-weighted scoring corrected this
   in the pilot, but only narrowly, and the full evaluation will test it.
-- **Compressed scores:** BGE similarity scores fall in a narrow range, so displayed match
-  percentages look closer together than the real differences in fit.
-- **No embedding cache:** mentor profiles are re-encoded on every request, so response time
-  grows with the number of mentors.
-- **Sessions after a password change:** existing logins on other devices stay valid until their
-  token expires (7 days).
-- **Two-factor recovery:** there are no backup codes yet; an admin would need to reset 2FA for a
-  user who loses their phone.
-- **Inconsistent output escaping:** newer pages escape user text before display; some older
-  admin tables do not yet.
-- **Duplicate table:** the original `event_participation` table duplicates
-  `event_registrations` and is to be removed.
-- **Notifications:** updated every 60 seconds by polling, not in real time.
+- **Mentorship outcomes are not recorded:** the platform knows a mentorship started, not whether
+  it helped.
+- **Scam checks are rules, not a model:** text inside images and links whose page changes after
+  approval are not caught; reports from members and the re-check are the backstop.
+- **Single-admin installations** cannot use the second-admin rule for HR imports; the log
+  records that no second check was possible.
+- **Two-factor library:** otplib is kept on version 12. Version 13 rejects the shorter secrets
+  that existing accounts already use, so upgrading needs a planned move of every two-factor
+  user to a new secret.
+- **Events have no end time:** calendar files assume two hours.
+- **Notifications:** updated every 60 seconds by polling, not in real time. Event changes and
+  cancellations are also emailed; other notifications are in the app only.
 - **Free hosting:** the online version sleeps when idle, so the first visit can take up to a
   minute.
 

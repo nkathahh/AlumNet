@@ -24,7 +24,13 @@ const REJECTION_REASONS = {
 // Only this reason teaches the system that a website or email belongs to a scam
 const SCAM_REASON = 'asks_for_payment';
 
-const TRUST = { minAccountDays: 30, minApprovedPosts: 2, burstPerDay: 3 };
+// burstPerDay is the default; the alumni office can change it (2 to 20) in Moderation
+const TRUST = { minAccountDays: 30, minApprovedPosts: 2, burstPerDay: 5 };
+const BURST_RANGE = { min: 2, max: 20 };
+async function burstLimit() {
+  const n = Number(await getSetting('burst_per_day', TRUST.burstPerDay));
+  return Number.isInteger(n) && n >= BURST_RANGE.min && n <= BURST_RANGE.max ? n : TRUST.burstPerDay;
+}
 
 // careers.jambojet.com and www.jambojet.com both belong to jambojet.com.
 // Kenyan and UK second-level endings (co.ke, ac.ke, go.ke, or.ke, co.uk) keep three parts.
@@ -120,12 +126,14 @@ async function chooseLane(kind, post, scan) {
 
   // A hacked account usually posts a lot, quickly
   const [[{ recent }]] = await pool.execute(
-    `SELECT (SELECT COUNT(*) FROM career_opportunities WHERE posted_by = :userId AND submitted_at > DATE_SUB(NOW(), INTERVAL 1 DAY))
-          + (SELECT COUNT(*) FROM events WHERE created_by = :userId AND submitted_at > DATE_SUB(NOW(), INTERVAL 1 DAY)) AS recent`,
-    { userId: post.userId }
+    `SELECT (SELECT COUNT(*) FROM career_opportunities WHERE posted_by = :userId AND submitted_at > DATE_SUB(NOW(), INTERVAL 1 DAY) AND opportunity_id != :oppEx)
+          + (SELECT COUNT(*) FROM events WHERE created_by = :userId AND submitted_at > DATE_SUB(NOW(), INTERVAL 1 DAY) AND event_id != :eventEx) AS recent`,
+    // An edit or resubmission is not a new post, so it does not count towards the burst
+    { userId: post.userId, oppEx: kind === 'opportunity' ? post.excludeId || 0 : 0, eventEx: kind === 'event' ? post.excludeId || 0 : 0 }
   );
-  if (Number(recent) >= TRUST.burstPerDay) {
-    hold.push(`This is post number ${Number(recent) + 1} in the last 24 hours from this account (more than ${TRUST.burstPerDay} a day is held)`);
+  const perDay = await burstLimit();
+  if (Number(recent) >= perDay) {
+    hold.push(`This is post number ${Number(recent) + 1} in the last 24 hours from this account (more than ${perDay} a day is held)`);
   }
 
   // The same unknown link from two accounts suggests one scammer using several
@@ -214,7 +222,7 @@ async function learnFromScam(link, adminId, title) {
   }
 }
 
-module.exports = { baseDomain, REJECTION_REASONS, SCAM_REASON, TRUST, indicatorsFor, canTrustDomain, getSetting, posterTrust, chooseLane, learnFromApproval, learnFromScam };
+module.exports = { burstLimit, BURST_RANGE, normaliseLink, baseDomain, REJECTION_REASONS, SCAM_REASON, TRUST, indicatorsFor, canTrustDomain, getSetting, posterTrust, chooseLane, learnFromApproval, learnFromScam };
 
 /*
  * After a post is saved: store its lane, publish it straight away if it is

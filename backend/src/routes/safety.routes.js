@@ -1,10 +1,10 @@
 const router = require('express').Router();
-const { rateLimit } = require('express-rate-limit');
+const { dbRateLimit } = require('../utils/rateLimit');
 const { requireAuth } = require('../middleware/auth.middleware');
 const safety = require('../controllers/safety.controller');
 
 // Reports are free to send but not to spam
-const reportLimit = rateLimit({
+const reportLimit = dbRateLimit('reports', {
   windowMs: 60 * 60 * 1000,
   limit: 10,
   standardHeaders: 'draft-7',

@@ -182,6 +182,68 @@ def eligible_mentors(cur, exclude_id=None, ids=None):
     return cur.fetchall()
 
 
+def encode_items_cached(conn, items):
+    """items: list of (item_key, text) for opportunities and events, e.g. ("opp:12", "...").
+    Cached in item_embeddings the same way profiles are cached."""
+    wanted = {}
+    for key, text in items:
+        if text:
+            wanted[key] = (text, hashlib.sha256(f"{MODEL_NAME}|{text}".encode('utf-8')).hexdigest())
+    result, cached = {}, {}
+    try:
+        if wanted:
+            cur = conn.cursor(dictionary=True)
+            keys = list(wanted)
+            cur.execute(f"SELECT item_key, text_hash, vector FROM item_embeddings WHERE item_key IN ({','.join(['%s'] * len(keys))})", keys)
+            cached = {r['item_key']: (r['text_hash'], r['vector']) for r in cur.fetchall()}
+            cur.close()
+    except Exception:
+        cached = {}
+    missing = []
+    for key, (text, digest) in wanted.items():
+        hit = cached.get(key)
+        if hit and hit[0] == digest:
+            result[key] = json.loads(hit[1])
+        else:
+            missing.append((key, text, digest))
+    if missing:
+        vectors = MODEL.encode([m[1] for m in missing], normalize_embeddings=True)
+        rows = []
+        for (key, _t, digest), vec in zip(missing, vectors):
+            values = [round(float(x), 6) for x in vec]
+            result[key] = values
+            rows.append((key, digest, json.dumps(values)))
+        try:
+            cur = conn.cursor()
+            cur.executemany(
+                """INSERT INTO item_embeddings (item_key, text_hash, vector) VALUES (%s, %s, %s)
+                   ON DUPLICATE KEY UPDATE text_hash = VALUES(text_hash), vector = VALUES(vector)""",
+                rows
+            )
+            conn.commit()
+            cur.close()
+        except Exception:
+            pass
+    return result
+
+
+def member_texts(cur, user_ids):
+    """What a member wants and can do, for scoring events and opportunities against them."""
+    if not user_ids:
+        return {}
+    cur.execute(
+        f"""SELECT p.user_id, p.skills, p.experience, p.career_interests, p.headline, u.department
+            FROM profiles p JOIN users u ON u.user_id = p.user_id
+            WHERE p.user_id IN ({','.join(['%s'] * len(user_ids))})""",
+        list(user_ids)
+    )
+    out = {}
+    for row in cur.fetchall():
+        parts = [field(row, 'career_interests'), field(row, 'skills'), field(row, 'experience'), field(row, 'headline'), field(row, 'department')]
+        out[row['user_id']] = '. '.join(p for p in parts if p)
+    return out
+
+
 @app.get("/health")
 def health():
     return jsonify(status="ok")
@@ -300,6 +362,52 @@ def recommend():
     results.sort(key=lambda r: r["score"], reverse=True)
     # The backend removes mentors who are full or not taking mentees, so send a few extra
     return jsonify(results[:25])
+
+
+@app.post("/score-items")
+def score_items():
+    """
+    How well each opportunity or event fits one member.
+    Body: {"user_id": 7, "items": [{"key": "opp:12", "text": "..."}]}
+    """
+    body = request.get_json(silent=True) or {}
+    try:
+        user_id = int(body.get('user_id'))
+    except (TypeError, ValueError):
+        return jsonify(error="user_id is required"), 400
+    items = [(str(i.get('key')), str(i.get('text') or '')) for i in (body.get('items') or []) if i.get('key')][:500]
+    conn = get_connection()
+    cur = conn.cursor(dictionary=True)
+    text = member_texts(cur, [user_id]).get(user_id, '')
+    cur.close()
+    if not text or not items:
+        conn.close()
+        return jsonify([])
+    member = encode_cached(conn, [(user_id, 'member', text)]).get((user_id, 'member'))
+    vectors = encode_items_cached(conn, items)
+    conn.close()
+    return jsonify([{"key": k, "score": pct(member, vectors[k])} for k, _t in items if k in vectors])
+
+
+@app.post("/score-users")
+def score_users():
+    """
+    How well one new opportunity or event fits each of many members, for alerts.
+    Body: {"key": "opp:12", "text": "...", "user_ids": [1, 2, 3]}
+    """
+    body = request.get_json(silent=True) or {}
+    key, text = str(body.get('key') or ''), str(body.get('text') or '')
+    user_ids = [int(x) for x in (body.get('user_ids') or []) if str(x).isdigit()][:5000]
+    if not key or not text:
+        return jsonify(error="key and text are required"), 400
+    conn = get_connection()
+    cur = conn.cursor(dictionary=True)
+    texts = member_texts(cur, user_ids)
+    cur.close()
+    item = encode_items_cached(conn, [(key, text)]).get(key)
+    members = encode_cached(conn, [(uid, 'member', t) for uid, t in texts.items()])
+    conn.close()
+    return jsonify([{"user_id": uid, "score": pct(item, members[(uid, 'member')])} for uid in texts if (uid, 'member') in members])
 
 
 if __name__ == "__main__":

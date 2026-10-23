@@ -1,5 +1,5 @@
 const express = require('express');
-const { rateLimit } = require('express-rate-limit');
+const { dbRateLimit } = require('../utils/rateLimit');
 const router = express.Router();
 const auth = require('../controllers/auth.controller');
 const { requireAuth } = require('../middleware/auth.middleware');
@@ -7,7 +7,7 @@ const { requireAuth } = require('../middleware/auth.middleware');
 // Separate limits per purpose. Successful requests are not counted where
 // that makes sense, so normal use never hits a limit; repeated failures
 // (password or code guessing) do.
-const limiter = (limit, skipSuccessfulRequests = true) => rateLimit({
+const limiter = (name, limit, skipSuccessfulRequests = true) => dbRateLimit(name, {
   windowMs: 15 * 60 * 1000,
   limit,
   skipSuccessfulRequests,
@@ -15,13 +15,13 @@ const limiter = (limit, skipSuccessfulRequests = true) => rateLimit({
   legacyHeaders: false,
   message: { error: 'Too many attempts. Please wait 15 minutes and try again.' }
 });
-const signInLimit = limiter(10);
-const codeLimit = limiter(10);
-const accountLimit = limiter(20);
+const signInLimit = limiter('sign-in', 10);
+const codeLimit = limiter('code', 10);
+const accountLimit = limiter('account', 20);
 // These send emails, so every request counts: at most 20 from one network address in
 // 15 minutes, and at most 5 for any one email
-const emailIpLimit = limiter(20, false);
-const perEmailLimit = rateLimit({
+const emailIpLimit = limiter('email-ip', 20, false);
+const perEmailLimit = dbRateLimit('email', {
   windowMs: 15 * 60 * 1000,
   limit: 5,
   standardHeaders: 'draft-7',
@@ -50,6 +50,7 @@ router.post('/reset-password', accountLimit, auth.resetPassword);
 
 // Account settings (signed-in users)
 router.get('/account', requireAuth, auth.getAccount);
+router.put('/account/alerts', requireAuth, auth.setAlerts);
 router.post('/change-password', requireAuth, accountLimit, auth.changePassword);
 router.post('/2fa/setup', requireAuth, auth.setupTwoFactor);
 router.post('/2fa/enable', requireAuth, codeLimit, auth.enableTwoFactor);

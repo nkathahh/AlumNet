@@ -15,7 +15,7 @@
   /* Neutrals */
   --ink: #15201C;
   --ink-soft: #45524C;
-  --slate: #6E7A75;
+  --slate: #5C6863; /* 4.5:1 or better on every light background (WCAG AA) */
   --paper: #FBFAF7;
   --panel: #FFFFFF;
   --stone: #E4E1D8;
@@ -1401,7 +1401,7 @@ textarea:focus-visible {
   --md-accent-soft: rgba(200, 16, 46, 0.08);
   --md-green: #15803d;
   --md-green-soft: rgba(21, 128, 61, 0.1);
-  --md-amber: #b45309;
+  --md-amber: #92400e;
   --md-amber-soft: rgba(180, 83, 9, 0.1);
   max-width: 1160px;
   margin: 0 auto;
@@ -1836,3 +1836,47 @@ textarea:focus-visible {
 }
 .fm-why { font-size: 0.82rem; color: var(--kq-green); }
 .pf-chip-hit { border-color: var(--kq-green); color: var(--kq-green); font-weight: 600; }
+
+/* ------------------------------------------------------------------
+   Fit bands and recommendations (Module 4)
+   ------------------------------------------------------------------ */
+.fit-pill { display: inline-block; font-size: 0.72rem; font-weight: 600; padding: 3px 10px; border-radius: 999px; white-space: nowrap; vertical-align: middle; }
+.fit-strong { background: rgba(4, 92, 67, 0.12); color: var(--kq-green); }
+.fit-good { background: rgba(4, 92, 67, 0.06); color: var(--kq-green); border: 1px solid rgba(4, 92, 67, 0.25); }
+.fit-some { background: var(--wash); color: var(--ink-soft); }
+.fit-why { font-size: 0.82rem; color: var(--kq-green); margin: 4px 0 6px; }
+.rec-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 26px; }
+.rec-card { text-align: left; background: var(--panel); border: 1px solid var(--stone-line); border-radius: var(--radius-lg, 14px); padding: 14px; display: flex; flex-direction: column; gap: 6px; cursor: pointer; font: inherit; color: var(--ink); }
+.rec-card:hover { border-color: var(--kq-green); }
+.rec-card .fit-pill { align-self: flex-start; }
+.events-rec-label { grid-column: 1 / -1; font-weight: 600; font-size: 0.95rem; margin: 8px 0 -4px; }
+.event-highlight { outline: 2px solid var(--kq-red); outline-offset: 2px; }
+.dept-picks { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 4px 12px; }
+.dept-pick { display: flex; gap: 6px; align-items: center; font-size: 0.85rem; color: var(--ink-soft); cursor: pointer; }
+.dept-pick input { accent-color: var(--kq-red); }
+:root[data-theme="dark"] .fit-strong, :root[data-theme="dark"] .fit-good, :root[data-theme="dark"] .fit-why { color: #6FD3AE; }
+.event-card .fit-pill { align-self: flex-start; margin-bottom: 6px; }
+.dept-pick, .admin-form .dept-pick { display: flex; flex-direction: row; align-items: center; gap: 8px; margin: 0; font-weight: 400; }
+.dept-pick input[type="checkbox"] { width: 16px; height: 16px; flex: 0 0 auto; margin: 0; padding: 0; }
+
+/* Your own event: edit and cancel instead of register */
+.event-badge.mine { background: var(--kq-green-soft, #e3f1ea); color: var(--kq-green, #0b6b3a); margin-left: 6px; }
+.event-own-actions { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.event-card-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.admin-event-actions { white-space: nowrap; }
+.admin-event-actions .btn-quiet { margin-left: 8px; }
+.modal-card .md-muted a, .fit-why a { color: var(--kq-green, #0b6b3a); text-decoration: underline; }
+.mod-burst { margin-top: 14px; }
+.mod-burst-row { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+.mod-burst-row input { width: 90px; }
+#event-filters { margin-bottom: 16px; }
+.list-more { display: flex; justify-content: center; margin: 18px 0 6px; grid-column: 1 / -1; }
+.fm-save { margin-right: auto; display: inline-flex; align-items: center; gap: 6px; background: none; border: 1px solid var(--line, #d9ddd8);
+  border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 0.85rem; color: var(--ink-soft, #45524c); cursor: pointer; }
+.fm-save:hover { border-color: var(--kq-green, #0b6b3a); color: var(--kq-green, #0b6b3a); }
+.fm-save.is-saved { color: var(--kq-green, #0b6b3a); border-color: var(--kq-green, #0b6b3a); font-weight: 600; }
+.mentor-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.mentor-actions .fm-save { margin-right: 0; }
+.event-place-free { font-size: 0.85rem; font-weight: 600; color: var(--kq-green, #0b6b3a); text-align: center; }
+.fm-save { white-space: nowrap; }
+.fm-card-actions { flex-wrap: wrap; }

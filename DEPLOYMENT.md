@@ -13,13 +13,14 @@ of every password and key as you go. Never put them in the repository.
 
 ## Before you start
 
-Generate two random secrets. In PowerShell, run this twice and keep both results:
+Generate three random secrets. In PowerShell, run this three times and keep all three results:
 
 ```
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-The first is your `JWT_SECRET`; the second is your `ML_API_KEY`.
+The first is your `JWT_SECRET`, the second is your `ML_API_KEY` and the third is your
+`TOTP_ENC_KEY` (it encrypts two-factor secrets; never change it after people turn on two-factor).
 
 ## 1. Database on Aiven
 
@@ -85,6 +86,7 @@ The first is your `JWT_SECRET`; the second is your `ML_API_KEY`.
    | `DB_SSL_CA` | the full text of `ca.pem` |
    | `JWT_SECRET` | your first secret |
    | `JWT_EXPIRES_IN` | `7d` |
+   | `TOTP_ENC_KEY` | your third secret |
    | `ML_SERVICE_URL` | `https://<your-username>-alumnet-ml.hf.space` |
    | `ML_API_KEY` | your second secret |
    | `GOOGLE_CLIENT_ID` | your Google OAuth client ID |

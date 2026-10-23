@@ -16,7 +16,7 @@
         <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
         <div class="topbar-actions">
             <label class="theme-switch" title="Toggle dark mode">
-                <input type="checkbox" id="theme-toggle-checkbox">
+                <input type="checkbox" id="theme-toggle-checkbox" aria-label="Dark mode">
                 <span class="switch-track"><span class="switch-thumb"></span></span>
             </label>
             <button id="logout-btn" class="icon-btn" aria-label="Log out" title="Log out">⏻</button>
@@ -167,6 +167,13 @@
                         <div id="hr-preview"></div>
                     </div>
                 </section>
+                <section class="md-panel" id="hr-requests-panel" style="margin-top:20px; display:none;">
+                    <div class="md-panel-head"><h2>Waiting for a second admin</h2></div>
+                    <div class="st-body">
+                        <p class="st-text">HR updates change who can sign in and who becomes a mentor, so a different admin approves each one before it is applied.</p>
+                        <div id="hr-requests"></div>
+                    </div>
+                </section>
             </div>
 
             <!-- ================= Events ================= -->
@@ -187,7 +194,7 @@
                                 <input type="text" id="eventTitle" required>
                             </div>
                             <div class="field">
-                                <label for="eventDate">Date and time</label>
+                                <label for="eventDate">Date and time (Nairobi time)</label>
                                 <input type="datetime-local" id="eventDate" required>
                             </div>
                         </div>
@@ -212,6 +219,7 @@
                             <label for="eventDescription">Description</label>
                             <textarea id="eventDescription"></textarea>
                         </div>
+                        <div id="event-targeting"></div>
                         <p id="event-form-error"
                             style="color:var(--kq-red); font-size:0.85rem; display:none; margin-bottom:12px;"></p>
                         <div class="admin-form-actions">
@@ -230,7 +238,8 @@
                                 <tr>
                                     <th>Title</th>
                                     <th>Date</th>
-                                    <th>Description</th>
+                                    <th>Registered</th>
+                                    <th>Status</th>
                                     <th></th>
                                 </tr>
                             </thead>
@@ -257,6 +266,14 @@
                         <input type="checkbox" id="fast-lane-toggle">
                         <span><strong>Fast lane</strong><br><span class="md-muted st-small" id="fast-lane-text">Off: every post waits for an admin.</span></span>
                     </label>
+                    <div class="mod-burst">
+                        <label for="burst-limit"><strong>Daily post limit</strong><br><span class="md-muted st-small">Posts one account can make in 24 hours before the rest are held for you, even from trusted posters (2 to 20). A sudden burst is a common sign of a hacked account.</span></label>
+                        <div class="mod-burst-row">
+                            <input type="number" id="burst-limit" min="2" max="20" step="1">
+                            <button type="button" class="btn btn-secondary md-btn-sm" id="burst-save">Save</button>
+                        </div>
+                        <p class="st-msg" id="burst-msg"></p>
+                    </div>
                 </section>
 
                 <section class="mod-insights" id="mod-insights"></section>

@@ -21,7 +21,14 @@ const pool = mysql.createPool({
   ssl: sslConfig(),
   waitForConnections: true,
   connectionLimit: 10,
-  namedPlaceholders: true
+  namedPlaceholders: true,
+  // Times are Nairobi time wherever the server runs (Render and Aiven use UTC),
+  // so "2 pm" stays 2 pm and NOW() matches what members see
+  timezone: '+03:00'
+});
+
+pool.pool.on('connection', (conn) => {
+  conn.query("SET time_zone = '+03:00'");
 });
 
 module.exports = pool;

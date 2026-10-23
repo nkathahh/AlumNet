@@ -30,7 +30,8 @@ const CARD_COLUMNS = `
   IF(p.gender_in_search = 1, p.gender, NULL) AS gender,
   mt.years_of_experience, mt.accepting_mentees, mt.max_mentees, mt.meeting_mode, mt.availability_note,
   (sd.staff_number IS NOT NULL) AS verified,
-  (SELECT COUNT(*) FROM mentorship_requests r WHERE r.mentor_id = u.user_id AND r.status = 'accepted') AS active_mentees`;
+  (SELECT COUNT(*) FROM mentorship_requests r WHERE r.mentor_id = u.user_id AND r.status = 'accepted') AS active_mentees,
+  EXISTS(SELECT 1 FROM bookmarks bm WHERE bm.mentee_id = :viewerId AND bm.mentor_id = u.user_id) AS saved`;
 
 function shapeCard(r) {
   const active = Number(r.active_mentees || 0);
@@ -55,7 +56,8 @@ function shapeCard(r) {
     meeting_label: MODES[r.meeting_mode] || null,
     availability_note: r.availability_note,
     skills: String(r.skills || '').split(',').map((x) => x.trim()).filter(Boolean),
-    skills_preview: String(r.skills || '').split(',').map((x) => x.trim()).filter(Boolean).slice(0, 4)
+    skills_preview: String(r.skills || '').split(',').map((x) => x.trim()).filter(Boolean).slice(0, 4),
+    saved: Boolean(Number(r.saved))
   };
 }
 
@@ -210,4 +212,35 @@ async function cardsFor(viewerId, ids) {
   return ids.map((id) => byId.get(id)).filter(Boolean);
 }
 
-module.exports = { listMentors, cardsFor, shapeCard };
+/*
+ * A mentee's shortlist. Only 5 requests can wait at once, so mentees save
+ * mentors they are considering and compare them before asking.
+ */
+const MAX_SAVED = 30;
+async function listSaved(req, res, next) {
+  try {
+    const [rows] = await pool.execute('SELECT mentor_id FROM bookmarks WHERE mentee_id = :me ORDER BY bookmarked_at DESC', { me: req.user.userId });
+    res.json(await cardsFor(req.user.userId, rows.map((r) => r.mentor_id)));
+  } catch (err) { next(err); }
+}
+
+async function saveMentor(req, res, next) {
+  try {
+    const mentorId = Number(req.params.id);
+    const [[mentor]] = await pool.execute(`SELECT u.user_id ${BASE_FROM} AND u.user_id = :mentorId`, { viewerId: req.user.userId, mentorId });
+    if (!mentor) return res.status(404).json({ error: 'Mentor not found' });
+    const [[{ n }]] = await pool.execute('SELECT COUNT(*) AS n FROM bookmarks WHERE mentee_id = :me', { me: req.user.userId });
+    if (Number(n) >= MAX_SAVED) return res.status(409).json({ error: `You can save up to ${MAX_SAVED} mentors. Remove some first.` });
+    await pool.execute('INSERT IGNORE INTO bookmarks (mentee_id, mentor_id) VALUES (:me, :mentorId)', { me: req.user.userId, mentorId });
+    res.status(201).json({ saved: true });
+  } catch (err) { next(err); }
+}
+
+async function unsaveMentor(req, res, next) {
+  try {
+    await pool.execute('DELETE FROM bookmarks WHERE mentee_id = :me AND mentor_id = :mentorId', { me: req.user.userId, mentorId: Number(req.params.id) });
+    res.json({ saved: false });
+  } catch (err) { next(err); }
+}
+
+module.exports = { listMentors, cardsFor, shapeCard, listSaved, saveMentor, unsaveMentor };

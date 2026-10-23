@@ -136,3 +136,24 @@ def test_search_finds_mentors_by_meaning_and_respects_the_filtered_list(client):
     assert ranked[0] == 9002
     only = client.post("/search", json={"q": "engine overhaul", "ids": [9003]}, headers=KEY).get_json()
     assert [r["mentor_id"] for r in only] == [9003]
+
+
+def test_opportunities_are_scored_against_a_member(client):
+    assert client.post("/score-items", json={}, headers=KEY).status_code == 400
+    res = client.post("/score-items", json={"user_id": 9001, "items": [
+        {"key": "opp:test-1", "text": "Aircraft maintenance engineer. Engine inspection, hydraulic systems, airworthiness."},
+        {"key": "opp:test-2", "text": "Cabin crew. Passenger care, in-flight service, catering."}
+    ]}, headers=KEY)
+    assert res.status_code == 200
+    scores = {r["key"]: r["score"] for r in res.get_json()}
+    assert scores["opp:test-1"] > scores["opp:test-2"]
+
+
+def test_one_post_is_scored_against_many_members_for_alerts(client):
+    assert client.post("/score-users", json={"key": "x"}, headers=KEY).status_code == 400
+    res = client.post("/score-users", json={
+        "key": "event:test-1", "text": "Workshop on engine overhaul and maintenance planning",
+        "user_ids": [9001, 9003]
+    }, headers=KEY)
+    scores = {r["user_id"]: r["score"] for r in res.get_json()}
+    assert scores[9001] > scores[9003]

@@ -1,6 +1,7 @@
 const pool = require('../config/db');
 const { mlGet } = require('../utils/ml');
 const { cardsFor } = require('./mentors.controller');
+const { bandFor } = require('../utils/fit');
 
 const MATCHING_FIELDS = ['skills', 'experience', 'career_interests'];
 
@@ -30,7 +31,7 @@ async function getRecommendations(req, res, next) {
     const cards = new Map((await cardsFor(userId, matches.map((m) => m.mentor_id))).map((c) => [c.mentor_id, c]));
     const ranked = matches
       .filter((m) => cards.has(m.mentor_id))
-      .map((m) => ({ ...m, ...cards.get(m.mentor_id), score: m.score }))
+      .map((m) => ({ ...m, ...cards.get(m.mentor_id), score: m.score, fit: bandFor(m.score) }))
       // Only mentors who are taking mentees and have a free place are suggested
       .filter((m) => m.available)
       // Scores are compared in 2-point bands: within a band, the mentor with more

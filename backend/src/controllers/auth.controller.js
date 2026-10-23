@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { seal, open: openSecret } = require('../utils/secretBox');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { authenticator } = require('otplib');
@@ -403,7 +404,7 @@ async function checkSecondFactor(user, rawCode) {
   const code = String(rawCode || '').trim();
   const digits = code.replace(/\s/g, '');
   if (/^\d{6}$/.test(digits)) {
-    return authenticator.verify({ token: digits, secret: user.totp_secret }) ? { ok: true } : { ok: false };
+    return authenticator.verify({ token: digits, secret: openSecret(user.totp_secret) }) ? { ok: true } : { ok: false };
   }
   const normalised = code.toLowerCase().replace(/[^a-z0-9]/g, '');
   if (normalised.length !== 10) return { ok: false };
@@ -564,10 +565,24 @@ async function changePassword(req, res, next) {
    Account settings
    ------------------------------------------------------------------ */
 
+// Which alerts a member wants; at most a few a week either way
+async function setAlerts(req, res, next) {
+  try {
+    const sets = [];
+    const params = { userId: req.user.userId };
+    if (typeof req.body.opportunities === 'boolean') { sets.push('alert_opportunities = :o'); params.o = req.body.opportunities ? 1 : 0; }
+    if (typeof req.body.events === 'boolean') { sets.push('alert_events = :e'); params.e = req.body.events ? 1 : 0; }
+    if (!sets.length) return res.status(400).json({ error: 'Choose which alerts you want' });
+    await pool.execute(`UPDATE users SET ${sets.join(', ')} WHERE user_id = :userId`, params);
+    res.json({ saved: true });
+  } catch (err) { next(err); }
+}
+
 async function getAccount(req, res, next) {
   try {
     const [[user]] = await pool.execute(
       `SELECT u.name, u.email, u.department, u.totp_enabled, u.google_id, u.password_changed_at, u.created_at,
+              u.alert_opportunities, u.alert_events,
               sd.employment_status,
               (SELECT COUNT(*) FROM two_factor_backup_codes b WHERE b.user_id = u.user_id AND b.used_at IS NULL) AS backup_codes_left
        FROM users u LEFT JOIN staff_directory sd ON sd.staff_number = u.staff_number
@@ -586,6 +601,7 @@ async function getAccount(req, res, next) {
       backupCodesLeft: user.backup_codes_left,
       googleLinked: Boolean(user.google_id),
       passwordChangedAt: user.password_changed_at,
+      alerts: { opportunities: Boolean(user.alert_opportunities), events: Boolean(user.alert_events) },
       createdAt: user.created_at
     });
   } catch (err) {
@@ -615,7 +631,7 @@ async function setupTwoFactor(req, res, next) {
 
     // Stored now but only switched on once the user proves the app works
     const secret = authenticator.generateSecret();
-    await pool.execute('UPDATE users SET totp_secret = :secret WHERE user_id = :userId', { secret, userId: req.user.userId });
+    await pool.execute('UPDATE users SET totp_secret = :secret WHERE user_id = :userId', { secret: seal(secret), userId: req.user.userId });
     const qr = await QRCode.toDataURL(authenticator.keyuri(user.email, 'AlumNet', secret), { margin: 1, width: 220 });
     res.json({ qr, secret });
   } catch (err) {
@@ -630,7 +646,7 @@ async function enableTwoFactor(req, res, next) {
     const [[user]] = await pool.execute('SELECT totp_secret, totp_enabled FROM users WHERE user_id = :userId', { userId: req.user.userId });
     if (!user || !user.totp_secret) return res.status(400).json({ error: 'Start the setup again' });
     if (user.totp_enabled) return res.status(400).json({ error: 'Two-factor authentication is already on' });
-    if (!authenticator.verify({ token: code, secret: user.totp_secret })) {
+    if (!authenticator.verify({ token: code, secret: openSecret(user.totp_secret) })) {
       return res.status(400).json({ error: 'That code is incorrect. Check the time on your phone and try again.' });
     }
     await pool.execute('UPDATE users SET totp_enabled = 1 WHERE user_id = :userId', { userId: req.user.userId });
@@ -787,6 +803,8 @@ async function deleteMyAccount(req, res, next) {
       );
       // Embeddings are worked out from the profile, so they are personal data too
       await conn.execute('DELETE FROM profile_embeddings WHERE user_id = :userId', { userId });
+      await conn.execute('DELETE FROM event_waitlist WHERE user_id = :userId', { userId });
+      await conn.execute('DELETE FROM bookmarks WHERE mentee_id = :userId OR mentor_id = :userId', { userId });
       await conn.execute(
         'UPDATE mentors SET availability_note = NULL, accepting_mentees = 0 WHERE user_id = :userId',
         { userId }
@@ -820,7 +838,8 @@ module.exports = {
   signupStart, signupLink, signupComplete, signupRequestReview,
   login, googleLogin, verifyTwoFactor, logout, logoutEverywhere,
   forgotPassword, resetPassword, changePassword,
-  getAccount, setupTwoFactor, enableTwoFactor, regenerateBackupCodes, disableTwoFactor,
+  getAccount,
+  setAlerts, setupTwoFactor, enableTwoFactor, regenerateBackupCodes, disableTwoFactor,
   linkGoogle, unlinkGoogle, exportMyData, deleteMyAccount,
   // shared with the admin controller and tests
   createAccount, validatePassword
