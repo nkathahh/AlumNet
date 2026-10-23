@@ -154,7 +154,11 @@ async function listMyRequests(req, res, next) {
         const otherColumn = role === 'mentor' ? 'mentee_id' : 'mentor_id';
 
         const [rows] = await pool.execute(
-            `SELECT r.request_id, r.status, r.requested_at, r.responded_at, r.message, r.risk_flags,
+            `SELECT r.request_id, r.status, r.requested_at, r.responded_at, r.ended_at, r.message, r.risk_flags,
+                    (SELECT COUNT(*) FROM mentorship_goals g WHERE g.request_id = r.request_id) AS goals_total,
+                    (SELECT COUNT(*) FROM mentorship_goals g WHERE g.request_id = r.request_id AND g.done_at IS NOT NULL) AS goals_done,
+                    (SELECT COUNT(*) FROM mentorship_meetings mt WHERE mt.request_id = r.request_id) AS meetings,
+                    EXISTS(SELECT 1 FROM mentorship_feedback f WHERE f.request_id = r.request_id AND f.user_id = :userId) AS feedback_given,
                     u.user_id AS other_user_id, u.name AS other_name, u.department AS other_department,
                     u.email AS other_email, p.headline AS other_headline, sd.employment_status AS other_hr_status
    FROM mentorship_requests r
@@ -172,6 +176,8 @@ async function listMyRequests(req, res, next) {
             // Only the person receiving the message sees the caution
             message_warnings: role === 'mentor' ? parseFlags(flags).filter((f) => f.level !== 'low').map((f) => f.label) : [],
             other_verified: Boolean(hr),
+            goals_total: Number(r.goals_total), goals_done: Number(r.goals_done), meetings: Number(r.meetings),
+            feedback_given: Number(r.feedback_given) === 1,
             other_email: r.status === 'accepted' ? email : null
         })));
     } catch (err) { next(err); }
@@ -278,8 +284,14 @@ async function endMentorship(req, res, next) {
     await createNotification(
       otherUserId,
       'mentorship_ended',
-      `${enderName} ended your mentorship.`,
-      'requests.html'
+      `${enderName} ended your mentorship. Tell the alumni office how it went: it takes a minute and they will not share your answers.`,
+      'requests.html#ended'
+    );
+    await createNotification(
+      userId,
+      'mentorship_feedback',
+      'Your mentorship has ended. Tell the alumni office how it went: it takes a minute and your answers stay private.',
+      'requests.html#ended'
     );
 
     res.json({ request_id: Number(id), status: 'ended' });

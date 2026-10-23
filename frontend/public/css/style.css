@@ -1399,7 +1399,7 @@ textarea:focus-visible {
   --md-muted: var(--slate, #64748b);
   --md-accent: #c8102e;
   --md-accent-soft: rgba(200, 16, 46, 0.08);
-  --md-green: #15803d;
+  --md-green: #166534;
   --md-green-soft: rgba(21, 128, 61, 0.1);
   --md-amber: #92400e;
   --md-amber-soft: rgba(180, 83, 9, 0.1);
@@ -1880,3 +1880,26 @@ textarea:focus-visible {
 .event-place-free { font-size: 0.85rem; font-weight: 600; color: var(--kq-green, #0b6b3a); text-align: center; }
 .fm-save { white-space: nowrap; }
 .fm-card-actions { flex-wrap: wrap; }
+
+/* Mentorship workspace */
+.ws-card { max-width: 620px; }
+.ws-section { border-top: 1px solid var(--line, #e3e6e2); padding-top: 14px; margin-top: 14px; }
+.ws-section h4 { margin: 0 0 8px; font-size: 0.95rem; }
+.ws-goals, .ws-meetings { list-style: none; padding: 0; margin: 0 0 10px; display: grid; gap: 8px; }
+.ws-goals li, .ws-meetings li { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.ws-meetings li { flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 8px; background: var(--paper-soft, rgba(0,0,0,0.03)); }
+.ws-goal { display: flex; gap: 10px; align-items: flex-start; font-weight: 400; cursor: pointer; }
+.ws-goal input { width: 18px; height: 18px; margin-top: 2px; flex: 0 0 auto; }
+.ws-goal.done .ws-goal-text { text-decoration: line-through; color: var(--slate); }
+.ws-inline { display: flex; gap: 8px; }
+.ws-inline input { flex: 1; }
+.req-side-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.req-progress { margin-top: 6px; }
+.fb-q { border: 0; padding: 0; margin: 0 0 14px; }
+.fb-q legend { font-weight: 600; margin-bottom: 6px; padding: 0; }
+.fb-scale { display: flex; gap: 8px; }
+.fb-scale label { display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; }
+.fb-scale-ends { display: flex; justify-content: space-between; max-width: 220px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.ws-inline input { padding: 10px 12px; border: 1px solid var(--line, #d9ddd8); border-radius: 10px; font: inherit; background: var(--panel, #fff); color: inherit; }

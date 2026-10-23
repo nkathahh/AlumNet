@@ -753,6 +753,9 @@ async function exportMyData(req, res, next) {
       'SELECT title, company, approval_status, created_at FROM career_opportunities WHERE posted_by = :userId',
       { userId }
     );
+    const [goals] = await pool.execute('SELECT text, created_at, done_at FROM mentorship_goals WHERE created_by = :userId', { userId });
+    const [meetings] = await pool.execute('SELECT met_on, mode, minutes, note, created_at FROM mentorship_meetings WHERE logged_by = :userId', { userId });
+    const [feedback] = await pool.execute('SELECT side, met, helpful, goals_progress, felt_safe, comment, created_at FROM mentorship_feedback WHERE user_id = :userId', { userId });
     const [notifications] = await pool.execute(
       'SELECT type, message, is_read, created_at FROM notifications WHERE user_id = :userId ORDER BY created_at DESC',
       { userId }
@@ -763,6 +766,9 @@ async function exportMyData(req, res, next) {
       account: { ...account, totp_enabled: Boolean(account.totp_enabled), google_linked: Boolean(account.google_linked) },
       profile: profile || {},
       mentorships,
+      mentorship_goals: goals,
+      mentorship_meetings: meetings,
+      mentorship_feedback_you_gave: feedback,
       event_registrations: events,
       opportunities_posted: opportunities,
       notifications
@@ -805,6 +811,10 @@ async function deleteMyAccount(req, res, next) {
       await conn.execute('DELETE FROM profile_embeddings WHERE user_id = :userId', { userId });
       await conn.execute('DELETE FROM event_waitlist WHERE user_id = :userId', { userId });
       await conn.execute('DELETE FROM bookmarks WHERE mentee_id = :userId OR mentor_id = :userId', { userId });
+      // Ratings stay (they are anonymous totals); words written by this person go
+      await conn.execute('UPDATE mentorship_feedback SET comment = NULL WHERE user_id = :userId', { userId });
+      await conn.execute('UPDATE mentorship_meetings SET note = NULL WHERE logged_by = :userId', { userId });
+      await conn.execute("UPDATE mentorship_goals SET text = 'Removed' WHERE created_by = :userId", { userId });
       await conn.execute(
         'UPDATE mentors SET availability_note = NULL, accepting_mentees = 0 WHERE user_id = :userId',
         { userId }

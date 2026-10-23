@@ -59,12 +59,10 @@ jobs:
             node --check "$f"
           done
 
+      # The same migration runner used on laptops and the live database
       - name: Build the database from the migrations
-        run: |
-          for f in database/migrations/*.sql; do
-            echo "Applying $f"
-            mysql -h 127.0.0.1 -P 3306 -uroot -proot alumnet_test < "$f"
-          done
+        working-directory: backend
+        run: npm run migrate
 
       - name: Run API tests
         working-directory: backend
@@ -111,10 +109,8 @@ jobs:
           (cd e2e && npm ci && npx playwright install --with-deps chromium)
 
       - name: Build the database from the migrations
-        run: |
-          for f in database/migrations/*.sql; do
-            mysql -h 127.0.0.1 -P 3306 -uroot -proot alumnet_test < "$f"
-          done
+        working-directory: backend
+        run: npm run migrate
 
       - name: Run browser checks
         working-directory: e2e

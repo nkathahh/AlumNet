@@ -867,6 +867,12 @@ async function renderRequests() {
     list.querySelectorAll('[data-profile]').forEach((a) => {
       a.addEventListener('click', (e) => { e.preventDefault(); openMentorProfile(a.dataset.profile); });
     });
+    list.querySelectorAll('[data-workspace]').forEach((btn) => {
+      btn.onclick = () => openWorkspace(btn.dataset.workspace, allMyRequests.find((r) => String(r.request_id) === btn.dataset.workspace), load);
+    });
+    list.querySelectorAll('[data-feedback]').forEach((btn) => {
+      btn.onclick = () => openFeedbackDialog(btn.dataset.feedback, btn.dataset.name, load);
+    });
     list.querySelectorAll('[data-safety]').forEach((btn) => {
       btn.addEventListener('click', () => {
         if (btn.dataset.safety === 'report') openReportDialog('user', btn.dataset.user, btn.dataset.name);
@@ -917,7 +923,167 @@ async function renderRequests() {
     });
   });
 
+  // Links such as requests.html#ended open that tab
+  const fromHash = location.hash.slice(1);
+  if (['pending', 'accepted', 'ended', 'declined'].includes(fromHash)) {
+    activeTab = fromHash;
+    tabs.forEach((t) => t.classList.toggle('active', t.dataset.tab === fromHash));
+  }
   load();
+}
+
+/* --------------------------------------------------------------------
+   Mentorship workspace: goals, meetings and feedback (Module 5)
+   -------------------------------------------------------------------- */
+
+const MEETING_MODES = { in_person: 'In person', virtual: 'Video call', phone: 'Phone call' };
+
+async function openWorkspace(requestId, card, onChange) {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.innerHTML = '<div class="modal-card ws-card" role="dialog" aria-modal="true" aria-labelledby="ws-title"><p class="md-muted">Loading...</p></div>';
+  document.body.appendChild(backdrop);
+  const close = () => { backdrop.remove(); document.removeEventListener('keydown', onKey); if (onChange) onChange(); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+  const otherName = card ? card.other_name : 'your mentorship partner';
+
+  async function draw() {
+    const { ok, data } = await apiSend('GET', `/mentorship-requests/${requestId}/workspace`);
+    const box = backdrop.querySelector('.modal-card');
+    if (!ok) { box.innerHTML = `<p>${escapeHTML(data.error || 'Could not open the mentorship')}</p>`; return; }
+    const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Africa/Nairobi' });
+    const started = data.started_at ? new Date(data.started_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+    box.innerHTML = `
+      <h3 id="ws-title">Your mentorship with ${escapeHTML(otherName)}</h3>
+      <div class="modal-meta">${started ? `Started ${escapeHTML(started)}` : ''}${data.status === 'ended' ? ' · Ended. You can still read everything here.' : ''}</div>
+
+      <section class="ws-section">
+        <h4>Goals</h4>
+        ${data.goals.length ? `<ul class="ws-goals">${data.goals.map((g) => `
+          <li>
+            <label class="ws-goal ${g.done ? 'done' : ''}">
+              <input type="checkbox" data-goal="${g.goal_id}" ${g.done ? 'checked' : ''} ${data.editable ? '' : 'disabled'}>
+              <span><span class="ws-goal-text">${escapeHTML(g.text)}</span><br><span class="md-muted st-small">Added by ${g.mine ? 'you' : escapeHTML(g.added_by || otherName)}</span></span>
+            </label>
+            ${g.mine && data.editable ? `<button type="button" class="btn-quiet st-small" data-remove-goal="${g.goal_id}" aria-label="Remove this goal">Remove</button>` : ''}
+          </li>`).join('')}</ul>`
+          : `<p class="md-muted st-small">${data.editable ? 'Agree 2 or 3 goals together, for example "Prepare for the cargo supervisor interview" or "Learn how load planning works".' : 'No goals were added.'}</p>`}
+        ${data.editable && data.goals.length < 8 ? `
+          <form class="ws-inline" id="ws-goal-form">
+            <label class="sr-only" for="ws-goal-text">New goal</label>
+            <input type="text" id="ws-goal-text" maxlength="200" placeholder="Add a goal">
+            <button type="submit" class="btn btn-secondary md-btn-sm">Add goal</button>
+          </form>` : ''}
+      </section>
+
+      <section class="ws-section">
+        <h4>Meetings</h4>
+        ${data.meetings.length ? `<ul class="ws-meetings">${data.meetings.map((m) => `
+          <li>
+            <div><strong>${escapeHTML(new Date(m.met_on + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }))}</strong>
+              · ${escapeHTML(MEETING_MODES[m.mode] || m.mode)} · ${Number(m.minutes)} min
+              <span class="md-muted st-small">· logged by ${m.mine ? 'you' : escapeHTML(m.logged_by_name || otherName)}</span></div>
+            ${m.note ? `<div class="st-small">${escapeHTML(m.note)}</div>` : ''}
+            ${m.mine && data.editable ? `<button type="button" class="btn-quiet st-small" data-remove-meeting="${m.meeting_id}">Remove</button>` : ''}
+          </li>`).join('')}</ul>`
+          : `<p class="md-muted st-small">${data.editable ? 'Log each time you meet, so you can both see your progress.' : 'No meetings were logged.'}</p>`}
+        ${data.editable ? `
+          <form id="ws-meeting-form" class="ws-meeting-form">
+            <div class="field-row">
+              <div class="field"><label for="ws-date">Date</label><input type="date" id="ws-date" max="${today}" value="${today}"></div>
+              <div class="field"><label for="ws-mode">How you met</label>
+                <select id="ws-mode">${Object.entries(MEETING_MODES).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></div>
+              <div class="field"><label for="ws-minutes">Minutes</label><input type="number" id="ws-minutes" min="5" max="480" step="5" value="30"></div>
+            </div>
+            <div class="field"><label for="ws-note">What you covered (optional, ${escapeHTML(otherName)} can see this)</label>
+              <textarea id="ws-note" maxlength="500" rows="2" placeholder="e.g. Went through a sample load sheet"></textarea></div>
+            <button type="submit" class="btn btn-secondary md-btn-sm">Log meeting</button>
+          </form>` : ''}
+      </section>
+      <p class="st-msg" id="ws-msg"></p>
+      <div class="dlg-actions">
+        ${data.can_give_feedback ? '<button type="button" class="btn btn-primary" id="ws-feedback">Tell us how it went</button>' : ''}
+        <button type="button" class="btn btn-secondary" id="ws-close">Close</button>
+      </div>`;
+
+    const msg = box.querySelector('#ws-msg');
+    const act = async (method, path, body) => {
+      const r = await apiSend(method, path, body);
+      if (!r.ok) { setMsg(msg, r.data.error || 'Could not save that'); return false; }
+      await draw();
+      return true;
+    };
+    box.querySelector('#ws-close').onclick = close;
+    const fb = box.querySelector('#ws-feedback');
+    if (fb) fb.onclick = () => { close(); openFeedbackDialog(requestId, otherName, onChange); };
+    box.querySelectorAll('[data-goal]').forEach((c) => { c.onchange = () => act('PATCH', `/mentorship-requests/${requestId}/goals/${c.dataset.goal}`, { done: c.checked }); });
+    box.querySelectorAll('[data-remove-goal]').forEach((b) => { b.onclick = () => act('DELETE', `/mentorship-requests/${requestId}/goals/${b.dataset.removeGoal}`); });
+    box.querySelectorAll('[data-remove-meeting]').forEach((b) => { b.onclick = () => act('DELETE', `/mentorship-requests/${requestId}/meetings/${b.dataset.removeMeeting}`); });
+    const gf = box.querySelector('#ws-goal-form');
+    if (gf) gf.onsubmit = (e) => { e.preventDefault(); act('POST', `/mentorship-requests/${requestId}/goals`, { text: box.querySelector('#ws-goal-text').value }); };
+    const mf = box.querySelector('#ws-meeting-form');
+    if (mf) {
+      mf.onsubmit = async (e) => {
+        e.preventDefault();
+        if (await act('POST', `/mentorship-requests/${requestId}/meetings`, {
+          metOn: box.querySelector('#ws-date').value, mode: box.querySelector('#ws-mode').value,
+          minutes: Number(box.querySelector('#ws-minutes').value), note: box.querySelector('#ws-note').value
+        })) toast('Meeting logged.');
+      };
+    }
+  }
+  await draw();
+}
+
+// Private feedback once a mentorship has ended
+function openFeedbackDialog(requestId, otherName, onDone) {
+  openDialog({
+    title: 'How did the mentorship go?',
+    confirmText: 'Send',
+    bodyHTML: `
+      <p class="st-text md-muted">Your answers go only to the alumni office. ${escapeHTML(otherName)} will not see them.</p>
+      <fieldset class="fb-q"><legend>Did you meet?</legend>
+        <label class="check-row"><input type="radio" name="fb-met" value="yes"><span>Yes</span></label>
+        <label class="check-row"><input type="radio" name="fb-met" value="no"><span>No, we never met</span></label>
+      </fieldset>
+      <div id="fb-met-yes" style="display:none;">
+        <fieldset class="fb-q"><legend>How helpful was it?</legend>
+          <div class="fb-scale">${[1, 2, 3, 4, 5].map((n) => `<label><input type="radio" name="fb-helpful" value="${n}"><span>${n}</span></label>`).join('')}</div>
+          <div class="fb-scale-ends md-muted st-small"><span>Not at all</span><span>Very helpful</span></div>
+        </fieldset>
+        <div class="field"><label for="fb-progress">How many of your goals did you reach?</label>
+          <select id="fb-progress"><option value="">Choose</option><option value="none">None</option><option value="some">Some</option><option value="most">Most</option><option value="all">All</option></select></div>
+      </div>
+      <fieldset class="fb-q"><legend>Did you feel safe and respected?</legend>
+        <label class="check-row"><input type="radio" name="fb-safe" value="yes" checked><span>Yes</span></label>
+        <label class="check-row"><input type="radio" name="fb-safe" value="no"><span>No. The alumni office will follow up with you.</span></label>
+      </fieldset>
+      <div class="field"><label for="fb-comment">Anything else? (optional)</label><textarea id="fb-comment" rows="3" maxlength="500"></textarea></div>`,
+    onOpen: (dlg) => {
+      dlg.querySelectorAll('[name="fb-met"]').forEach((r) => {
+        r.onchange = () => { dlg.querySelector('#fb-met-yes').style.display = r.value === 'yes' && r.checked ? '' : 'none'; };
+      });
+    },
+    onConfirm: async (dlg) => {
+      const met = dlg.querySelector('[name="fb-met"]:checked');
+      if (!met) return 'Say whether you met';
+      const helpful = dlg.querySelector('[name="fb-helpful"]:checked');
+      if (met.value === 'yes' && !helpful) return 'Choose how helpful it was, from 1 to 5';
+      const r = await apiSend('POST', `/mentorship-requests/${requestId}/feedback`, {
+        met: met.value === 'yes',
+        helpful: helpful ? Number(helpful.value) : null,
+        goalsProgress: dlg.querySelector('#fb-progress').value || null,
+        feltSafe: dlg.querySelector('[name="fb-safe"]:checked').value === 'yes',
+        comment: dlg.querySelector('#fb-comment').value
+      });
+      if (!r.ok) return r.data.error || 'Could not send your feedback';
+      toast(r.data.message);
+      if (onDone) onDone();
+      return null;
+    }
+  });
 }
 
 function requestCardHTML(r) {
@@ -936,7 +1102,17 @@ function requestCardHTML(r) {
   } else if (canWithdraw) {
     actionHTML = `<button class="btn btn-secondary" data-action="withdraw" data-request-id="${r.request_id}">Withdraw</button>`;
   } else if (canEnd) {
-    actionHTML = `<button class="btn btn-secondary" data-action="end" data-request-id="${r.request_id}">End mentorship</button>`;
+    actionHTML = `<div class="req-side-actions">
+      <button class="btn btn-primary" data-workspace="${r.request_id}">Open mentorship</button>
+      <button class="btn-quiet st-small" data-action="end" data-request-id="${r.request_id}">End mentorship</button>
+    </div>`;
+  } else if (r.status === 'ended') {
+    actionHTML = `<div class="req-side-actions">
+      ${r.feedback_given
+        ? '<span class="request-status ended">Feedback sent</span>'
+        : `<button class="btn btn-primary" data-feedback="${r.request_id}" data-name="${escapeHTML(r.other_name)}">Tell us how it went</button>`}
+      <button class="btn-quiet st-small" data-workspace="${r.request_id}">View goals and meetings</button>
+    </div>`;
   } else {
     actionHTML = `<span class="request-status ${r.status === 'expired' ? 'ended' : r.status}">${r.status === 'accepted' ? 'active' : r.status === 'expired' ? 'expired, no reply in 14 days' : r.status}</span>`;
   }
@@ -964,9 +1140,10 @@ function requestCardHTML(r) {
         <strong><a href="#" class="req-name" data-profile="${r.other_user_id}">${escapeHTML(r.other_name)}</a></strong>
         ${r.other_verified ? verifiedBadgeHTML(role === 'mentor' ? 'Verified current KQ staff' : 'Verified former KQ staff') : ''}<br>
         ${r.other_headline ? `<span class="req-headline">${escapeHTML(r.other_headline)}</span><br>` : ''}
-        <span style="font-size:0.82rem; color:var(--slate);">${escapeHTML(r.other_department || '')} · ${r.status === 'ended' ? 'Ended' : 'Requested'} on ${date}</span>
+        <span style="font-size:0.82rem; color:var(--slate);">${escapeHTML(r.other_department || '')} · ${r.status === 'ended' && r.ended_at ? `Ended on ${new Date(r.ended_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : `Requested on ${date}`}</span>
         ${message}
         ${contact}
+        ${['accepted', 'ended'].includes(r.status) ? `<div class="req-progress md-muted st-small">${r.goals_total ? `Goals: ${r.goals_done} of ${r.goals_total} done` : 'No goals yet'} · ${r.meetings} meeting${r.meetings === 1 ? '' : 's'} logged</div>` : ''}
         <div class="req-safety">
           <button type="button" class="btn-quiet st-small" data-safety="report" data-user="${r.other_user_id}" data-name="${escapeHTML(r.other_name)}">Report</button>
           <button type="button" class="btn-quiet st-small" data-safety="block" data-user="${r.other_user_id}" data-name="${escapeHTML(r.other_name)}">Block</button>

@@ -1217,6 +1217,71 @@ test('mentees can save mentors to a shortlist', async () => {
   assert.equal((await mentee.me.call('GET', '/mentors/saved')).body.length, 0);
 });
 
+/* ---------------- Mentorship outcomes (Module 5) ---------------- */
+
+async function activeMentorship(tag) {
+  const mentee = await makeMember(`Goal Mentee ${tag}`, `goal.mentee.${tag}@example.org`, 'mentee');
+  const mentor = await makeMember(`Goal Mentor ${tag}`, `goal.mentor.${tag}@example.org`, 'mentor');
+  const sent = await mentee.me.call('POST', '/mentorship-requests', { mentorId: mentor.id, message: 'I would like help planning a move into cargo operations.' });
+  assert.equal(sent.status, 201);
+  const [[r]] = await db.execute('SELECT request_id FROM mentorship_requests WHERE mentee_id = :id', { id: mentee.id });
+  assert.equal((await mentor.me.call('PATCH', `/mentorship-requests/${r.request_id}`, { decision: 'accepted' })).status, 200);
+  return { mentee, mentor, id: r.request_id };
+}
+
+test('a mentorship has shared goals and a meeting log that only the two people can see', async () => {
+  const { mentee, mentor, id } = await activeMentorship('a');
+  const outsider = await makeMember('Outsider', 'outsider@example.org', 'mentee');
+  assert.equal((await outsider.me.call('GET', `/mentorship-requests/${id}/workspace`)).status, 404);
+
+  const g = await mentee.me.call('POST', `/mentorship-requests/${id}/goals`, { text: 'Understand how load planning works' });
+  assert.equal(g.status, 201);
+  assert.ok((await mentor.me.call('GET', '/notifications')).body.some((n) => n.type === 'mentorship_goal'));
+  assert.equal((await mentor.me.call('PATCH', `/mentorship-requests/${id}/goals/${g.body.goal_id}`, { done: true })).status, 200);
+  // Only the person who added a goal can remove it
+  assert.equal((await mentor.me.call('DELETE', `/mentorship-requests/${id}/goals/${g.body.goal_id}`)).status, 404);
+
+  const nairobi = (ms) => new Date(ms).toLocaleDateString('sv-SE', { timeZone: 'Africa/Nairobi' });
+  const today = nairobi(Date.now());
+  const future = nairobi(Date.now() + 3 * 864e5);
+  assert.equal((await mentor.me.call('POST', `/mentorship-requests/${id}/meetings`, { metOn: future, mode: 'virtual', minutes: 45 })).status, 400);
+  assert.equal((await mentor.me.call('POST', `/mentorship-requests/${id}/meetings`, { metOn: today, mode: 'virtual', minutes: 2 })).status, 400);
+  assert.equal((await mentor.me.call('POST', `/mentorship-requests/${id}/meetings`, { metOn: today, mode: 'virtual', minutes: 45, note: 'Went through a load sheet together.' })).status, 201);
+
+  const ws = (await mentee.me.call('GET', `/mentorship-requests/${id}/workspace`)).body;
+  assert.equal(ws.goals.length, 1);
+  assert.equal(ws.goals[0].done, true);
+  assert.equal(ws.meetings.length, 1);
+  assert.equal(ws.meetings[0].minutes, 45);
+  const card = (await mentee.me.call('GET', '/mentorship-requests')).body.find((r) => r.request_id === id);
+  assert.equal(card.goals_done, 1);
+  assert.equal(card.meetings, 1);
+  state.outcome = { mentee, mentor, id };
+});
+
+test('after a mentorship ends, each person rates it once and privately; feeling unsafe opens a report', async () => {
+  const { mentee, mentor, id } = state.outcome;
+  assert.equal((await mentee.me.call('POST', `/mentorship-requests/${id}/feedback`, { met: true, helpful: 5 })).status, 409); // still active
+  assert.equal((await mentee.me.call('POST', `/mentorship-requests/${id}/end`)).status, 200);
+  assert.ok((await mentor.me.call('GET', '/notifications')).body.some((n) => /how it went/.test(n.message)));
+  // Nothing can be added once it has ended
+  assert.equal((await mentee.me.call('POST', `/mentorship-requests/${id}/goals`, { text: 'Too late' })).status, 409);
+
+  assert.equal((await mentee.me.call('POST', `/mentorship-requests/${id}/feedback`, { met: true, helpful: 9 })).status, 400);
+  const ok = await mentee.me.call('POST', `/mentorship-requests/${id}/feedback`, { met: true, helpful: 4, goalsProgress: 'most', comment: 'Very practical.' });
+  assert.equal(ok.status, 201);
+  assert.equal((await mentee.me.call('POST', `/mentorship-requests/${id}/feedback`, { met: true, helpful: 4 })).status, 409);
+
+  const unsafe = await mentor.me.call('POST', `/mentorship-requests/${id}/feedback`, { met: false, feltSafe: false, comment: 'Kept asking for my personal number.' });
+  assert.equal(unsafe.status, 201);
+  const [[report]] = await db.execute("SELECT reason FROM reports WHERE target_type = 'user' AND target_id = :id AND reporter_id = :by", { id: mentee.id, by: mentor.id });
+  assert.equal(report.reason, 'harassment');
+  // The other person's answers are never returned to them
+  const ws = (await mentee.me.call('GET', `/mentorship-requests/${id}/workspace`)).body;
+  assert.equal(ws.feedback_given, true);
+  assert.equal(JSON.stringify(ws).includes('personal number'), false);
+});
+
 test('the department comes from HR at sign-in, even if the account says otherwise', async () => {
   // Like Mark Thuo's account, linked to his HR record by hand with an old department
   const m = await makeMember('Hand Linked', 'hand.linked@example.org', 'mentee');

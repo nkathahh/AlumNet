@@ -170,6 +170,15 @@ test('script typed into any field never runs, on any page, for any role', async 
   for (const url of ['/mentor-dashboard.html', '/requests.html', '/events.html', `/profile.html?id=${ids.mentee}`, '/notifications.html']) {
     await visit(mentor, url);
   }
+  // The mentorship workspace: goals and meeting notes both people can see
+  const rid = req.body.request_id;
+  assert.equal((await api(mentor, 'PATCH', `/mentorship-requests/${rid}`, { decision: 'accepted' })).status, 200);
+  assert.equal((await api(mentee, 'POST', `/mentorship-requests/${rid}/goals`, { text: `Goal ${P1}${P2}` })).status, 201);
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Africa/Nairobi' });
+  assert.equal((await api(mentor, 'POST', `/mentorship-requests/${rid}/meetings`, { metOn: today, mode: 'virtual', minutes: 30, note: `Note ${PAYLOAD}` })).status, 201);
+  for (const pg of [mentee, mentor]) {
+    await visit(pg, '/requests.html#accepted', async (p) => { await p.click('[data-workspace]'); await wait(600); });
+  }
   await visit(mentor, '/events.html', (pg) => pg.click('[data-event-filter=proposals]'));
   await visit(mentor, '/opportunities.html', (pg) => pg.click('text=My posts'));
   await visit(mentor, '/opportunities.html', (pg) => pg.click('[data-open-opp], .opportunity-card >> nth=0').catch(() => null));

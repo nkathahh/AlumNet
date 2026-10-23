@@ -37,6 +37,11 @@ The first is your `JWT_SECRET`, the second is your `ML_API_KEY` and the third is
    2. Connect to **Aiven**. Choose **Server → Data Import**, pick the file, set
       **Default Target Schema** to a new schema called `alumnet`, and start the import.
 5. Check that the tables and demo accounts are there.
+6. From then on, apply new migrations to Aiven with the runner instead of by hand. On your
+   laptop, put the Aiven values in `backend/.env` for a moment (or set them in the terminal),
+   then from the `backend` folder run `npm run migrate -- --baseline=NNN` once with the last
+   migration the copied database already had, and `npm run migrate` after every update.
+   Put your local values back afterwards.
 
 ## 2. ML service on Hugging Face Spaces
 

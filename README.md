@@ -103,6 +103,11 @@ Strathmore University.
 - **Search:** events can be searched by title, topic, venue or host and filtered by format and
   date; posters can search their own posts and filter them by status. Long lists show 12 at a
   time.
+- **Mentorship workspace and outcomes:** once a mentor accepts, the pair agree up to 8 goals,
+  tick them off and log each meeting (date, how they met, length, an optional note). When the
+  mentorship ends, each person answers privately: did you meet, how helpful was it (1 to 5),
+  how many goals did you reach, and did you feel safe. Only the alumni office sees the
+  answers. "I did not feel safe" opens a report straight away.
 - **Mentor shortlist:** mentees can save mentors and compare them before asking, since only 5
   requests can wait at once.
 - **Nairobi time:** event times are shown in Nairobi time, with the viewer's own time added for
@@ -150,7 +155,16 @@ AlumNet/
 ### 1. Database
 
 1. Create the database: `CREATE DATABASE alumnet;`
-2. Run the files in `database/migrations` in order, 001 to 010, in MySQL Workbench.
+2. Set the `DB_*` values in `backend/.env` (step 2), then from the `backend` folder run:
+   ```
+   npm run migrate
+   ```
+   This applies every file in `database/migrations` that the database has not had yet, in
+   order, and records each one in `schema_migrations`, so it is safe to run again at any time.
+   `npm run migrate -- --status` lists what is applied and what is waiting.
+3. A database set up by hand before the runner existed: run
+   `npm run migrate -- --baseline=021` once (021 being the last migration you applied), then
+   `npm run migrate` as normal.
 
 ### 2. Environment variables
 
@@ -260,7 +274,7 @@ progress, and the full development and test results will follow.
 Every push and pull request to `main` runs `.github/workflows/ci.yml`. Each job starts an
 empty MySQL 8 database, builds it from `database/migrations` and tests the real code:
 
-- **Backend API tests** (`backend/tests/api.test.js`, 79 tests): sign-up by HR email match,
+- **Backend API tests** (`backend/tests/api.test.js`, 81 tests): sign-up by HR email match,
   the alumni office review path with risk signals, impostor detection, roles from HR, HttpOnly
   session cookies, CSRF protection, log out everywhere, suspension, single-use reset links,
   two-factor with backup codes, admin 2FA requirement, HR import with retirement conversion,
@@ -269,7 +283,8 @@ empty MySQL 8 database, builds it from `database/migrations` and tests the real 
   learning from approvals and scam rejections, the mentor directory and its filters, gender
   consent, mentor capacity (including two accepts at the same moment), request expiry, search
   fallback, filter counts, paging, removal of embeddings on account deletion, skill coverage and
-  fit labels, event targeting, alert limits and opt-out, editing live posts and events, the waiting list, event reminders, the mentor shortlist, encrypted two-factor secrets, second-admin
+  fit labels, event targeting, alert limits and opt-out, editing live posts and events, the waiting list, event reminders, the mentor shortlist, mentorship goals, meetings and private
+  feedback, encrypted two-factor secrets, second-admin
   approval of HR imports, re-checking live posts after a scam, security headers
   and rate limiting.
 - **Browser checks** (`e2e/browser.test.js`): script payloads in every field members can type
@@ -307,8 +322,6 @@ screenshots are in Chapter 5 of the project report.
 - **Known ranking error:** for one mentee (Joyce), a mentor with strong skills overlap
   (Catherine) ranks above the better overall fit (Brian). Field-weighted scoring corrected this
   in the pilot, but only narrowly, and the full evaluation will test it.
-- **Mentorship outcomes are not recorded:** the platform knows a mentorship started, not whether
-  it helped.
 - **Scam checks are rules, not a model:** text inside images and links whose page changes after
   approval are not caught; reports from members and the re-check are the backstop.
 - **Single-admin installations** cannot use the second-admin rule for HR imports; the log
