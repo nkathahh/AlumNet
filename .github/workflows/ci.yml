@@ -22,7 +22,7 @@ env:
 jobs:
   backend:
     name: Backend API tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       mysql:
         image: mysql:8.0
@@ -85,7 +85,7 @@ jobs:
 
   browser:
     name: Browser checks (XSS and accessibility)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       mysql:
         image: mysql:8.0
@@ -118,6 +118,8 @@ jobs:
 
       - name: Run browser checks
         working-directory: e2e
+        env:
+          JWT_SECRET: ci-test-secret
         run: |
           node --test \
             --test-reporter=spec --test-reporter-destination=stdout \
@@ -130,10 +132,11 @@ jobs:
         with:
           name: browser-test-results
           path: e2e/browser-test-results.xml
+          if-no-files-found: ignore
 
   ml-service:
     name: Recommendation service tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       mysql:
         image: mysql:8.0
