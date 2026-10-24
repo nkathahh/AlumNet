@@ -274,7 +274,7 @@ test('rejecting needs a reason; approving creates the account from the HR record
 
 test('activity log entries name people instead of ID numbers', async () => {
   const r = await state.admin.call('GET', '/admin/activity-logs');
-  const text = r.body.map((l) => l.description).join(' | ');
+  const text = r.body.items.map((l) => l.description).join(' | ');
   assert.match(text, /Approved sign-up for Victor Odhiambo \(KQ29806\) as mentor/);
   assert.match(text, /Rejected sign-up for Someone Else \(KQ37954\)\. Reason: Staff number already registered/);
 });
@@ -317,7 +317,7 @@ test('suspending a user ends their session at once, with a readable log entry', 
   assert.equal(r.status, 200);
   assert.equal((await state.george.call('GET', '/auth/account')).status, 401);
   const logs = await state.admin.call('GET', '/admin/activity-logs');
-  assert.match(logs.body[0].description, /Suspended George Simiyu \(mentor, /);
+  assert.match(logs.body.items[0].description, /Suspended George Simiyu \(mentor, /);
   await state.admin.call('PATCH', `/admin/users/${u.user_id}/toggle-status`);
   await state.george.call('POST', '/auth/login', { email: GEORGE.email, password: 'Passw0rd1' });
 });
@@ -505,7 +505,7 @@ test('an admin removes a reported post: reporters hear back and the log says wha
   const notes = await state.joyce.call('GET', '/notifications');
   assert.ok(notes.body.some((n) => /reviewed it/.test(n.message)));
   const logs = await state.admin.call('GET', '/admin/activity-logs');
-  assert.match(logs.body[0].description, /Removed opportunity "Safety analyst" after 3 reports/);
+  assert.match(logs.body.items[0].description, /Removed opportunity "Safety analyst" after 3 reports/);
 });
 
 test('blocking ends the mentorship, hides the profile and stops new requests', async () => {
@@ -654,8 +654,8 @@ test('a trusted poster on a known site is published straight away, but only when
   const live = await state.carol.me.call('GET', '/opportunities');
   assert.ok(live.body.some((o) => o.opportunity_id === fast.body.opportunityId));
   const logs = await state.admin.call('GET', '/admin/activity-logs');
-  assert.equal(logs.body[0].admin_name, 'Automatic');
-  assert.match(logs.body[0].description, /Auto-approved opportunity "Cargo Planner".*Known employer website \(jambojet\.com\)/);
+  assert.equal(logs.body.items[0].admin_name, 'Automatic');
+  assert.match(logs.body.items[0].description, /Auto-approved opportunity "Cargo Planner".*Known employer website \(jambojet\.com\)/);
   state.fastPost = fast.body.opportunityId;
 
   // A website the alumni office has never approved still needs a person
@@ -1280,6 +1280,130 @@ test('after a mentorship ends, each person rates it once and privately; feeling 
   const ws = (await mentee.me.call('GET', `/mentorship-requests/${id}/workspace`)).body;
   assert.equal(ws.feedback_given, true);
   assert.equal(JSON.stringify(ws).includes('personal number'), false);
+});
+
+test('the admin can open one member and see their mentorships, ratings, posts and reports, and the view is logged', async () => {
+  const { mentee, mentor, id } = state.outcome;
+  const r = await state.admin.call('GET', `/admin/users/${mentor.id}`);
+  assert.equal(r.status, 200);
+  assert.equal(r.body.account.role, 'mentor');
+  const m = r.body.mentorships.find((x) => x.request_id === id);
+  assert.equal(m.goals_done, 1);
+  assert.equal(m.mentee_rating, 4);
+  assert.equal(m.felt_safe, false);
+  // One answer is not enough for an average
+  assert.equal(r.body.mentor_stats.avg_helpful, null);
+  assert.equal(r.body.mentor_stats.feedback_answers, 1);
+  const about = (await state.admin.call('GET', `/admin/users/${mentee.id}`)).body;
+  assert.ok(about.reports_about.some((x) => x.reason === 'harassment'));
+  const [[log]] = await db.execute("SELECT description FROM admin_activity_logs WHERE action_type = 'view_user' AND target_entity_id = :id ORDER BY log_id DESC LIMIT 1", { id: mentee.id });
+  assert.match(log.description, /Viewed the details/);
+  assert.equal((await mentee.me.call('GET', `/admin/users/${mentor.id}`)).status, 403);
+  assert.equal((await state.admin.call('GET', '/admin/users/999999')).status, 404);
+});
+
+test('the impact figures add up from the data, and fairness is measured', async () => {
+  const { gini, median } = require('../src/controllers/impact.controller');
+  assert.equal(gini([5, 5, 5, 5]), 0);
+  assert.ok(gini([0, 0, 0, 20]) >= 0.7);
+  assert.equal(median([3, 1, 2]), 2);
+  assert.equal(median([1, 2, 3, 4]), 2.5);
+
+  const r = await state.admin.call('GET', '/admin/impact?period=all');
+  assert.equal(r.status, 200);
+  const [[{ sent }]] = await db.execute('SELECT COUNT(*) AS sent FROM mentorship_requests');
+  assert.equal(r.body.mentorship.requests_sent, Number(sent));
+  assert.ok(r.body.outcomes.answers >= 2);
+  assert.ok(r.body.outcomes.felt_unsafe >= 1);
+  assert.equal(r.body.monthly.length, 12);
+  assert.equal(r.body.outcomes.rating_counts.length, 5);
+  assert.equal((await state.admin.call('GET', '/admin/impact?period=7')).status, 400);
+  assert.equal((await state.outcome.mentee.me.call('GET', '/admin/impact')).status, 403);
+});
+
+test('the activity log can be filtered, paged and exported, and record views are hidden unless asked for', async () => {
+  const all = (await state.admin.call('GET', '/admin/activity-logs')).body;
+  assert.ok(all.total > 0 && all.items.length <= 50);
+  assert.equal(all.items.some((l) => l.action_type === 'view_user'), false);
+  const views = (await state.admin.call('GET', '/admin/activity-logs?action=view_user')).body;
+  assert.ok(views.items.length >= 1 && views.items.every((l) => l.action_type === 'view_user'));
+  const auto = (await state.admin.call('GET', '/admin/activity-logs?by=automatic')).body;
+  assert.ok(auto.items.every((l) => l.admin_name === 'Automatic'));
+  const words = (await state.admin.call('GET', '/admin/activity-logs?q=Victor')).body;
+  assert.ok(words.items.length >= 1 && words.items.every((l) => /Victor/.test(l.description + l.target_label)));
+  const future = (await state.admin.call('GET', '/admin/activity-logs?from=2999-01-01')).body;
+  assert.equal(future.total, 0);
+  const res = await fetch(`http://localhost:${process.env.TEST_PORT || 4999}/api/admin/activity-logs?format=csv&q=Victor`, {
+    headers: { 'X-Requested-With': 'AlumNet', Cookie: Object.entries(state.admin.jar).map(([k, v]) => `${k}=${v}`).join('; ') }
+  });
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-type'), /text\/csv/);
+  const csv = await res.text();
+  assert.match(csv.split('\r\n')[0], /^time,by,action/);
+  assert.match(csv, /Victor/);
+});
+
+/* ---------------- Batch A hardening ---------------- */
+
+test('admin sessions end after 30 idle minutes and 12 hours; member sessions last longer', async () => {
+  const jwt = require('jsonwebtoken');
+  const secret = process.env.JWT_SECRET || 'test-secret';
+  const now = Math.floor(Date.now() / 1000);
+  const [[adminRow]] = await db.execute("SELECT user_id, session_version FROM users WHERE email = 'admin@example.org'");
+  const call = (token) => fetch(`${ROOT}/api/auth/account`, { headers: { Cookie: `alumnet_session=${token}` } });
+  const token = (claims) => jwt.sign({ userId: adminRow.user_id, role: 'admin', sv: adminRow.session_version, ...claims }, secret);
+  // Idle for 31 minutes: the token has expired
+  assert.equal((await call(token({ at: now - 3600, act: now - 31 * 60, exp: now - 60 }))).status, 401);
+  // Active, but signed in 13 hours ago
+  assert.equal((await call(token({ at: now - 13 * 3600, act: now - 60, exp: now + 600 }))).status, 401);
+  // Active and recent: allowed, and the cookie is renewed when it is over 5 minutes old
+  const ok = await call(token({ at: now - 3600, act: now - 10 * 60, exp: now + 20 * 60 }));
+  assert.equal(ok.status, 200);
+  assert.ok(ok.headers.getSetCookie().some((c) => c.startsWith('alumnet_session=') && /Max-Age=(1[0-9]{3}|[0-9]{1,3})\b/.test(c)));
+  // A member idle for a day is still signed in
+  const m = await makeMember('Idle Member', 'idle.member@example.org', 'mentee');
+  const [[mr]] = await db.execute('SELECT session_version FROM users WHERE user_id = :id', { id: m.id });
+  const memberToken = jwt.sign({ userId: m.id, role: 'mentee', sv: mr.session_version, at: now - 86400, act: now - 86400, exp: now + 86400 }, secret);
+  assert.equal((await call(memberToken)).status, 200);
+});
+
+test('wrong passwords from many addresses still lock one account, and the owner is told once', async () => {
+  const victim = await makeMember('Targeted Member', 'targeted.member@example.org', 'mentee');
+  let last;
+  for (let i = 0; i < 22; i++) {
+    last = await fetch(`${ROOT}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'AlumNet', 'X-Forwarded-For': `10.9.${i}.1` },
+      body: JSON.stringify({ email: 'targeted.member@example.org', password: `wrong-${i}` })
+    });
+  }
+  assert.equal(last.status, 429);
+  const notes = (await victim.me.call('GET', '/notifications')).body.filter((n) => /wrong password attempts/.test(n.message));
+  assert.equal(notes.length, 1);
+});
+
+test('each member has an hourly limit on changes, and meetings per day are capped', async () => {
+  const { mentee, id } = await activeMentorship('cap');
+  const nairobi = new Date().toLocaleDateString('sv-SE', { timeZone: 'Africa/Nairobi' });
+  for (let i = 0; i < 3; i++) {
+    assert.equal((await mentee.me.call('POST', `/mentorship-requests/${id}/meetings`, { metOn: nairobi, mode: 'phone', minutes: 15 })).status, 201);
+  }
+  assert.equal((await mentee.me.call('POST', `/mentorship-requests/${id}/meetings`, { metOn: nairobi, mode: 'phone', minutes: 15 })).status, 409);
+
+  const busy = await makeMember('Busy Clicker', 'busy.clicker@example.org', 'mentee');
+  let status = 0;
+  for (let i = 0; i < 121 && status !== 429; i++) status = (await busy.me.call('DELETE', '/mentors/1/save')).status;
+  assert.equal(status, 429);
+  // Reading is not limited
+  assert.equal((await busy.me.call('GET', '/events')).status, 200);
+});
+
+test('download my data includes the shortlist, waiting lists, reports, blocks and alerts', async () => {
+  const r = await state.outcome.mentee.me.call('GET', '/auth/account/export');
+  for (const key of ['saved_mentors', 'event_waiting_lists', 'events_proposed', 'reports_you_made', 'people_you_blocked', 'alerts_sent_to_you', 'mentorship_goals', 'mentorship_feedback_you_gave']) {
+    assert.ok(key in r.body, key);
+  }
+  assert.ok('alert_events' in r.body.account);
 });
 
 test('the department comes from HR at sign-in, even if the account says otherwise', async () => {

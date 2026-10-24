@@ -57,6 +57,7 @@ if (allowedOrigins.length) app.use(cors({ origin: allowedOrigins, credentials: t
 app.use('/api/admin/hr', express.json({ limit: '2mb' }));
 app.use(express.json({ limit: '100kb' }));
 app.use('/api', requireAppHeader);
+app.use('/api', require('./utils/rateLimit').writeLimit);
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
@@ -108,6 +109,8 @@ async function cleanUpOldRecords() {
     await pool.query('DELETE FROM notifications WHERE is_read = 1 AND created_at < DATE_SUB(NOW(), INTERVAL 180 DAY)');
     await pool.query('DELETE FROM alerts_sent WHERE sent_at < DATE_SUB(NOW(), INTERVAL 90 DAY)');
     await require('./utils/rateLimit').pruneRateLimits();
+    // The activity log is evidence, so it is kept for two years and then removed
+    await pool.query('DELETE FROM admin_activity_logs WHERE created_at < DATE_SUB(NOW(), INTERVAL 730 DAY)');
     await require('./utils/recheck').recheckLivePosts();
   } catch (err) {
     console.error('Clean-up skipped:', err.message);

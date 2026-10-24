@@ -16,6 +16,10 @@ const isProduction = () => process.env.NODE_ENV === 'production';
 // control. Outside production, nothing is ever sent without it, so a test
 // email can never reach a real person by accident.
 async function sendMail({ to, subject, text, html }) {
+  // Titles typed by members end up in subjects: a line break there could add
+  // email headers, so header values are always a single line
+  subject = String(subject || '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, 200);
+  to = String(to || '').replace(/[\r\n,;]+/g, '').trim();
   const redirect = process.env.MAIL_DEV_REDIRECT;
   const finalTo = redirect || to;
   const finalSubject = redirect ? `[for ${to}] ${subject}` : subject;

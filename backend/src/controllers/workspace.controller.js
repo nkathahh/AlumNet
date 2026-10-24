@@ -7,7 +7,7 @@
 const pool = require('../config/db');
 const { createNotification } = require('../utils/notify');
 
-const LIMITS = { goals: 8, goalText: 200, note: 500, comment: 500, minMinutes: 5, maxMinutes: 480 };
+const LIMITS = { goals: 8, goalText: 200, note: 500, comment: 500, minMinutes: 5, maxMinutes: 480, meetingsPerDay: 3, meetings: 200 };
 const MODES = ['in_person', 'virtual', 'phone'];
 const PROGRESS = ['none', 'some', 'most', 'all'];
 
@@ -121,6 +121,11 @@ async function logMeeting(req, res, next) {
       return res.status(400).json({ error: `Length must be between ${LIMITS.minMinutes} and ${LIMITS.maxMinutes} minutes` });
     }
     if (note.length > LIMITS.note) return res.status(400).json({ error: `Keep the note under ${LIMITS.note} characters` });
+    // Real meetings, not a way to inflate the numbers
+    const [[{ sameDay }]] = await pool.execute('SELECT COUNT(*) AS sameDay FROM mentorship_meetings WHERE request_id = :id AND met_on = :metOn', { id: m.request_id, metOn });
+    if (Number(sameDay) >= LIMITS.meetingsPerDay) return res.status(409).json({ error: `Up to ${LIMITS.meetingsPerDay} meetings can be logged for one day` });
+    const [[{ total }]] = await pool.execute('SELECT COUNT(*) AS total FROM mentorship_meetings WHERE request_id = :id', { id: m.request_id });
+    if (Number(total) >= LIMITS.meetings) return res.status(409).json({ error: `A mentorship can log up to ${LIMITS.meetings} meetings` });
     const [r] = await pool.execute(
       'INSERT INTO mentorship_meetings (request_id, met_on, mode, minutes, note, logged_by) VALUES (:id, :metOn, :mode, :minutes, :note, :me)',
       { id: m.request_id, metOn, mode, minutes, note: note || null, me: req.user.userId }

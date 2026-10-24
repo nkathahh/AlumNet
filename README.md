@@ -108,6 +108,17 @@ Strathmore University.
   mentorship ends, each person answers privately: did you meet, how helpful was it (1 to 5),
   how many goals did you reach, and did you feel safe. Only the alumni office sees the
   answers. "I did not feel safe" opens a report straight away.
+- **Member detail for admins:** search and filter members by role and status, then open one
+  member to see their account, HR record, mentorships with goals, meetings and both ratings,
+  mentor response times and average rating (shown only from 3 answers), posts, reports and
+  admin history. Opening it is recorded in the activity log.
+- **Impact dashboard:** for the last 30 days, 90 days, 12 months or all time: requests,
+  acceptance, typical reply time, meetings and goals reached; private outcome ratings; how evenly
+  requests are spread across mentors (Gini coefficient and the share going to the busiest fifth);
+  events, opportunities, scams stopped and two-factor use. Every chart has its numbers in a
+  table, and everything downloads as CSV.
+- **Activity log:** filter by who did it, kind of action, dates and words, 50 a page, and
+  download as CSV (cells that could run as spreadsheet formulas are made plain text).
 - **Mentor shortlist:** mentees can save mentors and compare them before asking, since only 5
   requests can wait at once.
 - **Nairobi time:** event times are shown in Nairobi time, with the viewer's own time added for
@@ -230,8 +241,18 @@ All demo data is synthetic and does not describe real Kenya Airways staff. Set
   that already exist, so staff-number verification at registration cannot be skipped.
 - Two-factor secrets are encrypted in the database with AES-256-GCM (key in `TOTP_ENC_KEY`),
   so a copy of the database alone cannot produce sign-in codes. Backup codes are hashed.
-- Repeated failed attempts on sign-in, codes and resets are rate limited. The counters are kept
-  in the database, so a restart does not reset them.
+- Repeated failed attempts on sign-in, codes and resets are rate limited, both per network
+  address and per account (so guesses spread across many addresses still stop), and the owner is
+  told once. The counters are kept in the database, so a restart does not reset them.
+- Every signed-in member has a limit of 120 changes an hour (posts, requests, registrations,
+  goals, meetings, reports), and at most 3 meetings can be logged per mentorship per day.
+- Admin sessions end after 30 minutes without use and 12 hours after signing in; member sessions
+  after 14 days without use and 30 days in all. The background check for new notifications does
+  not count as use.
+- The matching service refuses to start on a public host without its API key, so a forgotten
+  setting can never leave it open.
+- Email subjects and addresses are always one line, so text typed by members cannot add email
+  headers.
 - Every page has a Content Security Policy that blocks inline scripts, and all member text is
   escaped before it is shown. A browser test (`e2e/browser.test.js`) types script payloads into
   every field and fails if any page turns them into HTML.
@@ -254,6 +275,7 @@ All demo data is synthetic and does not describe real Kenya Airways staff. Set
 | Read notifications | 180 days |
 | Record of alerts sent (to limit them to 3 a week) | 90 days |
 | Rate limit counters | 1 day after they expire |
+| Admin activity log | 2 years |
 | Mentor profile vectors | until the profile changes or the account is deleted |
 | Account, profile and posts | until the member deletes their account |
 
@@ -274,7 +296,7 @@ progress, and the full development and test results will follow.
 Every push and pull request to `main` runs `.github/workflows/ci.yml`. Each job starts an
 empty MySQL 8 database, builds it from `database/migrations` and tests the real code:
 
-- **Backend API tests** (`backend/tests/api.test.js`, 81 tests): sign-up by HR email match,
+- **Backend API tests** (`backend/tests/api.test.js`, 88 tests): sign-up by HR email match,
   the alumni office review path with risk signals, impostor detection, roles from HR, HttpOnly
   session cookies, CSRF protection, log out everywhere, suspension, single-use reset links,
   two-factor with backup codes, admin 2FA requirement, HR import with retirement conversion,
@@ -284,12 +306,14 @@ empty MySQL 8 database, builds it from `database/migrations` and tests the real 
   consent, mentor capacity (including two accepts at the same moment), request expiry, search
   fallback, filter counts, paging, removal of embeddings on account deletion, skill coverage and
   fit labels, event targeting, alert limits and opt-out, editing live posts and events, the waiting list, event reminders, the mentor shortlist, mentorship goals, meetings and private
-  feedback, encrypted two-factor secrets, second-admin
+  feedback, member detail, the impact figures, activity log filters and export, encrypted two-factor secrets, second-admin
   approval of HR imports, re-checking live posts after a scam, security headers
   and rate limiting.
 - **Browser checks** (`e2e/browser.test.js`): script payloads in every field members can type
-  into, checked on every page for every role, and an axe-core accessibility check (WCAG 2.1 AA)
-  of the main pages. CI also runs `npm audit` and `pip-audit`.
+  into, checked on every page for every role; an axe-core accessibility check (WCAG 2.1 AA) of the
+  main pages and the busiest admin screens in light and dark mode; keyboard focus kept inside
+  dialogs and returned afterwards; and every page checked at phone width (390px) for sideways
+  scrolling. CI also runs `npm audit` and `pip-audit`.
 - **Recommendation service tests** (`ml-service/tests/test_app.py`): the API key check, input
   errors, a ranking check with the real BGE model on seeded synthetic profiles, the embedding
   cache, search by meaning and scoring of opportunities and events.

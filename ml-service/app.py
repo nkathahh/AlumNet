@@ -13,6 +13,12 @@ load_dotenv()
 
 app = Flask(__name__)
 
+# On the internet the key is required: a missing key must never mean "open to
+# everyone". Hugging Face Spaces sets SPACE_ID; ML_REQUIRE_KEY=1 forces it
+# elsewhere. Checked before the model loads, so a bad deploy fails at once.
+if (os.getenv("SPACE_ID") or os.getenv("ML_REQUIRE_KEY") == "1") and not os.getenv("ML_API_KEY"):
+    raise SystemExit("ML_API_KEY is not set. Refusing to start without it on a public host.")
+
 # Loaded once at startup, not per request, this is what keeps recommendation
 # calls under NFR-01's 3-second target instead of reloading the model each time.
 MODEL_NAME = 'BAAI/bge-small-en-v1.5'
@@ -49,6 +55,7 @@ def get_connection():
 # When ML_API_KEY is set, only callers with the same key (the AlumNet backend)
 # can ask for recommendations. This matters once the service is on the internet.
 API_KEY = os.getenv("ML_API_KEY")
+
 
 
 @app.before_request

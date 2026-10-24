@@ -422,6 +422,20 @@ async function checkSecondFactor(user, rawCode) {
   return { ok: true, backupCodeUsed: true, backupCodesLeft: remaining };
 }
 
+// Many wrong passwords for one account: tell the owner once, by email and in the app
+async function warnAccountUnderAttack(email) {
+  const [[u]] = await pool.execute("SELECT user_id, name, email FROM users WHERE email = :email AND status = 'active'", { email: normaliseEmail(email) });
+  if (!u) return;
+  const message = 'There were many wrong password attempts on your account in the last 15 minutes, so sign-in is paused for a while. If this was not you, your account is still safe; consider changing your password.';
+  await createNotification(u.user_id, 'security', message, 'settings.html');
+  await sendMail({
+    to: u.email,
+    subject: 'Many wrong password attempts on your AlumNet account',
+    text: `Hi ${firstName(u.name)},\n\n${message}`,
+    html: emailLayout('Many wrong password attempts', `<p>Hi ${firstName(u.name).replace(/[<>&"]/g, '')},</p><p>${message}</p>`)
+  }).catch(() => null);
+}
+
 async function verifyTwoFactor(req, res, next) {
   const { tempToken, code } = req.body;
   if (!tempToken || !code) return res.status(400).json({ error: 'Enter your code' });
@@ -727,12 +741,13 @@ async function exportMyData(req, res, next) {
   try {
     const [[account]] = await pool.execute(
       `SELECT name, email, department, city, country, status, created_at, last_login_at,
-              privacy_accepted_at, totp_enabled, (google_id IS NOT NULL) AS google_linked
+              privacy_accepted_at, totp_enabled, (google_id IS NOT NULL) AS google_linked,
+              alert_opportunities, alert_events
        FROM users WHERE user_id = :userId`,
       { userId }
     );
     const [[profile]] = await pool.execute(
-      'SELECT headline, bio, skills, experience, career_interests, industry, linkedin_url FROM profiles WHERE user_id = :userId',
+      'SELECT headline, bio, skills, experience, career_interests, industry, linkedin_url, gender, gender_in_search FROM profiles WHERE user_id = :userId',
       { userId }
     );
     const [mentorships] = await pool.execute(
@@ -754,6 +769,12 @@ async function exportMyData(req, res, next) {
       { userId }
     );
     const [goals] = await pool.execute('SELECT text, created_at, done_at FROM mentorship_goals WHERE created_by = :userId', { userId });
+    const [saved] = await pool.execute('SELECT u.name AS mentor, b.bookmarked_at FROM bookmarks b JOIN users u ON u.user_id = b.mentor_id WHERE b.mentee_id = :userId', { userId });
+    const [waiting] = await pool.execute('SELECT e.title, e.event_date, w.joined_at FROM event_waitlist w JOIN events e ON e.event_id = w.event_id WHERE w.user_id = :userId', { userId });
+    const [reportsMade] = await pool.execute('SELECT target_type, reason, details, status, created_at FROM reports WHERE reporter_id = :userId', { userId });
+    const [blocked] = await pool.execute('SELECT u.name AS blocked, b.created_at FROM user_blocks b JOIN users u ON u.user_id = b.blocked_id WHERE b.blocker_id = :userId', { userId });
+    const [events2] = await pool.execute('SELECT title, event_date, status, created_at FROM events WHERE created_by = :userId', { userId });
+    const [alerts] = await pool.execute('SELECT item_type, item_id, sent_at FROM alerts_sent WHERE user_id = :userId', { userId });
     const [meetings] = await pool.execute('SELECT met_on, mode, minutes, note, created_at FROM mentorship_meetings WHERE logged_by = :userId', { userId });
     const [feedback] = await pool.execute('SELECT side, met, helpful, goals_progress, felt_safe, comment, created_at FROM mentorship_feedback WHERE user_id = :userId', { userId });
     const [notifications] = await pool.execute(
@@ -769,6 +790,15 @@ async function exportMyData(req, res, next) {
       mentorship_goals: goals,
       mentorship_meetings: meetings,
       mentorship_feedback_you_gave: feedback,
+      saved_mentors: saved,
+      event_waiting_lists: waiting,
+      events_proposed: events2,
+      reports_you_made: reportsMade,
+      people_you_blocked: blocked,
+      alerts_sent_to_you: alerts,
+      // Matching also keeps a list of numbers worked out from your profile text (an embedding).
+      // It is not readable as text, is replaced when your profile changes and deleted with your account.
+      derived_data: 'Profile embedding used for matching (not included: numbers only, rebuilt from your profile)',
       event_registrations: events,
       opportunities_posted: opportunities,
       notifications
@@ -849,7 +879,7 @@ module.exports = {
   login, googleLogin, verifyTwoFactor, logout, logoutEverywhere,
   forgotPassword, resetPassword, changePassword,
   getAccount,
-  setAlerts, setupTwoFactor, enableTwoFactor, regenerateBackupCodes, disableTwoFactor,
+  warnAccountUnderAttack, setAlerts, setupTwoFactor, enableTwoFactor, regenerateBackupCodes, disableTwoFactor,
   linkGoogle, unlinkGoogle, exportMyData, deleteMyAccount,
   // shared with the admin controller and tests
   createAccount, validatePassword

@@ -52,6 +52,126 @@ async function listUsers(req, res, next) {
     } catch (err) { next(err); }
 }
 
+/*
+ * Everything the alumni office needs about one member in one place, for
+ * questions like "why can this person not sign in?" or "is this mentor
+ * reliable?". Opening it is logged, because it shows personal data.
+ */
+async function getUserDetail(req, res, next) {
+    try {
+        const id = Number(req.params.id);
+        const [[u]] = await pool.execute(
+          `SELECT u.user_id, u.name, u.email, u.status, u.created_at, u.last_login_at, u.department, u.staff_number,
+                  u.totp_enabled, u.google_id IS NOT NULL AS google_linked, u.city, u.country, u.onboarded_at,
+                  sd.full_name AS hr_name, sd.department AS hr_department, sd.employment_status, sd.alumni_eligible,
+                  ad.user_id IS NOT NULL AS is_admin, me.user_id IS NOT NULL AS is_mentee, mo.user_id IS NOT NULL AS is_mentor,
+                  mo.accepting_mentees, mo.max_mentees, mo.meeting_mode, mo.years_of_experience,
+                  p.headline, p.skills, p.career_interests
+           FROM users u
+           LEFT JOIN staff_directory sd ON sd.staff_number = u.staff_number
+           LEFT JOIN admins ad ON ad.user_id = u.user_id
+           LEFT JOIN mentees me ON me.user_id = u.user_id
+           LEFT JOIN mentors mo ON mo.user_id = u.user_id
+           LEFT JOIN profiles p ON p.user_id = u.user_id
+           WHERE u.user_id = :id`, { id }
+        );
+        if (!u) return res.status(404).json({ error: 'Member not found' });
+        const role = u.is_admin ? 'admin'
+          : u.employment_status === 'former' ? 'mentor' : u.employment_status === 'active' ? 'mentee'
+            : u.is_mentor ? 'mentor' : u.is_mentee ? 'mentee' : null;
+
+        const [mentorships] = await pool.execute(
+          `SELECT r.request_id, r.status, r.requested_at, r.responded_at, r.ended_at,
+                  IF(r.mentee_id = :id, 'mentee', 'mentor') AS their_side, o.user_id AS other_id, o.name AS other_name,
+                  (SELECT COUNT(*) FROM mentorship_goals g WHERE g.request_id = r.request_id) AS goals_total,
+                  (SELECT COUNT(*) FROM mentorship_goals g WHERE g.request_id = r.request_id AND g.done_at IS NOT NULL) AS goals_done,
+                  (SELECT COUNT(*) FROM mentorship_meetings m WHERE m.request_id = r.request_id) AS meetings,
+                  (SELECT helpful FROM mentorship_feedback f WHERE f.request_id = r.request_id AND f.side = 'mentee') AS mentee_rating,
+                  (SELECT helpful FROM mentorship_feedback f WHERE f.request_id = r.request_id AND f.side = 'mentor') AS mentor_rating,
+                  (SELECT MIN(felt_safe) FROM mentorship_feedback f WHERE f.request_id = r.request_id) AS felt_safe
+           FROM mentorship_requests r
+           JOIN users o ON o.user_id = IF(r.mentee_id = :id, r.mentor_id, r.mentee_id)
+           WHERE r.mentee_id = :id OR r.mentor_id = :id
+           ORDER BY r.requested_at DESC LIMIT 50`, { id }
+        );
+
+        // As a mentor: how they respond, and what their mentees said (only with 3 or more answers)
+        let mentorStats = null;
+        if (role === 'mentor' || u.is_mentor) {
+          const [[st]] = await pool.execute(
+            `SELECT COUNT(*) AS received,
+                    SUM(status IN ('accepted','ended')) AS accepted,
+                    SUM(status = 'declined') AS declined,
+                    SUM(status = 'expired') AS expired,
+                    SUM(status = 'pending') AS pending,
+                    SUM(status = 'accepted') AS active,
+                    AVG(IF(responded_at IS NOT NULL, TIMESTAMPDIFF(HOUR, requested_at, responded_at), NULL)) AS avg_reply_hours
+             FROM mentorship_requests WHERE mentor_id = :id`, { id }
+          );
+          const [[fb]] = await pool.execute(
+            `SELECT COUNT(*) AS answers, AVG(f.helpful) AS avg_helpful, SUM(f.met) AS met
+             FROM mentorship_feedback f JOIN mentorship_requests r ON r.request_id = f.request_id
+             WHERE r.mentor_id = :id AND f.side = 'mentee'`, { id }
+          );
+          const answers = Number(fb.answers);
+          mentorStats = {
+            received: Number(st.received), accepted: Number(st.accepted || 0), declined: Number(st.declined || 0),
+            expired: Number(st.expired || 0), pending: Number(st.pending || 0), active: Number(st.active || 0),
+            max_mentees: u.max_mentees, accepting: Boolean(u.accepting_mentees),
+            avg_reply_hours: st.avg_reply_hours === null ? null : Math.round(Number(st.avg_reply_hours)),
+            feedback_answers: answers,
+            // A single bad (or good) rating says little, so averages need at least 3 answers
+            avg_helpful: answers >= 3 ? Math.round(Number(fb.avg_helpful) * 10) / 10 : null
+          };
+        }
+
+        const [posts] = await pool.execute(
+          `SELECT 'opportunity' AS kind, opportunity_id AS id, title, approval_status AS status, created_at FROM career_opportunities WHERE posted_by = :id
+           UNION ALL
+           SELECT 'event', event_id, title, status, COALESCE(created_at, event_date) FROM events WHERE created_by = :id
+           ORDER BY created_at DESC LIMIT 30`, { id }
+        );
+        const [reportsAbout] = await pool.execute(
+          `SELECT r.report_id, r.reason, r.status, r.source, r.created_at, r.details, rp.name AS reporter_name
+           FROM reports r LEFT JOIN users rp ON rp.user_id = r.reporter_id
+           WHERE r.target_type = 'user' AND r.target_id = :id ORDER BY r.created_at DESC LIMIT 30`, { id }
+        );
+        const [[{ reportsMade }]] = await pool.execute('SELECT COUNT(*) AS reportsMade FROM reports WHERE reporter_id = :id', { id });
+        const [[{ blockedBy }]] = await pool.execute('SELECT COUNT(*) AS blockedBy FROM user_blocks WHERE blocked_id = :id', { id });
+        const [history] = await pool.execute(
+          `SELECT l.created_at, l.action_type, l.description, COALESCE(a.name, 'Automatic') AS by_name
+           FROM admin_activity_logs l LEFT JOIN users a ON a.user_id = l.admin_id
+           WHERE l.target_entity = 'users' AND l.target_entity_id = :id AND l.action_type != 'view_user'
+           ORDER BY l.created_at DESC, l.log_id DESC LIMIT 30`, { id }
+        );
+
+        await logAdminAction(req.user.userId, 'view_user', 'users', id, `Viewed the details of ${u.name}`, u.name);
+        res.json({
+          account: {
+            user_id: u.user_id, name: u.name, email: u.email, status: u.status, role,
+            created_at: u.created_at, last_login_at: u.last_login_at, onboarded: Boolean(u.onboarded_at),
+            department: u.department, city: u.city, country: u.country, staff_number: u.staff_number,
+            two_factor: Boolean(u.totp_enabled), google_linked: Boolean(Number(u.google_linked))
+          },
+          hr: u.employment_status ? {
+            name: u.hr_name, department: u.hr_department, employment_status: u.employment_status,
+            alumni_eligible: Boolean(u.alumni_eligible), name_matches: String(u.hr_name || '').trim().toLowerCase() === String(u.name || '').trim().toLowerCase()
+          } : null,
+          profile: { headline: u.headline, skills: u.skills, career_interests: u.career_interests },
+          mentor_stats: mentorStats,
+          mentorships: mentorships.map((m) => ({
+            ...m, goals_total: Number(m.goals_total), goals_done: Number(m.goals_done), meetings: Number(m.meetings),
+            felt_safe: m.felt_safe === null ? null : Boolean(m.felt_safe)
+          })),
+          posts,
+          reports_about: reportsAbout,
+          reports_made: Number(reportsMade),
+          blocked_by: Number(blockedBy),
+          history
+        });
+    } catch (err) { next(err); }
+}
+
 async function toggleUserStatus(req, res, next) {
     try {
         const { id } = req.params;
@@ -212,14 +332,65 @@ async function reviewOpportunity(req, res, next) {
     } catch (err) { next(err); }
 }
 
+/*
+ * The activity log with filters: who did it (an admin or "Automatic"), the
+ * kind of action, a date range and words in the description. 50 a page, or
+ * the whole filtered list as CSV for an audit. Looking at a member's details
+ * is logged too, but hidden unless asked for, so the log stays readable.
+ */
+const LOG_PAGE = 50;
 async function listActivityLogs(req, res, next) {
     try {
-        const [rows] = await pool.query(`
-      SELECT l.*, COALESCE(u.name, 'Automatic') AS admin_name
-      FROM admin_activity_logs l LEFT JOIN users u ON u.user_id = l.admin_id
-      ORDER BY l.created_at DESC, l.log_id DESC LIMIT 50
-    `);
-        res.json(rows);
+        const q = req.query || {};
+        const where = [];
+        const params = [];
+        if (q.by === 'automatic') where.push('l.admin_id IS NULL');
+        else if (q.by && /^\d+$/.test(String(q.by))) { where.push('l.admin_id = ?'); params.push(Number(q.by)); }
+        if (q.action) { where.push('l.action_type = ?'); params.push(String(q.action).slice(0, 50)); }
+        else if (q.views !== '1') where.push("l.action_type != 'view_user'");
+        if (/^\d{4}-\d{2}-\d{2}$/.test(String(q.from || ''))) { where.push('l.created_at >= ?'); params.push(`${q.from} 00:00:00`); }
+        if (/^\d{4}-\d{2}-\d{2}$/.test(String(q.to || ''))) { where.push('l.created_at <= ?'); params.push(`${q.to} 23:59:59`); }
+        if (q.q && String(q.q).trim()) {
+          where.push('(l.description LIKE ? OR l.target_label LIKE ?)');
+          const like = `%${String(q.q).trim().slice(0, 100).replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
+          params.push(like, like);
+        }
+        const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+        const base = `FROM admin_activity_logs l LEFT JOIN users u ON u.user_id = l.admin_id ${whereSql}`;
+
+        if (q.format === 'csv') {
+          const [rows] = await pool.query(
+            `SELECT l.created_at, COALESCE(u.name, 'Automatic') AS by_name, l.action_type, l.target_entity, l.target_entity_id, l.description
+             ${base} ORDER BY l.created_at DESC, l.log_id DESC LIMIT 10000`, params
+          );
+          const cell = (v) => {
+            const text = v instanceof Date ? v.toISOString() : String(v ?? '');
+            // A leading = + - @ would run as a formula in Excel, so it is made plain text
+            return `"${(/^[=+\-@]/.test(text) ? "'" + text : text).replace(/"/g, '""')}"`;
+          };
+          const csv = [['time', 'by', 'action', 'target', 'target_id', 'description'].join(',')]
+            .concat(rows.map((r) => [r.created_at, r.by_name, r.action_type, r.target_entity, r.target_entity_id, r.description].map(cell).join(',')))
+            .join('\r\n');
+          await logAdminAction(req.user.userId, 'export_logs', 'admin_activity_logs', 0, `Exported ${rows.length} activity log entries`, 'Activity log');
+          res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+          res.setHeader('Content-Disposition', 'attachment; filename="alumnet-activity-log.csv"');
+          return res.send(csv);
+        }
+
+        const page = Math.max(1, Number(q.page) || 1);
+        const [[{ total }]] = await pool.query(`SELECT COUNT(*) AS total ${base}`, params);
+        const [rows] = await pool.query(
+          `SELECT l.*, COALESCE(u.name, 'Automatic') AS admin_name ${base}
+           ORDER BY l.created_at DESC, l.log_id DESC LIMIT ${LOG_PAGE} OFFSET ${(page - 1) * LOG_PAGE}`, params
+        );
+        const [admins] = await pool.query(
+          'SELECT DISTINCT u.user_id AS id, u.name FROM admin_activity_logs l JOIN users u ON u.user_id = l.admin_id ORDER BY u.name'
+        );
+        const [actions] = await pool.query('SELECT DISTINCT action_type FROM admin_activity_logs ORDER BY action_type');
+        res.json({
+          items: rows, total: Number(total), page, pages: Math.max(1, Math.ceil(Number(total) / LOG_PAGE)),
+          admins, actions: actions.map((a2) => a2.action_type)
+        });
     } catch (err) { next(err); }
 }
 
@@ -542,7 +713,7 @@ async function decideHrImport(req, res, next) {
 
 module.exports = {
   logAdminAction,
-  getStats, listUsers, toggleUserStatus,
+  getStats, listUsers, getUserDetail, toggleUserStatus,
   listSignupRequests, reviewSignupRequest,
   previewHrImport, applyHrImport,
   listEvents, createEvent, updateEvent, deleteEvent, listHrImportRequests, decideHrImport,

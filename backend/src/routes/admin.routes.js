@@ -10,6 +10,8 @@ router.use(requireAuth, requireRole('admin'), requireAdminTwoFactor);
 
 router.get('/stats', admin.getStats);
 router.get('/users', admin.listUsers);
+router.get('/users/:id', admin.getUserDetail);
+router.get('/impact', require('../controllers/impact.controller').getImpact);
 router.patch('/users/:id/toggle-status', admin.toggleUserStatus);
 
 router.get('/signup-requests', admin.listSignupRequests);

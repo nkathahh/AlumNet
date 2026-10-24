@@ -37,7 +37,10 @@ The first is your `JWT_SECRET`, the second is your `ML_API_KEY` and the third is
    2. Connect to **Aiven**. Choose **Server → Data Import**, pick the file, set
       **Default Target Schema** to a new schema called `alumnet`, and start the import.
 5. Check that the tables and demo accounts are there.
-6. From then on, apply new migrations to Aiven with the runner instead of by hand. On your
+6. Write down the region you chose for Aiven here, and later for Render, Hugging Face and Brevo.
+   The privacy notice tells members their data may be kept outside Kenya; your report should name
+   the regions.
+7. From then on, apply new migrations to Aiven with the runner instead of by hand. On your
    laptop, put the Aiven values in `backend/.env` for a moment (or set them in the terminal),
    then from the `backend` folder run `npm run migrate -- --baseline=NNN` once with the last
    migration the copied database already had, and `npm run migrate` after every update.
@@ -156,3 +159,12 @@ GRANT SELECT, INSERT, UPDATE ON alumnet.profile_embeddings TO 'alumnet_ml'@'%';
 Use this user's details for `DB_USER` and `DB_PASSWORD` in the Hugging Face
 Space. If the service is ever compromised, it cannot change accounts, posts
 or reports.
+
+
+## Security settings to check after deploying
+
+- `ML_API_KEY` must be set on Hugging Face. On a Space the service refuses to start without it
+  (it detects the Space automatically), so a missing key shows up as a failed build, not an open
+  service.
+- `TOTP_ENC_KEY` must be set on Render before anyone turns on two-factor, and never changed.
+- Admin sessions end after 30 minutes without use, so expect to sign in again after a break.

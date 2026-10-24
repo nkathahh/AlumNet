@@ -111,8 +111,17 @@
                     <h1 class="md-greeting">User management</h1>
                     <p class="md-sub">Roles come from HR records: current staff are mentees and former staff are mentors.</p>
                 </header>
-                <input type="text" id="admin-user-search" class="search-pill" placeholder="Search by name, email, staff number or department"
-                    style="margin-bottom:14px; width:100%; max-width:320px;">
+                <div class="opportunity-filters adm-user-filters">
+                    <input type="search" id="admin-user-search" class="search-pill" placeholder="Search by name, email, staff number or department" aria-label="Search members">
+                    <select id="admin-user-role" class="select-pill" aria-label="Role">
+                        <option value="">Any role</option><option value="mentee">Mentees</option><option value="mentor">Mentors</option><option value="admin">Admins</option>
+                    </select>
+                    <select id="admin-user-status" class="select-pill" aria-label="Status">
+                        <option value="">Any status</option><option value="active">Active</option><option value="suspended">Suspended</option>
+                    </select>
+                    <span class="md-muted st-small" id="admin-user-count" role="status"></span>
+                </div>
+                <p class="md-muted st-small" style="margin:-4px 0 12px;">Click a name to see everything about that member.</p>
                 <div class="table-card">
                     <table class="data-table">
                         <thead>
@@ -305,12 +314,45 @@
                 </details>
             </div>
 
+            <!-- ================= Impact ================= -->
+            <div id="admin-tab-impact" class="md" style="display:none;">
+                <header class="md-top ic-top">
+                    <div>
+                        <h1 class="md-greeting">Impact</h1>
+                        <p class="md-sub">Whether matches turn into useful mentorships, how evenly mentors are asked, and how events and opportunities are used.</p>
+                    </div>
+                    <div class="ic-controls">
+                        <label for="impact-period" class="sr-only">Period</label>
+                        <select id="impact-period" class="select-pill">
+                            <option value="30">Last 30 days</option>
+                            <option value="90" selected>Last 90 days</option>
+                            <option value="365">Last 12 months</option>
+                            <option value="all">All time</option>
+                        </select>
+                        <button type="button" class="btn btn-secondary md-btn-sm" id="impact-download">Download CSV</button>
+                    </div>
+                </header>
+                <div id="impact-body"></div>
+            </div>
+
             <!-- ================= Activity log ================= -->
             <div id="admin-tab-logs" class="md" style="display:none;">
                 <header class="md-top">
                     <h1 class="md-greeting">Activity log</h1>
-                    <p class="md-sub">Every admin action, newest first.</p>
+                    <p class="md-sub">Every admin action and automatic decision, newest first. Kept for two years.</p>
                 </header>
+                <div class="opportunity-filters log-filters">
+                    <input type="search" id="log-q" class="search-pill" placeholder="Search names, titles or reasons" aria-label="Search the log">
+                    <select id="log-by" class="select-pill" aria-label="Done by"><option value="">Anyone</option><option value="automatic">Automatic</option></select>
+                    <select id="log-action" class="select-pill" aria-label="Action"><option value="">Any action</option></select>
+                    <label class="log-date"><span class="st-small md-muted">From</span><input type="date" id="log-from"></label>
+                    <label class="log-date"><span class="st-small md-muted">To</span><input type="date" id="log-to"></label>
+                </div>
+                <div class="log-tools">
+                    <label class="check-row"><input type="checkbox" id="log-views"><span>Include when admins opened a member's details</span></label>
+                    <span class="md-muted st-small" id="log-summary" role="status"></span>
+                    <button type="button" class="btn btn-secondary md-btn-sm" id="log-export">Download CSV</button>
+                </div>
                 <div class="table-card">
                     <table class="data-table">
                         <thead>
@@ -324,6 +366,7 @@
                         <tbody id="admin-logs-body"></tbody>
                     </table>
                 </div>
+                <nav class="fm-pages" id="log-pages" aria-label="Log pages"></nav>
             </div>
         </main>
     </div>

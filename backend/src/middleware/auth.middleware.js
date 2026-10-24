@@ -1,6 +1,6 @@
 const jwt = require('jsonwebtoken');
 const pool = require('../config/db');
-const { readSessionToken, clearSessionCookie } = require('../utils/session');
+const { readSessionToken, clearSessionCookie, setSessionCookie, limitsFor, REFRESH_AFTER_SECONDS } = require('../utils/session');
 
 const UNSAFE = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
@@ -46,6 +46,19 @@ async function requireAuth(req, res, next) {
     if (ended) {
       clearSessionCookie(req, res);
       return res.status(401).json({ error: 'Your session has ended. Please log in again.' });
+    }
+    // Too long since signing in (the idle limit is the token's own expiry)
+    const now = Math.floor(Date.now() / 1000);
+    const signedInAt = decoded.at || decoded.iat || now;
+    if (now - signedInAt > limitsFor(decoded.role).maxSeconds) {
+      clearSessionCookie(req, res);
+      return res.status(401).json({ error: 'For your security, please log in again.' });
+    }
+    // Still in use: extend the idle limit. The background check for new
+    // notifications does not count, so an open but unused tab still times out.
+    const passive = req.method === 'GET' && /\/notifications\/unread-count$/.test(req.originalUrl.split('?')[0]);
+    if (!passive && now - (decoded.act || decoded.iat || 0) > REFRESH_AFTER_SECONDS) {
+      setSessionCookie(req, res, { userId: decoded.userId, role: decoded.role, sessionVersion: u.session_version, at: signedInAt });
     }
     req.user = { userId: decoded.userId, role: decoded.role, twoFactorEnabled: Boolean(u.totp_enabled) };
     next();

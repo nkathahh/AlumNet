@@ -182,7 +182,11 @@ test('script typed into any field never runs, on any page, for any role', async 
   await visit(mentor, '/events.html', (pg) => pg.click('[data-event-filter=proposals]'));
   await visit(mentor, '/opportunities.html', (pg) => pg.click('text=My posts'));
   await visit(mentor, '/opportunities.html', (pg) => pg.click('[data-open-opp], .opportunity-card >> nth=0').catch(() => null));
-  for (const tab of ['overview', 'verification', 'reports', 'users', 'hr', 'events', 'opportunities', 'logs']) {
+  // One member in detail, as the admin sees them
+  // (a different query string each time, so the page really reloads and no dialog is left open)
+  await visit(admin, '/admin.html?d=1#users', async (pg) => { await pg.click('[data-admin-tab=users]'); await wait(500); await pg.click(`[data-user-detail="${ids.mentor}"]`); await wait(800); });
+  await visit(admin, '/admin.html?d=2#users', async (pg) => { await pg.click('[data-admin-tab=users]'); await wait(500); await pg.click(`[data-user-detail="${ids.mentee}"]`); await wait(800); });
+  for (const tab of ['overview', 'verification', 'reports', 'users', 'hr', 'events', 'opportunities', 'impact', 'logs']) {
     await visit(admin, `/admin.html#${tab}`, async (pg) => { await pg.click(`[data-admin-tab=${tab}]`); await wait(400); });
   }
 });
@@ -201,5 +205,60 @@ test('the main pages have no serious accessibility problems (WCAG 2.1 AA, axe-co
   for (const url of ['/mentee-dashboard.html', '/recommendations.html', '/opportunities.html', '/events.html', '/notifications.html', '/profile.html', '/settings.html']) {
     await check(mentee, url);
   }
+  // Admin screens with the most data on them, in light and dark mode
+  const admin = await page('e2e.admin@example.org');
+  for (const [i, tab] of ['users', 'impact', 'logs'].entries()) {
+    for (const theme of ['light', 'dark']) {
+      await admin.goto(`${ROOT}/admin.html?a=${i}${theme}#${tab}`);
+      await admin.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme);
+      await admin.click(`[data-admin-tab=${tab}]`);
+      await admin.waitForLoadState('networkidle');
+      await wait(500);
+      const r = await new AxeBuilder({ page: admin }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+      for (const v of r.violations) if (['critical', 'serious'].includes(v.impact)) results.push(`admin ${tab} (${theme}): ${v.id} (${v.nodes.length}) ${v.help}`);
+    }
+  }
   assert.deepEqual(results, [], `Accessibility problems:\n${results.join('\n')}`);
+});
+
+test('keyboard focus stays inside a dialog and returns to the button that opened it', async () => {
+  const mentee = await page('e2e.mentee@example.org');
+  await mentee.goto(`${ROOT}/settings.html`);
+  await mentee.waitForLoadState('networkidle');
+  await mentee.focus('#logout-everywhere');
+  await mentee.keyboard.press('Enter');
+  await wait(300);
+  for (let i = 0; i < 12; i++) {
+    await mentee.keyboard.press('Tab');
+    const inside = await mentee.evaluate(() => Boolean(document.activeElement && document.activeElement.closest('.modal-backdrop')));
+    assert.equal(inside, true, `Tab ${i + 1} left the dialog`);
+  }
+  await mentee.keyboard.press('Escape');
+  await wait(200);
+  assert.equal(await mentee.evaluate(() => document.activeElement && document.activeElement.id), 'logout-everywhere');
+});
+
+test('pages fit a phone screen without sideways scrolling', async () => {
+  const wide = [];
+  for (const [email, urls] of [
+    ['e2e.mentee@example.org', ['/mentee-dashboard.html', '/recommendations.html', '/opportunities.html', '/events.html', '/requests.html', '/notifications.html', '/profile.html', '/settings.html']],
+    ['e2e.admin@example.org', ['/admin.html?m=1#users', '/admin.html?m=2#verification', '/admin.html?m=3#reports', '/admin.html?m=4#events', '/admin.html?m=5#opportunities', '/admin.html?m=6#impact', '/admin.html?m=7#logs']]
+  ]) {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true });
+    const pg = await ctx.newPage();
+    await pg.goto(`${ROOT}/login.html`);
+    await pg.fill('#email', email);
+    await pg.fill('#password', PASSWORD);
+    await pg.click('#login-form button[type=submit]');
+    await pg.waitForURL((u) => !u.pathname.endsWith('login.html'));
+    for (const url of urls) {
+      await pg.goto(ROOT + url);
+      await pg.waitForLoadState('networkidle');
+      await wait(400);
+      const width = await pg.evaluate(() => document.documentElement.scrollWidth);
+      if (width > 392) wide.push(`${url}: ${width}px`);
+    }
+    await ctx.close();
+  }
+  assert.deepEqual(wide, [], `Wider than a 390px phone:\n${wide.join('\n')}`);
 });

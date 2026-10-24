@@ -144,6 +144,7 @@ const NAV_CONFIG = {
         { tab: 'hr', label: 'HR records' },
         { tab: 'events', label: 'Event management' },
         { tab: 'opportunities', label: 'Content moderation' },
+        { tab: 'impact', label: 'Impact' },
         { tab: 'logs', label: 'Activity log' }
       ]
     },
@@ -2492,8 +2493,7 @@ async function renderAdminTable() {
       <div class="stat-card"><div class="num">${stats.flaggedAccounts}</div><div class="label">Flagged accounts</div></div>`;
 
     allAdminUsers = users;
-    tbody.innerHTML = users.map(adminRowHTML).join('');
-    wireAdminActions(tbody);
+    drawAdminUsers();
   } catch {
     tbody.innerHTML = '<tr><td colspan="7">Could not reach the server.</td></tr>';
   }
@@ -2505,7 +2505,7 @@ function adminRowHTML(u) {
   const lastActive = u.last_login_at ? timeAgo(u.last_login_at) : 'Never';
   return `
     <tr>
-      <td><strong>${escapeHTML(u.name)}</strong><br><span class="md-muted st-small">${escapeHTML(u.email)}${u.staff_number ? ' · ' + escapeHTML(u.staff_number) : ''}</span></td>
+      <td><button type="button" class="link-btn adm-name" data-user-detail="${u.user_id}"><strong>${escapeHTML(u.name)}</strong></button><br><span class="md-muted st-small">${escapeHTML(u.email)}${u.staff_number ? ' · ' + escapeHTML(u.staff_number) : ''}</span></td>
       <td>${roleLabel}${u.employment_status ? `<br><span class="md-muted st-small">${u.employment_status === 'former' ? 'Former staff' : 'Current staff'}</span>` : ''}</td>
       <td>${escapeHTML(u.department || '')}</td>
       <td><span class="md-pill ${isSuspended ? 'rejected' : 'approved'}">${isSuspended ? 'Suspended' : 'Active'}</span></td>
@@ -2518,6 +2518,7 @@ function adminRowHTML(u) {
 }
 
 function wireAdminActions(tbody) {
+  tbody.querySelectorAll('[data-user-detail]').forEach((b) => { b.onclick = () => openUserDetail(b.dataset.userDetail); });
   tbody.querySelectorAll('[data-action="toggle-status"]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const suspending = btn.dataset.suspended === '0';
@@ -2550,18 +2551,142 @@ function wireAdminActions(tbody) {
   });
 }
 
+// Search, role and status filters, 25 rows at a time
+let adminUsersShown = 25;
+function drawAdminUsers(more = false) {
+  const tbody = document.getElementById('admin-table-body');
+  if (!tbody) return;
+  adminUsersShown = more ? adminUsersShown + 25 : 25;
+  const q = ((document.getElementById('admin-user-search') || {}).value || '').trim().toLowerCase();
+  const role = (document.getElementById('admin-user-role') || {}).value || '';
+  const status = (document.getElementById('admin-user-status') || {}).value || '';
+  const filtered = allAdminUsers.filter((u) => (!role || u.role === role) && (!status || u.status === status)
+    && (!q || [u.name, u.email, u.staff_number, u.department, u.role].some((v) => String(v || '').toLowerCase().includes(q))));
+  const count = document.getElementById('admin-user-count');
+  if (count) count.textContent = `${filtered.length} of ${allAdminUsers.length} members`;
+  tbody.innerHTML = filtered.length
+    ? filtered.slice(0, adminUsersShown).map(adminRowHTML).join('')
+      + (filtered.length > adminUsersShown ? `<tr><td colspan="7" style="text-align:center;"><button type="button" class="btn btn-secondary md-btn-sm" id="admin-users-more">Show more (${filtered.length - adminUsersShown} more)</button></td></tr>` : '')
+    : '<tr><td colspan="7" class="md-muted">No members match.</td></tr>';
+  const moreBtn = document.getElementById('admin-users-more');
+  if (moreBtn) moreBtn.onclick = () => drawAdminUsers(true);
+  wireAdminActions(tbody);
+}
+
 function wireAdminSearch() {
   const input = document.getElementById('admin-user-search');
   if (!input) return;
-  input.addEventListener('input', () => {
-    const q = input.value.trim().toLowerCase();
-    const filtered = allAdminUsers.filter((u) =>
-      [u.name, u.email, u.staff_number, u.department, u.role].some((v) => String(v || '').toLowerCase().includes(q)));
-    const tbody = document.getElementById('admin-table-body');
-    tbody.innerHTML = filtered.length ? filtered.map(adminRowHTML).join('') : '<tr><td colspan="7" class="md-muted">No members match that search.</td></tr>';
-    wireAdminActions(tbody);
+  input.addEventListener('input', () => drawAdminUsers());
+  ['admin-user-role', 'admin-user-status'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', () => drawAdminUsers());
   });
 }
+
+/* One member in detail (Module 5): account, HR record, mentorships and outcomes, posts, reports */
+async function openUserDetail(userId) {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.innerHTML = '<div class="modal-card ud-card" role="dialog" aria-modal="true" aria-labelledby="ud-title"><p class="md-muted">Loading...</p></div>';
+  document.body.appendChild(backdrop);
+  const close = () => { backdrop.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+
+  const { ok, data } = await apiSend('GET', `/admin/users/${userId}`);
+  const box = backdrop.querySelector('.modal-card');
+  if (!ok) { box.innerHTML = `<p>${escapeHTML(data.error || 'Could not load this member')}</p><div class="dlg-actions"><button class="btn btn-secondary" id="ud-close">Close</button></div>`; box.querySelector('#ud-close').onclick = close; return; }
+  const a = data.account;
+  const d = (v) => (v ? new Date(v).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Never');
+  const roleLabel = { mentor: 'Mentor', mentee: 'Mentee', admin: 'Admin' }[a.role] || 'No role';
+  const statusWords = { pending: 'Waiting', accepted: 'Active', ended: 'Ended', declined: 'Declined', expired: 'Expired', withdrawn: 'Withdrawn' };
+  const ms = data.mentor_stats;
+  const rating = (v) => (v === null || v === undefined ? '<span class="md-muted">No answer</span>' : `${Number(v)} / 5`);
+  const row = (label, value) => `<div><dt>${label}</dt><dd>${value}</dd></div>`;
+
+  box.innerHTML = `
+    <div class="ud-head">
+      <div>
+        <h3 id="ud-title">${escapeHTML(a.name)}</h3>
+        <div class="md-muted st-small">${escapeHTML(a.email)}${a.staff_number ? ' · ' + escapeHTML(a.staff_number) : ''}</div>
+      </div>
+      <div class="ud-pills">
+        <span class="md-pill neutral">${roleLabel}</span>
+        <span class="md-pill ${a.status === 'suspended' ? 'rejected' : 'approved'}">${a.status === 'suspended' ? 'Suspended' : 'Active'}</span>
+      </div>
+    </div>
+
+    <div class="ud-grid">
+      <section><h4>Account</h4><dl class="ud-dl">
+        ${row('Joined', d(a.created_at))}
+        ${row('Last signed in', a.last_login_at ? `${d(a.last_login_at)} (${escapeHTML(timeAgo(a.last_login_at))})` : 'Never')}
+        ${row('Department', escapeHTML(a.department || 'Not set'))}
+        ${row('Location', escapeHTML([a.city, a.country].filter(Boolean).join(', ') || 'Not set'))}
+        ${row('Two-factor', a.two_factor ? 'On' : 'Off')}
+        ${row('Google sign-in', a.google_linked ? 'Linked' : 'Not linked')}
+      </dl></section>
+      <section><h4>HR record</h4>${data.hr ? `<dl class="ud-dl">
+        ${row('Status', data.hr.employment_status === 'former' ? 'Former staff' : 'Current staff')}
+        ${row('Alumni network', data.hr.alumni_eligible ? 'Eligible' : '<strong class="ud-warn">Not eligible</strong>')}
+        ${row('HR department', escapeHTML(data.hr.department || ''))}
+        ${row('Name in HR', `${escapeHTML(data.hr.name || '')}${data.hr.name_matches ? '' : ' <strong class="ud-warn">(differs from the account)</strong>'}`)}
+      </dl>` : '<p class="md-muted st-small">Not linked to an HR record (older demo account).</p>'}</section>
+    </div>
+
+    ${ms ? `<section class="ud-section"><h4>As a mentor</h4>
+      <div class="ud-stats">
+        <div><strong>${ms.received}</strong><span>Requests received</span></div>
+        <div><strong>${ms.received ? Math.round((ms.accepted / ms.received) * 100) + '%' : 'None'}</strong><span>Accepted</span></div>
+        <div><strong>${ms.avg_reply_hours === null ? 'None' : ms.avg_reply_hours < 48 ? ms.avg_reply_hours + ' h' : Math.round(ms.avg_reply_hours / 24) + ' days'}</strong><span>Average time to reply</span></div>
+        <div><strong>${ms.active} of ${ms.max_mentees || 0}</strong><span>Places in use${ms.accepting ? '' : ' (paused)'}</span></div>
+        <div><strong>${ms.avg_helpful === null ? 'Not enough' : ms.avg_helpful + ' / 5'}</strong><span>Mentees' rating (${ms.feedback_answers} answer${ms.feedback_answers === 1 ? '' : 's'}${ms.avg_helpful === null ? ', 3 needed' : ''})</span></div>
+      </div>
+      ${ms.expired ? `<p class="md-muted st-small">${ms.expired} request${ms.expired === 1 ? '' : 's'} expired without a reply.</p>` : ''}
+    </section>` : ''}
+
+    <section class="ud-section"><h4>Mentorships (${data.mentorships.length})</h4>
+      ${data.mentorships.length ? `<div class="ud-table"><table class="data-table"><thead><tr>
+        <th>With</th><th>Their side</th><th>Status</th><th>Progress</th><th>Mentee's rating</th><th>Mentor's rating</th></tr></thead><tbody>
+        ${data.mentorships.map((m) => `<tr>
+          <td><button type="button" class="link-btn" data-user-detail="${m.other_id}">${escapeHTML(m.other_name)}</button><br><span class="md-muted st-small">${d(m.requested_at)}</span></td>
+          <td>${m.their_side === 'mentor' ? 'Mentor' : 'Mentee'}</td>
+          <td>${statusWords[m.status] || escapeHTML(m.status)}${m.felt_safe === false ? '<br><strong class="ud-warn">Someone did not feel safe</strong>' : ''}</td>
+          <td>${m.goals_total ? `${m.goals_done}/${m.goals_total} goals` : 'No goals'} · ${m.meetings} meeting${m.meetings === 1 ? '' : 's'}</td>
+          <td>${rating(m.mentee_rating)}</td><td>${rating(m.mentor_rating)}</td></tr>`).join('')}
+      </tbody></table></div>` : '<p class="md-muted st-small">None yet.</p>'}
+    </section>
+
+    <div class="ud-grid">
+      <section><h4>Posts (${data.posts.length})</h4>${data.posts.length ? `<ul class="ud-list">${data.posts.map((p) => `
+        <li>${escapeHTML(p.title)} <span class="md-muted st-small">· ${p.kind === 'event' ? 'Event' : 'Opportunity'} · ${escapeHTML({ approved: 'Live', pending: 'Waiting', rejected: 'Not approved', changes_requested: 'Changes requested', cancelled: 'Cancelled' }[p.status] || p.status)}</span></li>`).join('')}</ul>` : '<p class="md-muted st-small">None.</p>'}</section>
+      <section><h4>Reports about them (${data.reports_about.length})</h4>${data.reports_about.length ? `<ul class="ud-list">${data.reports_about.map((r) => `
+        <li><strong>${escapeHTML(REPORT_REASON_WORDS[r.reason] || r.reason)}</strong> <span class="md-muted st-small">· ${r.source === 'automatic' ? 'Automatic check' : escapeHTML(r.reporter_name || 'A member')} · ${d(r.created_at)} · ${escapeHTML({ open: 'Open', actioned: 'Actioned', dismissed: 'Dismissed' }[r.status] || r.status)}</span>
+          ${r.details ? `<div class="st-small">${escapeHTML(r.details)}</div>` : ''}</li>`).join('')}</ul>` : '<p class="md-muted st-small">None.</p>'}
+        <p class="md-muted st-small">They have made ${data.reports_made} report${data.reports_made === 1 ? '' : 's'}. ${data.blocked_by} member${data.blocked_by === 1 ? ' has' : 's have'} blocked them.</p></section>
+    </div>
+
+    <section class="ud-section"><h4>Admin history</h4>${data.history.length ? `<ul class="ud-list">${data.history.map((h) => `
+      <li>${escapeHTML(h.description || h.action_type)} <span class="md-muted st-small">· ${escapeHTML(h.by_name)} · ${d(h.created_at)}</span></li>`).join('')}</ul>` : '<p class="md-muted st-small">Nothing yet.</p>'}
+      <p class="md-muted st-small">Opening this page is recorded in the activity log.</p></section>
+
+    <div class="dlg-actions">
+      ${a.role === 'admin' ? '' : `<button type="button" class="btn ${a.status === 'suspended' ? 'btn-secondary' : 'btn-danger'}" data-action="toggle-status" data-user-id="${a.user_id}" data-name="${escapeHTML(a.name)}" data-suspended="${a.status === 'suspended' ? 1 : 0}">${a.status === 'suspended' ? 'Reactivate' : 'Suspend'}</button>`}
+      <button type="button" class="btn btn-secondary" id="ud-close">Close</button>
+    </div>`;
+  box.querySelector('#ud-close').onclick = close;
+  // The same suspend and reactivate flow as the table; this view closes so it never shows an old status
+  wireAdminActions(box);
+  const toggle = box.querySelector('[data-action="toggle-status"]');
+  if (toggle) toggle.addEventListener('click', () => setTimeout(close, 0));
+  // Links to the other person in a mentorship open their details instead
+  box.querySelectorAll('[data-user-detail]').forEach((b) => { b.onclick = () => { close(); openUserDetail(b.dataset.userDetail); }; });
+}
+
+const REPORT_REASON_WORDS = {
+  fake_profile: 'Fake profile or impersonation', asked_for_money: 'Asked for money or personal details',
+  harassment: 'Harassment or inappropriate behaviour', spam: 'Spam', misleading: 'Misleading or false information', other: 'Something else'
+};
 
 /* ---------- Identity verification queue ---------- */
 
@@ -2772,7 +2897,7 @@ async function checkAdminTwoFactor() {
 }
 
 
-const ADMIN_TABS = ['overview', 'verification', 'reports', 'users', 'hr', 'events', 'opportunities', 'logs'];
+const ADMIN_TABS = ['overview', 'verification', 'reports', 'users', 'hr', 'events', 'opportunities', 'impact', 'logs'];
 
 function showAdminTab(name) {
   ADMIN_TABS.forEach((t) => {
@@ -2786,6 +2911,7 @@ function showAdminTab(name) {
   window.scrollTo(0, 0);
   // Fresh data each time a tab opens, so admins never act on an old list
   if (name === 'events' && typeof renderAdminEvents === 'function') renderAdminEvents();
+  if (name === 'impact') renderImpact();
 }
 
 function wireAdminTabs() {
@@ -2943,27 +3069,81 @@ const ADMIN_ACTION_LABELS = {
   auto_approved_opportunity: 'Auto-approved', auto_approved_event: 'Auto-approved',
   changes_opportunity: 'Changes requested', changes_event: 'Changes requested',
   take_down_opportunity: 'Taken down', take_down_event: 'Taken down',
-  settings: 'Setting changed', unblock_indicator: 'Unblocked site', forget_site: 'Removed known site'
+  settings: 'Setting changed', unblock_indicator: 'Unblocked site', forget_site: 'Removed known site',
+  view_user: 'Viewed member', export_logs: 'Exported log', cancel_event: 'Event cancelled', edit_event: 'Event edited',
+  live_edit: 'Live post edited', request_hr_import: 'HR import requested', reject_hr_import: 'HR import rejected',
+  auto_hold_opportunity: 'Held by re-check', auto_hold_event: 'Held by re-check'
 };
 
-async function renderAdminLogs() {
+// Filters, paging and CSV export for the activity log
+let adminLogPage = 1;
+function logFilterQuery(extra = {}) {
+  const val = (id) => ((document.getElementById(id) || {}).value || '').trim();
+  const params = { q: val('log-q'), by: val('log-by'), action: val('log-action'), from: val('log-from'), to: val('log-to'), ...extra };
+  if (document.getElementById('log-views') && document.getElementById('log-views').checked) params.views = '1';
+  return new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v !== undefined)).toString();
+}
+
+async function renderAdminLogs(page) {
   const tbody = document.getElementById('admin-logs-body');
   if (!tbody) return;
-  const token = localStorage.getItem('alumnet_token');
+  adminLogPage = typeof page === 'number' ? page : 1;
+  const { ok, data } = await apiSend('GET', `/admin/activity-logs?${logFilterQuery({ page: adminLogPage })}`);
+  if (!ok) { tbody.innerHTML = `<tr><td colspan="4">${escapeHTML(data.error || 'Could not load the log')}</td></tr>`; return; }
 
-  const res = await fetch(`${API_BASE}/admin/activity-logs`, { headers: { Authorization: `Bearer ${token}` } });
-  const logs = await res.json();
-  if (!res.ok) { tbody.innerHTML = `<tr><td colspan="4">${escapeHTML(logs.error)}</td></tr>`; return; }
-  if (!logs.length) { tbody.innerHTML = '<tr><td colspan="4" class="md-muted">No admin activity yet.</td></tr>'; return; }
+  // Fill the "who" and "action" choices once, keeping what is selected
+  const by = document.getElementById('log-by');
+  if (by && by.options.length <= 2) {
+    data.admins.forEach((x) => by.insertAdjacentHTML('beforeend', `<option value="${x.id}">${escapeHTML(x.name)}</option>`));
+  }
+  const action = document.getElementById('log-action');
+  if (action && action.options.length <= 1) {
+    data.actions.forEach((x) => action.insertAdjacentHTML('beforeend', `<option value="${escapeHTML(x)}">${escapeHTML(ADMIN_ACTION_LABELS[x] || mdHumanise(x))}</option>`));
+  }
+  const summary = document.getElementById('log-summary');
+  if (summary) summary.textContent = `${data.total} entr${data.total === 1 ? 'y' : 'ies'}`;
 
-  tbody.innerHTML = logs.map((l) => `
+  tbody.innerHTML = data.items.length ? data.items.map((l) => `
     <tr>
       <td>${new Date(l.created_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
       <td>${escapeHTML(l.admin_name)}</td>
       <td><span class="tag" style="white-space:nowrap;">${escapeHTML(ADMIN_ACTION_LABELS[l.action_type] || mdHumanise(l.action_type))}</span></td>
       <td>${escapeHTML(l.description || l.target_label || '')}</td>
-    </tr>`).join('');
+    </tr>`).join('') : '<tr><td colspan="4" class="md-muted">Nothing matches these filters.</td></tr>';
+
+  const pager = document.getElementById('log-pages');
+  if (pager) {
+    pager.innerHTML = data.pages > 1 ? `
+      <button type="button" class="btn btn-secondary md-btn-sm" data-log-page="${data.page - 1}" ${data.page === 1 ? 'disabled' : ''}>Newer</button>
+      <span class="md-muted st-small">Page ${data.page} of ${data.pages}</span>
+      <button type="button" class="btn btn-secondary md-btn-sm" data-log-page="${data.page + 1}" ${data.page === data.pages ? 'disabled' : ''}>Older</button>` : '';
+    pager.querySelectorAll('[data-log-page]').forEach((b) => { b.onclick = () => renderAdminLogs(Number(b.dataset.logPage)); });
+  }
 }
+
+async function downloadLogsCSV() {
+  const res = await fetch(`${API_BASE}/admin/activity-logs?${logFilterQuery({ format: 'csv' })}`);
+  if (!res.ok) { toast('Could not export the log.'); return; }
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `alumnet-activity-log-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  renderAdminLogs(adminLogPage);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const q = document.getElementById('log-q');
+  if (!q) return;
+  let t = null;
+  q.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => renderAdminLogs(), 300); });
+  ['log-by', 'log-action', 'log-from', 'log-to', 'log-views'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', () => renderAdminLogs());
+  });
+  document.getElementById('log-export').addEventListener('click', downloadLogsCSV);
+});
 
 /* --------------------------------------------------------------------
    Notifications
@@ -4955,3 +5135,239 @@ async function fillAudience(container, selected = []) {
 function readAudience(container) {
   return [...container.querySelectorAll('input:checked')].map((i) => i.value);
 }
+
+
+/* --------------------------------------------------------------------
+   Impact (Module 5): is the network doing what it is for?
+   Single-series bar charts in one hue, with a hover tip on every bar and
+   the numbers in a table underneath, so nothing depends on colour alone.
+   -------------------------------------------------------------------- */
+
+let impactData = null;
+
+function barChartHTML({ title, caption, bars, valueLabel = (v) => v, tip }) {
+  // A whole, even top so the middle line is a whole number too (2, 4, 6, 10, 20...)
+  const top = Math.max(...bars.map((b) => b.value), 0);
+  const step = top <= 4 ? 2 : top <= 10 ? 2 : top <= 20 ? 4 : top <= 50 ? 10 : Math.pow(10, Math.floor(Math.log10(top)));
+  const max = Math.max(2, Math.ceil(top / step) * step + (Math.ceil(top / step) * step % 2 ? step : 0));
+  const ticks = [max, max / 2, 0];
+  return `
+    <figure class="ic-chart">
+      <figcaption><strong>${escapeHTML(title)}</strong>${caption ? `<span class="md-muted st-small">${escapeHTML(caption)}</span>` : ''}</figcaption>
+      <div class="ic-plot" role="img" aria-label="${escapeHTML(title)}: ${bars.map((b) => `${b.label} ${b.value}`).join(', ')}">
+        <div class="ic-axis">${ticks.map((t) => `<span>${t}</span>`).join('')}</div>
+        <div class="ic-bars" style="--n:${bars.length}">
+          ${bars.map((b) => `
+            <div class="ic-col" tabindex="0" data-tip="${escapeHTML(tip ? tip(b) : `${b.label}: ${valueLabel(b.value)}`)}">
+              <div class="ic-bar" style="height:${(b.value / max) * 100}%"></div>
+            </div>`).join('')}
+        </div>
+      </div>
+      <div class="ic-labels" style="--n:${bars.length}">${bars.map((b) => `<span>${escapeHTML(b.short || b.label)}</span>`).join('')}</div>
+      <details class="ic-table"><summary>See the numbers</summary>
+        <table class="data-table"><tbody>${bars.map((b) => `<tr><td>${escapeHTML(b.label)}</td><td>${escapeHTML(String(valueLabel(b.value)))}</td></tr>`).join('')}</tbody></table>
+      </details>
+    </figure>`;
+}
+
+const plural = (n, word, many = `${word}s`) => `${n} ${Number(n) === 1 ? word : many}`;
+function tileHTML(value, label, note) {
+  return `<div class="ic-tile"><strong>${value === null || value === undefined ? '<span class="md-muted">None yet</span>' : value}</strong><span>${label}</span>${note ? `<small class="md-muted">${note}</small>` : ''}</div>`;
+}
+
+async function renderImpact() {
+  const mount = document.getElementById('impact-body');
+  if (!mount) return;
+  const periodSel = document.getElementById('impact-period');
+  const period = periodSel ? periodSel.value : '90';
+  mount.innerHTML = '<div class="md-skel md-skel-row"></div><div class="md-skel md-skel-row"></div>';
+  const data = await mdGet(`/admin/impact?period=${encodeURIComponent(period)}`);
+  if (!data) { mount.innerHTML = '<p class="md-muted">Could not load the figures.</p>'; return; }
+  impactData = data;
+  const m = data.mentorship; const o = data.outcomes; const f = data.fairness; const e = data.events; const op = data.opportunities; const mem = data.members;
+  const p = (v) => (v === null ? null : `${v}%`);
+  const hours = (h) => (h === null ? null : h < 1 ? 'Under 1 h' : h < 48 ? `${Math.round(h)} h` : `${Math.round(h / 24)} days`);
+  const monthName = (k) => new Date(`${k}-15T12:00:00`).toLocaleDateString('en-GB', { month: 'short' });
+  const fairWords = f.gini === null ? 'Not enough requests yet'
+    : f.gini <= 0.3 ? 'Spread fairly evenly' : f.gini <= 0.5 ? 'Somewhat uneven' : 'Concentrated on a few mentors';
+
+  mount.innerHTML = `
+    <section class="ic-section">
+      <h2>From request to mentorship</h2>
+      <div class="ic-tiles">
+        ${tileHTML(m.requests_sent, 'Requests sent')}
+        ${tileHTML(p(m.acceptance_rate), 'Accepted', `${m.accepted} of ${m.requests_sent - m.pending - m.withdrawn} answered or expired`)}
+        ${tileHTML(hours(m.median_reply_hours), 'Typical time to reply', m.replies_measured ? `median of ${plural(m.replies_measured, 'reply', 'replies')}` : '')}
+        ${tileHTML(m.active_now, 'Active mentorships now')}
+        ${tileHTML(p(m.with_meeting_rate), 'Logged at least one meeting', `${plural(m.started, 'mentorship')} started`)}
+        ${tileHTML(p(m.goals_done_rate), 'Goals reached', `${m.goals_done} of ${plural(m.goals_total, 'goal')}`)}
+      </div>
+      ${barChartHTML({
+        title: 'Mentorship requests per month',
+        caption: 'Last 12 months, whatever period is chosen above',
+        bars: data.monthly.map((x) => ({ label: x.month, short: monthName(x.month), value: x.sent, accepted: x.accepted })),
+        tip: (b) => `${monthName(b.label)} ${b.label.slice(0, 4)}: ${b.value} sent, ${b.accepted} accepted`
+      })}
+    </section>
+
+    <section class="ic-section">
+      <h2>Outcomes</h2>
+      <p class="md-muted st-small">Private answers given after a mentorship ends. Each ended mentorship can get two, one from each person.</p>
+      <div class="ic-tiles">
+        ${tileHTML(o.ended, 'Mentorships ended')}
+        ${tileHTML(p(o.response_rate), 'Answered the feedback', plural(o.answers, 'answer'))}
+        ${tileHTML(p(o.met_rate), 'Said they met')}
+        ${tileHTML(o.avg_helpful_mentees === null ? null : `${o.avg_helpful_mentees} / 5`, 'How helpful, say mentees')}
+        ${tileHTML(o.felt_unsafe, 'Did not feel safe', o.felt_unsafe ? 'each one opened a report' : '')}
+      </div>
+      <div class="ic-two">
+        ${barChartHTML({
+          title: 'How helpful it was',
+          caption: 'Answers from 1 (not at all) to 5 (very), mentees and mentors',
+          bars: o.rating_counts.map((n, i) => ({ label: `${i + 1} out of 5`, short: String(i + 1), value: n })),
+          valueLabel: (v) => `${v} answer${v === 1 ? '' : 's'}`
+        })}
+        ${barChartHTML({
+          title: 'Goals reached, say mentees',
+          bars: [['none', 'None'], ['some', 'Some'], ['most', 'Most'], ['all', 'All']].map(([k, l]) => ({ label: l, value: o.goals_progress[k] })),
+          valueLabel: (v) => `${v} mentee${v === 1 ? '' : 's'}`
+        })}
+      </div>
+    </section>
+
+    <section class="ic-section">
+      <h2>Fairness across mentors</h2>
+      <p class="md-muted st-small">Recommendations favour mentors with free places when two matches are close, so requests should not pile up on a few people.</p>
+      <div class="ic-tiles">
+        ${tileHTML(f.gini === null ? null : f.gini.toFixed(2), 'Spread of requests (Gini)', fairWords + '. 0 is perfectly even, 1 is all on one mentor.')}
+        ${tileHTML(p(f.top_fifth_share), `Requests going to the busiest ${f.top_fifth_count} mentor${f.top_fifth_count === 1 ? '' : 's'}`, `the top fifth of ${plural(f.mentors, 'mentor')}`)}
+        ${tileHTML(f.mentors_without_requests, 'Mentors with no requests', `of ${plural(f.mentors, 'mentor')}`)}
+      </div>
+      ${barChartHTML({
+        title: 'Active mentees per mentor, now',
+        bars: ['0', '1', '2', '3+'].map((k) => ({ label: `${k} mentee${k === '1' ? '' : 's'}`, short: k, value: f.active_mentees_per_mentor[k] })),
+        valueLabel: (v) => `${v} mentor${v === 1 ? '' : 's'}`
+      })}
+    </section>
+
+    <section class="ic-section">
+      <h2>Events, opportunities and members</h2>
+      <div class="ic-tiles">
+        ${tileHTML(e.held, 'Events held')}
+        ${tileHTML(p(e.avg_fill_rate), 'Average seats filled', 'events with a capacity')}
+        ${tileHTML(e.registrations, 'Event registrations')}
+        ${tileHTML(op.submitted, 'Opportunities submitted', `${op.approved} live, ${op.auto_approved} through the fast lane`)}
+        ${tileHTML(op.scams_stopped, 'Scams stopped', 'rejected as asking applicants to pay')}
+        ${tileHTML(hours(op.median_review_hours), 'Typical time to review a post')}
+        ${tileHTML(op.alerts_sent, 'Targeted alerts sent')}
+        ${tileHTML(mem.joined, 'New members', `${plural(mem.mentees, 'mentee')} and ${plural(mem.mentors, 'mentor')} in total`)}
+        ${tileHTML(p(mem.two_factor_rate), 'Members with two-factor on')}
+      </div>
+    </section>
+    <p class="md-muted st-small">Worked out ${escapeHTML(new Date(data.generated_at).toLocaleString('en-GB', { timeZone: 'Africa/Nairobi' }))} Nairobi time.</p>`;
+}
+
+// Every figure as a CSV file, for the report or a spreadsheet
+function downloadImpactCSV() {
+  if (!impactData) return;
+  const rows = [['section', 'measure', 'value']];
+  const add = (section, obj) => Object.entries(obj).forEach(([k, v]) => {
+    if (v !== null && typeof v === 'object') Object.entries(v).forEach(([k2, v2]) => rows.push([section, `${k}.${k2}`, v2]));
+    else rows.push([section, k, v === null ? '' : v]);
+  });
+  ['mentorship', 'outcomes', 'fairness', 'events', 'opportunities', 'members'].forEach((sct) => add(sct, impactData[sct]));
+  impactData.monthly.forEach((x) => { rows.push(['monthly', `${x.month}.sent`, x.sent]); rows.push(['monthly', `${x.month}.accepted`, x.accepted]); });
+  const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `alumnet-impact-${impactData.period}-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const sel = document.getElementById('impact-period');
+  if (sel) sel.addEventListener('change', renderImpact);
+  const dl = document.getElementById('impact-download');
+  if (dl) dl.addEventListener('click', downloadImpactCSV);
+});
+
+
+/* --------------------------------------------------------------------
+   Keyboard focus in dialogs (WCAG 2.4.3). While a dialog is open,
+   everything behind it is made inert, so Tab stays inside the dialog and
+   screen readers ignore the page underneath. When it closes, focus goes
+   back to the button that opened it. Works for every dialog on the site,
+   including one opened on top of another.
+   -------------------------------------------------------------------- */
+(function keepFocusInDialogs() {
+  const openers = new WeakMap();
+  const stack = [];
+  // The last thing focused outside any dialog: where focus goes back to
+  let lastOutside = null;
+  document.addEventListener('focusin', (e) => {
+    if (!e.target.closest || !e.target.closest('.modal-backdrop')) lastOutside = e.target;
+  });
+  document.addEventListener('mousedown', (e) => {
+    const b = e.target.closest && e.target.closest('button, a, [tabindex]');
+    if (b && !b.closest('.modal-backdrop')) lastOutside = b;
+  }, true);
+  const update = () => {
+    const top = stack[stack.length - 1];
+    [...document.body.children].forEach((el) => {
+      if (el.tagName === 'SCRIPT' || el.classList.contains('toast')) return;
+      if (top) el.toggleAttribute('inert', el !== top);
+      else el.removeAttribute('inert');
+    });
+  };
+  new MutationObserver((changes) => {
+    changes.forEach((c) => {
+      c.addedNodes.forEach((n) => {
+        if (n.nodeType === 1 && n.classList.contains('modal-backdrop')) {
+          const active = document.activeElement;
+          const parent = stack[stack.length - 1];
+          // A dialog opened from another dialog returns focus there; otherwise to the page
+          openers.set(n, parent && parent.contains(active) ? active
+            : active && active !== document.body && !active.closest('.modal-backdrop') ? active : lastOutside);
+          stack.push(n);
+          const card = n.querySelector('.modal-card');
+          if (card) {
+            if (!card.getAttribute('role')) card.setAttribute('role', 'dialog');
+            card.setAttribute('aria-modal', 'true');
+          }
+          update();
+          // Focus the first field, or the dialog itself, if nothing inside has focus yet
+          setTimeout(() => {
+            if (!n.contains(document.activeElement)) {
+              const first = n.querySelector('input:not([type=hidden]), select, textarea, button, a[href]');
+              if (first) first.focus();
+            }
+          }, 0);
+        }
+      });
+      c.removedNodes.forEach((n) => {
+        const i = stack.indexOf(n);
+        if (i === -1) return;
+        stack.splice(i, 1);
+        update();
+        const back = openers.get(n);
+        if (back && document.body.contains(back) && !back.closest('[inert]')) back.focus();
+      });
+    });
+  }).observe(document.body, { childList: true });
+
+  // Tab and Shift+Tab wrap around inside the top dialog instead of leaving the page
+  document.addEventListener('keydown', (e) => {
+    const top = stack[stack.length - 1];
+    if (e.key !== 'Tab' || !top) return;
+    const items = [...top.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')]
+      .filter((el) => el.offsetParent !== null);
+    if (!items.length) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (!top.contains(document.activeElement)) { e.preventDefault(); first.focus(); return; }
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
+})();

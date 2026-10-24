@@ -157,3 +157,13 @@ def test_one_post_is_scored_against_many_members_for_alerts(client):
     }, headers=KEY)
     scores = {r["user_id"]: r["score"] for r in res.get_json()}
     assert scores[9001] > scores[9003]
+
+
+def test_refuses_to_start_on_a_public_host_without_a_key():
+    import subprocess
+    env = {k: v for k, v in os.environ.items() if k != "ML_API_KEY"}
+    env["SPACE_ID"] = "someone/alumnet-ml"
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    r = subprocess.run([sys.executable, "-c", "import app"], cwd=here, env=env, capture_output=True, text=True, timeout=60)
+    assert r.returncode != 0
+    assert "ML_API_KEY is not set" in (r.stderr + r.stdout)

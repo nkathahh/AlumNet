@@ -52,4 +52,38 @@ async function pruneRateLimits() {
   await pool.query('DELETE FROM rate_limits WHERE reset_at < DATE_SUB(NOW(), INTERVAL 1 DAY)');
 }
 
-module.exports = { dbRateLimit, DbStore, pruneRateLimits };
+/*
+ * One limit on everything a signed-in member changes (posts, requests,
+ * registrations, goals, meetings, reports): 120 an hour. Normal use never
+ * comes near it; a script or a hacked account flooding the system does.
+ * Sign-in has its own limits, and admins are left out because moderation
+ * can mean many quick decisions (their actions are all logged).
+ */
+const WRITES_PER_HOUR = 120;
+const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+function sessionUser(req) {
+  try {
+    const { readSessionToken } = require('./session');
+    const token = readSessionToken(req);
+    // Verified, so nobody can fill someone else's allowance by faking their id
+    return token ? require('jsonwebtoken').verify(token, process.env.JWT_SECRET) : null;
+  } catch {
+    return null;
+  }
+}
+const writeLimit = dbRateLimit('writes', {
+  windowMs: 60 * 60 * 1000,
+  limit: WRITES_PER_HOUR,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  skip: (req) => {
+    if (!WRITE_METHODS.has(req.method) || req.path.startsWith('/auth/')) return true;
+    const u = sessionUser(req);
+    req.limitUser = u;
+    return !u || u.role === 'admin';
+  },
+  keyGenerator: (req) => `user:${req.limitUser.userId}`,
+  message: { error: 'You have made a lot of changes in the last hour. Please wait a while and try again.' }
+});
+
+module.exports = { dbRateLimit, DbStore, pruneRateLimits, writeLimit, WRITES_PER_HOUR };
