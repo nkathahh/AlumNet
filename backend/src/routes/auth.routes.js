@@ -82,6 +82,7 @@ router.post('/reset-password', accountLimit, auth.resetPassword);
 
 // Account settings (signed-in users)
 router.get('/account', requireAuth, auth.getAccount);
+router.post('/privacy', requireAuth, auth.acceptPrivacy);
 router.put('/account/alerts', requireAuth, auth.setAlerts);
 router.post('/change-password', requireAuth, accountLimit, auth.changePassword);
 router.post('/2fa/setup', requireAuth, auth.setupTwoFactor);

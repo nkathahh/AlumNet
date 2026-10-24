@@ -16,8 +16,21 @@ const path = require('node:path');
 const bcrypt = require('bcrypt');
 const mysql = require('mysql2/promise');
 const { authenticator } = require('otplib');
+const { PRIVACY_VERSION } = require('../src/utils/privacy');
+
+// Only the database connection comes from backend/.env (anything set in the
+// terminal, such as DB_NAME=alumnet_test, wins). Every other setting is fixed
+// below, so a laptop's own choices (two-factor off, a running ML service) can
+// never change what the tests check.
+try {
+  const local = require('dotenv').parse(require('node:fs').readFileSync(path.join(__dirname, '..', '.env')));
+  for (const [k, v] of Object.entries(local)) if (k.startsWith('DB_') && process.env[k] === undefined) process.env[k] = v;
+} catch { /* no .env (as in CI): the DB_* variables come from the environment */ }
 
 const PORT = process.env.TEST_PORT || 4999;
+// Read once: later, loading the app's own modules also reads backend/.env,
+// which may hold a different secret
+const JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
 const ROOT = `http://localhost:${PORT}`;
 
 if (!String(process.env.DB_NAME || '').endsWith('_test')) {
@@ -74,15 +87,22 @@ before(async () => {
     timezone: '+03:00'
   });
   await db.query("SET time_zone = '+03:00'");
+  // The tests create accounts with fixed emails, so they need an empty database
+  const [[{ n }]] = await db.query('SELECT COUNT(*) AS n FROM users');
+  if (Number(n)) throw new Error('The test database already has data from an earlier run. Run "npm run migrate -- --fresh" first.');
   server = spawn(process.execPath, [path.join(__dirname, '..', 'src', 'server.js')], {
     env: {
       ...process.env,
       NODE_ENV: 'test',
       PORT: String(PORT),
-      JWT_SECRET: process.env.JWT_SECRET || 'test-secret',
+      JWT_SECRET,
       APP_URL: ROOT,
       // No email settings, so emails are printed to the log
-      SMTP_USER: '', SMTP_PASS: '', BREVO_API_KEY: '', GOOGLE_CLIENT_ID: '', MAIL_DEV_REDIRECT: ''
+      SMTP_USER: '', SMTP_PASS: '', BREVO_API_KEY: '', GOOGLE_CLIENT_ID: '', MAIL_DEV_REDIRECT: '', MAIL_FROM: '',
+      // The tests check these behaviours, so they are fixed whatever backend/.env says
+      ADMIN_2FA_REQUIRED: 'true',
+      ML_SERVICE_URL: 'http://127.0.0.1:1', // nothing listens here: the keyword fallback is tested
+      ML_API_KEY: '', CORS_ORIGIN: ''
     },
     stdio: ['ignore', 'pipe', 'pipe']
   });
@@ -220,8 +240,9 @@ test('a stranger using a stolen staff number is flagged high risk', async () => 
 test('admin tools stay locked until the admin turns on two-factor', async () => {
   const hash = await bcrypt.hash('AdminPass1', 10);
   const [r] = await db.execute(
-    `INSERT INTO users (name, email, password_hash, status, email_verified_at, onboarded_at) VALUES ('Test Admin', 'admin@example.org', :hash, 'active', NOW(), NOW())`,
-    { hash }
+    `INSERT INTO users (name, email, password_hash, status, email_verified_at, onboarded_at, privacy_accepted_at, privacy_version)
+     VALUES ('Test Admin', 'admin@example.org', :hash, 'active', NOW(), NOW(), NOW(), :version)`,
+    { hash, version: PRIVACY_VERSION }
   );
   await db.execute('INSERT INTO admins (user_id) VALUES (:id)', { id: r.insertId });
   const admin = client();
@@ -398,9 +419,9 @@ test('a mentee profile is hidden from mentors she has not contacted', async () =
 async function makeMember(name, email, role) {
   const hash = await bcrypt.hash('Passw0rd1', 4);
   const [r] = await db.execute(
-    `INSERT INTO users (name, email, password_hash, status, email_verified_at, onboarded_at, privacy_accepted_at)
-     VALUES (:name, :email, :hash, 'active', NOW(), NOW(), NOW())`,
-    { name, email, hash }
+    `INSERT INTO users (name, email, password_hash, status, email_verified_at, onboarded_at, privacy_accepted_at, privacy_version)
+     VALUES (:name, :email, :hash, 'active', NOW(), NOW(), NOW(), :version)`,
+    { name, email, hash, version: PRIVACY_VERSION }
   );
   await db.execute(`INSERT INTO ${role === 'mentor' ? 'mentors' : 'mentees'} (user_id) VALUES (:id)`, { id: r.insertId });
   await db.execute('INSERT INTO profiles (user_id) VALUES (:id)', { id: r.insertId });
@@ -1347,7 +1368,7 @@ test('the activity log can be filtered, paged and exported, and record views are
 
 test('admin sessions end after 30 idle minutes and 12 hours; member sessions last longer', async () => {
   const jwt = require('jsonwebtoken');
-  const secret = process.env.JWT_SECRET || 'test-secret';
+  const secret = JWT_SECRET;
   const now = Math.floor(Date.now() / 1000);
   const [[adminRow]] = await db.execute("SELECT user_id, session_version FROM users WHERE email = 'admin@example.org'");
   const call = (token) => fetch(`${ROOT}/api/auth/account`, { headers: { Cookie: `alumnet_session=${token}` } });
@@ -1503,6 +1524,115 @@ test('deleting an account removes personal data and ends the session', async () 
 });
 
 /* ---------------- General protections ---------------- */
+
+/* ---------------- Input sizes and the privacy notice version ---------------- */
+
+test('text longer than the database allows gets a clear message, never a server error', async () => {
+  const poster = await makeMember('Long Text Mentor', 'long.text@example.org', 'mentor');
+  const x = (n) => 'x'.repeat(n);
+  const tooLong = [
+    ['title', x(151)], ['company', x(151)], ['location', x(151)], ['industry', x(101)],
+    ['applyLink', `https://example.org/${x(250)}`], ['description', x(5001)], ['title', 12345], ['company', ['a', 'b']]
+  ];
+  for (const [field, value] of tooLong) {
+    const r = await poster.me.call('POST', '/opportunities', { ...opp('Ramp agent'), [field]: value });
+    assert.equal(r.status, 400, `opportunity ${field}: ${JSON.stringify(r.body)}`);
+    assert.ok(r.body.error);
+  }
+  // Exactly at the limit is fine
+  const atLimit = await poster.me.call('POST', '/opportunities', { ...opp(x(150)), company: x(150), location: x(150) });
+  assert.equal(atLimit.status, 201);
+  const edit = await poster.me.call('PUT', `/opportunities/${atLimit.body.opportunityId}`, { ...opp('Ramp agent'), description: x(5001) });
+  assert.equal(edit.status, 400);
+
+  const event = { title: 'Ramp safety talk', eventDate: inDays(15), mode: 'in_person', location: 'Pride Centre', description: 'Safety on the ramp.' };
+  for (const [field, value] of [['title', x(151)], ['location', x(256)], ['description', x(5001)], ['capacity', 10001], ['title', { a: 1 }]]) {
+    const r = await poster.me.call('POST', '/events', { ...event, [field]: value });
+    assert.equal(r.status, 400, `event ${field}: ${JSON.stringify(r.body)}`);
+  }
+  const official = await state.admin.call('POST', '/admin/events', { ...event, title: x(151) });
+  assert.equal(official.status, 400);
+  assert.equal(/at Error|ER_DATA_TOO_LONG/.test(serverLog), false);
+});
+
+test('the privacy version matches the date on the privacy notice', () => {
+  const page = require('node:fs').readFileSync(path.join(__dirname, '..', '..', 'frontend', 'public', 'privacy.html'), 'utf8');
+  const shown = page.match(/Last updated (\d{1,2} [A-Z][a-z]+ \d{4})/);
+  assert.ok(shown, 'privacy.html should say when it was last updated');
+  const asDate = new Date(`${shown[1]} 12:00 UTC`).toISOString().slice(0, 10);
+  assert.equal(asDate, PRIVACY_VERSION);
+});
+
+test('new members record the notice version they accepted', async () => {
+  // George registered through the HR email link, Victor through the alumni office
+  for (const email of [GEORGE.email, 'victor.new@example.org']) {
+    const [[u]] = await db.execute('SELECT user_id, privacy_version FROM users WHERE email = :email', { email });
+    assert.equal(u.privacy_version, PRIVACY_VERSION);
+    const [[kept]] = await db.execute('SELECT version FROM privacy_acceptances WHERE user_id = :id', { id: u.user_id });
+    assert.equal(kept.version, PRIVACY_VERSION);
+  }
+});
+
+test('a member who accepted an older notice must accept the new one, and can still take their data', async () => {
+  const m = await makeMember('Old Notice Member', 'old.notice@example.org', 'mentee');
+  await db.execute("UPDATE users SET privacy_version = '2026-08-01' WHERE user_id = :id", { id: m.id });
+
+  const blocked = await m.me.call('GET', '/profile/me');
+  assert.equal(blocked.status, 403);
+  assert.equal(blocked.body.code, 'privacy_update');
+  assert.equal(blocked.body.version, PRIVACY_VERSION);
+  // Their data is never held hostage
+  const account = await m.me.call('GET', '/auth/account');
+  assert.equal(account.status, 200);
+  assert.equal(account.body.privacy.accepted, '2026-08-01');
+  assert.equal(account.body.privacy.current, PRIVACY_VERSION);
+  assert.equal((await m.me.call('GET', '/auth/account/export')).status, 200);
+
+  // An out-of-date page cannot accept a notice the member never saw
+  const stale = await m.me.call('POST', '/auth/privacy', { version: '2026-08-01' });
+  assert.equal(stale.status, 409);
+  const ok = await m.me.call('POST', '/auth/privacy', { version: PRIVACY_VERSION });
+  assert.equal(ok.status, 200);
+  assert.equal((await m.me.call('GET', '/profile/me')).status, 200);
+
+  const data = await m.me.call('GET', '/auth/account/export');
+  assert.equal(data.body.account.privacy_version, PRIVACY_VERSION);
+  assert.deepEqual(data.body.privacy_notices_you_accepted.map((p) => p.version), [PRIVACY_VERSION]);
+});
+
+test('a backup restores into a fresh database with every row intact', async (t) => {
+  const { execFile } = require('node:child_process');
+  const os = require('node:os');
+  const fs = require('node:fs');
+  const run = (script, args, env = {}) => new Promise((resolve) => {
+    execFile(process.execPath, [path.join(__dirname, '..', 'scripts', script), ...args], {
+      // A settings file that does not exist, so only the test database settings apply
+      env: { ...process.env, BACKUP_DIR: dir, BACKUP_KEY: key, ...env }
+    }, (err, stdout, stderr) => resolve({ code: err ? err.code || 1 : 0, out: stdout + stderr }));
+  });
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'alumnet-backup-'));
+  const key = require('node:crypto').randomBytes(32).toString('hex');
+  const noEnv = `--env=${path.join(dir, 'none.env')}`;
+  try {
+    const made = await run('backup.js', [noEnv]);
+    assert.equal(made.code, 0, made.out);
+    const file = made.out.match(/Saved to (.+\.enc)/)[1].trim();
+    // Encrypted: none of the personal data is readable in the file
+    assert.equal(fs.readFileSync(file).includes(Buffer.from('example.org')), false);
+
+    const checked = await run('restore-check.js', [noEnv, file]);
+    if (/Access denied|command denied/i.test(checked.out)) return t.skip('this database user cannot create the scratch database');
+    assert.equal(checked.code, 0, checked.out);
+    assert.match(checked.out, /Every table matches the backup/);
+    assert.match(checked.out, /023_privacy_version/);
+
+    const wrongKey = await run('restore-check.js', [noEnv, file], { BACKUP_KEY: '0'.repeat(64) });
+    assert.notEqual(wrongKey.code, 0);
+    assert.match(wrongKey.out, /Could not decrypt/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 test('security headers are set on pages and API responses', async () => {
   const res = await fetch(`${ROOT}/login.html`);

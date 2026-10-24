@@ -5,6 +5,7 @@ const { splitList } = require('../utils/fit');
 const { annotateEvents } = require('../utils/recommend');
 const { reviewEdit, eventChanges, listInWords } = require('../utils/liveEdit');
 const { tellRegistrants } = require('../utils/eventNotice');
+const { checkText, MAX_CAPACITY } = require('../utils/fields');
 
 // Loaded lazily: admin.controller requires this file too
 const logAdminAction = (...args) => require('./admin.controller').logAdminAction(...args);
@@ -24,7 +25,10 @@ async function cleanTargeting({ topics, audienceDepartments }) {
 }
 
 // Shared by mentor proposals and admin-created events
-function validateEventInput({ title, eventDate, mode, location, capacity }) {
+function validateEventInput(body) {
+  const { title, eventDate, mode, location, capacity } = body;
+  const wrongSize = checkText(body, 'event');
+  if (wrongSize) return wrongSize;
   if (!title || !title.trim()) return 'Title is required';
   if (!eventDate || isNaN(new Date(eventDate))) return 'A valid date and time is required';
   if (new Date(eventDate) <= new Date()) return 'Event date must be in the future';
@@ -39,6 +43,7 @@ function validateEventInput({ title, eventDate, mode, location, capacity }) {
   if (capacity !== undefined && capacity !== null && capacity !== '') {
     const n = Number(capacity);
     if (!Number.isInteger(n) || n < 1) return 'Capacity must be a whole number of at least 1';
+    if (n > MAX_CAPACITY) return `Capacity can be at most ${MAX_CAPACITY.toLocaleString('en-US')}`;
   }
   return null;
 }

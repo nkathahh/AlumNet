@@ -3,3 +3,8 @@ node_modules/
 __pycache__/ 
 venv/ 
 .DS_Store 
+backups/
+*.sql.gz
+*.sql.gz.enc
+.env.*
+!.env.example

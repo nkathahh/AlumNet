@@ -200,7 +200,7 @@
                         <div class="field-row">
                             <div class="field">
                                 <label for="eventTitle">Title</label>
-                                <input type="text" id="eventTitle" required>
+                                <input type="text" id="eventTitle" maxlength="150" required>
                             </div>
                             <div class="field">
                                 <label for="eventDate">Date and time (Nairobi time)</label>
@@ -217,16 +217,16 @@
                             </div>
                             <div class="field">
                                 <label for="eventCapacity">Capacity (optional)</label>
-                                <input type="number" id="eventCapacity" min="1">
+                                <input type="number" id="eventCapacity" min="1" max="10000">
                             </div>
                         </div>
                         <div class="field">
                             <label for="eventLocation">Venue or meeting link</label>
-                            <input type="text" id="eventLocation" placeholder="e.g. Pride Centre, Embakasi or https://...">
+                            <input type="text" id="eventLocation" maxlength="255" placeholder="e.g. Pride Centre, Embakasi or https://...">
                         </div>
                         <div class="field">
                             <label for="eventDescription">Description</label>
-                            <textarea id="eventDescription"></textarea>
+                            <textarea id="eventDescription" maxlength="5000"></textarea>
                         </div>
                         <div id="event-targeting"></div>
                         <p id="event-form-error"

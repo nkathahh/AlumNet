@@ -486,7 +486,8 @@ async function reviewSignupRequest(req, res, next) {
             // The account is created from the HR record, not from what was typed
             const { createAccount } = require('./auth.controller');
             const { role } = await createAccount({
-              staff, email: request.email, passwordHash: request.password_hash, privacyAcceptedAt: request.privacy_accepted_at
+              staff, email: request.email, passwordHash: request.password_hash,
+              privacyAcceptedAt: request.privacy_accepted_at, privacyVersion: request.privacy_version
             });
             await pool.execute(
               `UPDATE signup_requests SET status = 'approved', password_hash = NULL, reviewed_by = :admin, reviewed_at = NOW(), review_note = :note

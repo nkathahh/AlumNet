@@ -4,6 +4,8 @@
  *
  *   npm run migrate                      apply every migration not yet applied
  *   npm run migrate -- --status          list what is applied and what is waiting
+ *   npm run migrate -- --fresh           empty a test database (name ending in _test)
+ *                                        and build it again from every migration
  *   npm run migrate -- --baseline=021    mark 001 to 021 as already applied without
  *                                        running them (for a database that was set
  *                                        up by hand before this runner existed)
@@ -29,10 +31,39 @@ function sslConfig() {
   return { rejectUnauthorized: false };
 }
 
+// A test database (name ending in _test) is created if it does not exist yet,
+// or emptied and created again with --fresh. Real databases are never created
+// or dropped here, so a typo cannot empty one.
+async function createTestDatabase() {
+  const name = process.env.DB_NAME || '';
+  if (!/^[A-Za-z0-9_]+_test$/.test(name)) {
+    if (flag('fresh')) throw new Error('--fresh only works on a test database (DB_NAME ending in _test)');
+    return;
+  }
+  const server = await mysql.createConnection({
+    host: process.env.DB_HOST || '127.0.0.1', port: Number(process.env.DB_PORT || 3306),
+    user: process.env.DB_USER, password: process.env.DB_PASSWORD, ssl: sslConfig()
+  });
+  try {
+    if (flag('fresh')) {
+      await server.query(`DROP DATABASE IF EXISTS \`${name}\``);
+      console.log(`Emptied the test database ${name}.`);
+    }
+    const [rows] = await server.query('SHOW DATABASES LIKE ?', [name]);
+    if (!rows.length) {
+      await server.query(`CREATE DATABASE \`${name}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
+      console.log(`Created the test database ${name}.`);
+    }
+  } finally {
+    await server.end();
+  }
+}
+
 const checksum = (text) => crypto.createHash('sha256').update(text.replace(/\r\n/g, '\n')).digest('hex').slice(0, 16);
 
 async function main() {
   const files = fs.readdirSync(DIR).filter((f) => /^\d{3}_.+\.sql$/.test(f)).sort();
+  await createTestDatabase();
   const db = await mysql.createConnection({
     host: process.env.DB_HOST || '127.0.0.1',
     port: Number(process.env.DB_PORT || 3306),

@@ -22,7 +22,9 @@ Strathmore University.
   a mentor automatically and their open mentee requests are closed.
 - **Sessions:** an HttpOnly cookie (not readable by page scripts), CSRF protection, log out
   everywhere, and sessions that end at once on suspension, password change or HR changes
-- **Privacy:** privacy notice and consent at sign-up, download my data, delete my account,
+- **Privacy:** privacy notice and consent at sign-up, a record of which notice version each
+  member accepted (members are asked to accept a changed notice before carrying on, and can still
+  download their data or delete their account if they do not), download my data, delete my account,
   automatic clean-up of old sign-up records, and mentee profiles visible only to mentors they
   have contacted
 - **Trust and safety:** verified badges on profiles and match cards, mentees introduce
@@ -296,7 +298,7 @@ progress, and the full development and test results will follow.
 Every push and pull request to `main` runs `.github/workflows/ci.yml`. Each job starts an
 empty MySQL 8 database, builds it from `database/migrations` and tests the real code:
 
-- **Backend API tests** (`backend/tests/api.test.js`, 88 tests): sign-up by HR email match,
+- **Backend API tests** (`backend/tests/api.test.js`, 93 tests): sign-up by HR email match,
   the alumni office review path with risk signals, impostor detection, roles from HR, HttpOnly
   session cookies, CSRF protection, log out everywhere, suspension, single-use reset links,
   two-factor with backup codes, admin 2FA requirement, HR import with retirement conversion,
@@ -307,13 +309,14 @@ empty MySQL 8 database, builds it from `database/migrations` and tests the real 
   fallback, filter counts, paging, removal of embeddings on account deletion, skill coverage and
   fit labels, event targeting, alert limits and opt-out, editing live posts and events, the waiting list, event reminders, the mentor shortlist, mentorship goals, meetings and private
   feedback, member detail, the impact figures, activity log filters and export, encrypted two-factor secrets, second-admin
-  approval of HR imports, re-checking live posts after a scam, security headers
-  and rate limiting.
+  approval of HR imports, re-checking live posts after a scam, length and type checks on every
+  post and event field, privacy notice versions, a backup restored with every row checked,
+  security headers and rate limiting.
 - **Browser checks** (`e2e/browser.test.js`): script payloads in every field members can type
   into, checked on every page for every role; an axe-core accessibility check (WCAG 2.1 AA) of the
   main pages and the busiest admin screens in light and dark mode; keyboard focus kept inside
-  dialogs and returned afterwards; and every page checked at phone width (390px) for sideways
-  scrolling. CI also runs `npm audit` and `pip-audit`.
+  dialogs and returned afterwards; every page checked at phone width (390px) for sideways
+  scrolling; and the prompt to accept a changed privacy notice. CI also runs `npm audit` and `pip-audit`.
 - **Recommendation service tests** (`ml-service/tests/test_app.py`): the API key check, input
   errors, a ranking check with the real BGE model on seeded synthetic profiles, the embedding
   cache, search by meaning and scoring of opportunities and events.
@@ -321,13 +324,18 @@ empty MySQL 8 database, builds it from `database/migrations` and tests the real 
 Results appear as a tick or cross next to each commit on GitHub, and each run keeps the
 test reports as downloadable artifacts.
 
-To run the backend tests locally, create an empty `alumnet_test` database, apply the
-migrations to it, then run this in PowerShell from the `backend` folder (the other database
-settings come from your `.env`):
+To run the backend tests locally, run this in PowerShell from the `backend` folder.
+`--fresh` empties and rebuilds the test database (it only works on names ending in `_test`),
+because the tests need an empty one. The connection settings come from your `.env`; every
+other setting is fixed by the tests, so local choices such as two-factor being off do not
+change the results:
 
 ```
-$env:DB_NAME="alumnet_test"; npm test
+$env:DB_NAME="alumnet_test"; npm run migrate -- --fresh; npm test
 ```
+
+Afterwards run `Remove-Item Env:DB_NAME` so later commands in that window use your normal
+database again.
 
 The tests refuse to run against any database whose name does not end in `_test`.
 

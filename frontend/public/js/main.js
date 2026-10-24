@@ -73,6 +73,10 @@ const AUTH_PATHS = ['/auth/login', '/auth/google', '/auth/2fa/verify', '/auth/si
       const page = location.pathname.split('/').pop();
       if (PAGE_ROLES[page] || page === 'onboarding.html') window.location.href = 'login.html?expired=1';
     }
+    if (res.status === 403 && path !== '/auth/privacy') {
+      const data = await res.clone().json().catch(() => null);
+      if (data && data.code === 'privacy_update') showPrivacyUpdate(data.version);
+    }
     return res;
   };
 })();
@@ -80,6 +84,86 @@ const AUTH_PATHS = ['/auth/login', '/auth/google', '/auth/2fa/verify', '/auth/si
 function clearSession() {
   localStorage.removeItem('alumnet_token');
   localStorage.removeItem('alumnet_role');
+  localStorage.removeItem('alumnet_signed_in_at');
+}
+
+/*
+ * All tabs share one session cookie. When someone signs in as another
+ * account, or signs out, in a different tab, this tab would otherwise keep
+ * showing the old person's pages while its requests go out as the new
+ * account. Reload instead, so the page matches whoever is signed in now (or
+ * goes to the login page).
+ */
+(function followSessionChanges() {
+  window.addEventListener('storage', (e) => {
+    if (!['alumnet_signed_in_at', 'alumnet_role', 'alumnet_token'].includes(e.key) && e.key !== null) return;
+    const page = location.pathname.split('/').pop();
+    if (PAGE_ROLES[page] || page === 'onboarding.html') window.location.reload();
+  });
+})();
+
+/*
+ * The privacy notice changed since this member accepted it, and the server
+ * refuses everything else until they accept. Ask once, in a dialog that
+ * cannot be dismissed. On Account settings a banner is used instead, so a
+ * member who does not agree can still download their data or delete their
+ * account there.
+ */
+let privacyPromptShown = false;
+function showPrivacyUpdate(version) {
+  if (privacyPromptShown || !/^\d{4}-\d{2}-\d{2}$/.test(String(version))) return;
+  privacyPromptShown = true;
+  const day = new Date(`${version}T12:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  const accept = async (btn, msgEl) => {
+    btn.disabled = true;
+    const { ok, data } = await apiSend('POST', '/auth/privacy', { version });
+    if (!ok) { btn.disabled = false; setMsg(msgEl, data.error || 'Could not save that. Try again.'); return; }
+    window.location.reload();
+  };
+
+  if (location.pathname.split('/').pop() === 'settings.html') {
+    const host = document.getElementById('settings-page');
+    if (!host) return;
+    const banner = document.createElement('div');
+    banner.className = 'md-banner';
+    banner.id = 'privacy-banner';
+    banner.setAttribute('role', 'alert');
+    banner.innerHTML = `
+      <div class="md-banner-body">
+        <strong>We updated our privacy notice on ${escapeHTML(day)}</strong>
+        <p>Most of AlumNet is paused until you accept it. <a href="privacy.html" target="_blank" rel="noopener">Read the privacy notice</a> (opens in a new tab). If you do not agree, you can still download your data or delete your account below.</p>
+        <p class="st-msg" style="display:none;"></p>
+      </div>
+      <button type="button" class="btn btn-primary md-btn-sm">I accept</button>`;
+    host.insertBefore(banner, host.querySelector('.md-top').nextSibling);
+    const btn = banner.querySelector('button');
+    btn.onclick = () => accept(btn, banner.querySelector('.st-msg'));
+    return;
+  }
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal-card dlg" role="dialog" aria-modal="true" aria-labelledby="pv-title" aria-describedby="pv-text">
+      <h3 id="pv-title">We updated our privacy notice</h3>
+      <p class="st-text" id="pv-text">The notice changed on ${escapeHTML(day)}. Please read it and accept it to keep using AlumNet.</p>
+      <p class="st-text"><a href="privacy.html" target="_blank" rel="noopener">Read the privacy notice</a> (opens in a new tab)</p>
+      <p class="st-text">If you do not agree, you can <a href="settings.html">download your data or delete your account</a> instead.</p>
+      <p class="st-msg dlg-msg"></p>
+      <div class="dlg-actions">
+        <button type="button" class="btn btn-secondary" data-pv="out">Log out</button>
+        <button type="button" class="btn btn-primary" data-pv="yes">I have read it and accept</button>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop);
+  backdrop.querySelector('[data-pv="out"]').onclick = async () => {
+    try { await fetch(`${API_BASE}/auth/logout`, { method: 'POST' }); } catch { /* offline: still clear locally */ }
+    clearSession();
+    window.location.href = 'login.html';
+  };
+  const yes = backdrop.querySelector('[data-pv="yes"]');
+  yes.onclick = () => accept(yes, backdrop.querySelector('.dlg-msg'));
+  yes.focus();
 }
 
 const HOME_PAGE = { mentee: 'mentee-dashboard.html', mentor: 'mentor-dashboard.html', admin: 'admin.html' };
@@ -446,6 +530,8 @@ function wireSignupForm() {
 function saveSession(result) {
   localStorage.setItem('alumnet_token', 'cookie');
   localStorage.setItem('alumnet_role', result.role);
+  // Changes on every sign-in, so other open tabs notice (see followSessionChanges)
+  localStorage.setItem('alumnet_signed_in_at', String(Date.now()));
 }
 
 function showFormError(el, message) {
@@ -1760,7 +1846,7 @@ function openProposeEventModal(existing = null, opts = {}) {
       <h3>${heading}</h3>
       <div class="modal-meta">${intro}</div>
       <form id="propose-event-form" novalidate>
-        <div class="field"><label for="peTitle">Title</label><input type="text" id="peTitle"></div>
+        <div class="field"><label for="peTitle">Title</label><input type="text" id="peTitle" maxlength="150"></div>
         <div class="field"><label for="peDate">Date and time (Nairobi time)</label><input type="datetime-local" id="peDate"></div>
         <div class="field-row">
           <div class="field">
@@ -1770,13 +1856,13 @@ function openProposeEventModal(existing = null, opts = {}) {
               <option value="virtual">Virtual</option>
             </select>
           </div>
-          <div class="field"><label for="peCapacity">Capacity (optional)</label><input type="number" id="peCapacity" min="1"></div>
+          <div class="field"><label for="peCapacity">Capacity (optional)</label><input type="number" id="peCapacity" min="1" max="10000"></div>
         </div>
         <div class="field">
           <label for="peLocation" id="peLocationLabel">Venue</label>
-          <input type="text" id="peLocation" placeholder="e.g. Pride Centre, Embakasi">
+          <input type="text" id="peLocation" maxlength="255" placeholder="e.g. Pride Centre, Embakasi">
         </div>
-        <div class="field"><label for="peDescription">Description</label><textarea id="peDescription"></textarea></div>
+        <div class="field"><label for="peDescription">Description</label><textarea id="peDescription" maxlength="5000"></textarea></div>
         ${targetingFieldsHTML('pe')}
         <p id="pe-error" style="color:var(--kq-red); font-size:0.85rem; display:none; margin-bottom:12px;"></p>
         <div style="display:flex; gap:10px;">
@@ -2246,8 +2332,8 @@ function openPostOpportunityModal(existing = null) {
             ? 'Small changes such as a new closing date stay live. Changing the application link to a new site, or anything the scam checks pick up, sends it back to the alumni office first.'
             : 'Your post is still waiting for review. Your changes replace it.'}</div>
       <form id="post-opp-form" novalidate>
-        <div class="field"><label for="poTitle">Role title</label><input type="text" id="poTitle" placeholder="e.g. Cabin Safety Trainer"></div>
-        <div class="field"><label for="poCompany">Company or department</label><input type="text" id="poCompany" placeholder="e.g. KQ Training Academy"></div>
+        <div class="field"><label for="poTitle">Role title</label><input type="text" id="poTitle" maxlength="150" placeholder="e.g. Cabin Safety Trainer"></div>
+        <div class="field"><label for="poCompany">Company or department</label><input type="text" id="poCompany" maxlength="150" placeholder="e.g. KQ Training Academy"></div>
         <div class="field-row">
           <div class="field"><label for="poType">Type</label><select id="poType">${typeOptions}</select></div>
           <div class="field">
@@ -2259,11 +2345,11 @@ function openPostOpportunityModal(existing = null) {
           </div>
         </div>
         <div class="field-row">
-          <div class="field"><label for="poLocation">Location</label><input type="text" id="poLocation" placeholder="e.g. Nairobi or Remote"></div>
+          <div class="field"><label for="poLocation">Location</label><input type="text" id="poLocation" maxlength="150" placeholder="e.g. Nairobi or Remote"></div>
           <div class="field"><label for="poClosing">Closing date</label><input type="date" id="poClosing" min="${today}"></div>
         </div>
-        <div class="field"><label for="poLink">Application link or contact email</label><input type="text" id="poLink" placeholder="https://... or name@example.com"></div>
-        <div class="field"><label for="poDescription">Description</label><textarea id="poDescription" placeholder="What the role involves and who it suits"></textarea></div>
+        <div class="field"><label for="poLink">Application link or contact email</label><input type="text" id="poLink" maxlength="255" placeholder="https://... or name@example.com"></div>
+        <div class="field"><label for="poDescription">Description</label><textarea id="poDescription" maxlength="5000" placeholder="What the role involves and who it suits"></textarea></div>
         <div class="field"><label for="poSkills">Skills it asks for (up to 8, separated by commas)</label><input type="text" id="poSkills" placeholder="e.g. Dangerous goods, Excel, team leadership">
           <p class="field-hint">Staff see which of these they already have, and well-matched staff get an alert.</p></div>
         <p id="po-error" style="color:var(--kq-red); font-size:0.85rem; display:none; margin-bottom:12px;"></p>
@@ -3899,6 +3985,7 @@ async function renderAccountSettings() {
     root.querySelector('.md-sub').textContent = 'Could not load your account. Refresh the page to try again.';
     return;
   }
+  if (account.privacy && account.privacy.accepted !== account.privacy.current) showPrivacyUpdate(account.privacy.current);
 
   document.getElementById('st-name').textContent = account.name;
   document.getElementById('st-email').textContent = account.email;

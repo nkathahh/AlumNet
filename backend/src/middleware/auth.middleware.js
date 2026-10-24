@@ -1,6 +1,20 @@
 const jwt = require('jsonwebtoken');
 const pool = require('../config/db');
 const { readSessionToken, clearSessionCookie, setSessionCookie, limitsFor, REFRESH_AFTER_SECONDS } = require('../utils/session');
+const { PRIVACY_VERSION } = require('../utils/privacy');
+
+/*
+ * What a member can still do before accepting a changed privacy notice:
+ * accept it, see their account, download their data, delete their account
+ * or sign out everywhere. Declining the new notice must never trap their data.
+ */
+const PRIVACY_EXEMPT = new Set([
+  'POST /api/auth/privacy',
+  'GET /api/auth/account',
+  'GET /api/auth/account/export',
+  'POST /api/auth/account/delete',
+  'POST /api/auth/logout-everywhere'
+]);
 
 const UNSAFE = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
@@ -37,7 +51,7 @@ async function requireAuth(req, res, next) {
 
   try {
     const [[u]] = await pool.execute(
-      `SELECT u.status, u.session_version, u.totp_enabled, sd.alumni_eligible
+      `SELECT u.status, u.session_version, u.totp_enabled, u.privacy_version, sd.alumni_eligible
        FROM users u LEFT JOIN staff_directory sd ON sd.staff_number = u.staff_number
        WHERE u.user_id = :userId`,
       { userId: decoded.userId }
@@ -61,6 +75,14 @@ async function requireAuth(req, res, next) {
       setSessionCookie(req, res, { userId: decoded.userId, role: decoded.role, sessionVersion: u.session_version, at: signedInAt });
     }
     req.user = { userId: decoded.userId, role: decoded.role, twoFactorEnabled: Boolean(u.totp_enabled) };
+    // The privacy notice changed since they last accepted it
+    if (u.privacy_version !== PRIVACY_VERSION && !PRIVACY_EXEMPT.has(`${req.method} ${req.originalUrl.split('?')[0]}`)) {
+      return res.status(403).json({
+        code: 'privacy_update',
+        version: PRIVACY_VERSION,
+        error: 'The privacy notice has changed. Please read and accept it to carry on.'
+      });
+    }
     next();
   } catch (err) {
     next(err);

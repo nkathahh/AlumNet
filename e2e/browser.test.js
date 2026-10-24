@@ -28,7 +28,13 @@ if (!String(process.env.DB_NAME || '').endsWith('_test')) {
 }
 
 const backendRequire = createRequire(path.join(__dirname, '..', 'backend', 'package.json'));
+// Only the database connection comes from backend/.env (anything set in the terminal wins)
+try {
+  const local = backendRequire('dotenv').parse(require('node:fs').readFileSync(path.join(__dirname, '..', 'backend', '.env')));
+  for (const [k, v] of Object.entries(local)) if (k.startsWith('DB_') && process.env[k] === undefined) process.env[k] = v;
+} catch { /* no .env (as in CI) */ }
 const bcrypt = backendRequire('bcrypt');
+const { PRIVACY_VERSION } = require('../backend/src/utils/privacy');
 
 const PORT = process.env.E2E_PORT || 4998;
 const ROOT = `http://localhost:${PORT}`;
@@ -42,12 +48,12 @@ let server; let db; let browser; let serverLog = '';
 const ids = {};
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function member(name, email, role) {
+async function member(name, email, role, privacyVersion = PRIVACY_VERSION) {
   const hash = await bcrypt.hash(PASSWORD, 4);
   const [r] = await db.execute(
-    `INSERT INTO users (name, email, password_hash, status, email_verified_at, onboarded_at, privacy_accepted_at, department)
-     VALUES (:name, :email, :hash, 'active', NOW(), NOW(), NOW(), 'Human Resources')`,
-    { name, email, hash }
+    `INSERT INTO users (name, email, password_hash, status, email_verified_at, onboarded_at, privacy_accepted_at, privacy_version, department)
+     VALUES (:name, :email, :hash, 'active', NOW(), NOW(), NOW(), :privacyVersion, 'Human Resources')`,
+    { name, email, hash, privacyVersion }
   );
   const table = { mentor: 'mentors', mentee: 'mentees', admin: 'admins' }[role];
   await db.execute(`INSERT INTO ${table} (user_id) VALUES (:id)`, { id: r.insertId });
@@ -261,4 +267,32 @@ test('pages fit a phone screen without sideways scrolling', async () => {
     await ctx.close();
   }
   assert.deepEqual(wide, [], `Wider than a 390px phone:\n${wide.join('\n')}`);
+});
+
+test('a member asked to accept a changed privacy notice can accept it, or still reach their data', async () => {
+  await member('Old Notice', 'e2e.old.notice@example.org', 'mentee', '2026-08-01');
+  const pg = await page('e2e.old.notice@example.org');
+  await pg.waitForLoadState('networkidle');
+  const dlg = pg.getByRole('dialog', { name: 'We updated our privacy notice' });
+  await dlg.waitFor();
+  // It cannot be closed with Escape: the server refuses everything else anyway
+  await pg.keyboard.press('Escape');
+  assert.equal(await dlg.isVisible(), true);
+  const a11y = await new AxeBuilder({ page: pg }).include('.modal-card').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+  assert.deepEqual(a11y.violations.filter((v) => ['critical', 'serious'].includes(v.impact)).map((v) => v.id), []);
+
+  // Account settings shows a banner instead, so data can still be downloaded
+  await pg.goto(`${ROOT}/settings.html`);
+  await pg.waitForLoadState('networkidle');
+  await pg.locator('#privacy-banner').waitFor();
+  assert.equal(await pg.getByRole('dialog').count(), 0);
+  assert.equal(await pg.locator('#st-name').textContent(), 'Old Notice');
+
+  await pg.locator('#privacy-banner button').click();
+  await pg.waitForLoadState('load');
+  await pg.waitForLoadState('networkidle');
+  assert.equal(await pg.locator('#privacy-banner').count(), 0);
+  assert.equal((await api(pg, 'GET', '/profile/me')).status, 200);
+  assert.deepEqual(pg.problems.filter((p) => p.startsWith('page error')), []);
+  await pg.context().close();
 });

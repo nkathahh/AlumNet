@@ -90,6 +90,13 @@ app.use((err, req, res, next) => {
   if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'The request was not valid. Reload the page and try again.' });
   if (err.type === 'entity.too.large') return res.status(413).json({ error: 'That is too much data to send at once.' });
   console.error(err);
+  // Safety net behind the field checks: the database refused a value that is
+  // too long or the wrong kind. The member is told to fix their input rather
+  // than seeing a server error; the log above still shows it, so the missing
+  // check can be added.
+  if (['ER_DATA_TOO_LONG', 'ER_TRUNCATED_WRONG_VALUE', 'ER_TRUNCATED_WRONG_VALUE_FOR_FIELD', 'WARN_DATA_TRUNCATED', 'ER_WARN_DATA_OUT_OF_RANGE'].includes(err.code)) {
+    return res.status(400).json({ error: 'One of the fields is too long or not in the right format. Shorten it and try again.' });
+  }
   const status = err.status || 500;
   // Do not leak internal error details to users in production
   const message = status < 500 || process.env.NODE_ENV !== 'production'

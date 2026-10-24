@@ -161,6 +161,51 @@ Space. If the service is ever compromised, it cannot change accounts, posts
 or reports.
 
 
+## Backups and restoring
+
+Aiven's free plan keeps a single backup for its own disaster recovery, cannot restore to a
+point in time and may power off a service that has been idle. So keep your own copies.
+
+**Set up once.** Make a backup key the same way as `JWT_SECRET` (64 hexadecimal characters)
+and put it in `backend/.env` as `BACKUP_KEY`. Store a second copy of the key in your password
+manager, not next to the backups. Make a file `backend/.env.live` with the Aiven `DB_*`
+settings and the same `BACKUP_KEY` (git ignores it as long as you never add it).
+
+**Make a backup** (from the `backend` folder, at least weekly and before every migration):
+
+```
+npm run backup -- --env=.env.live
+```
+
+It writes an encrypted file such as `backups/alumnet-20261024-1500.sql.gz.enc`. Copy it to a
+second place you control (for example a private OneDrive folder). Backups hold personal data,
+so never commit them, email them or keep unencrypted copies.
+
+**Prove it restores** (this is the test restore):
+
+```
+npm run restore-check
+```
+
+With no file named it checks the newest backup in `backups`. To check a particular one, add
+its name: `npm run restore-check -- backups\alumnet-20261024-1500.sql.gz.enc`.
+
+It loads the backup into a scratch database called `alumnet_restore_test` on your local MySQL,
+checks that every table has the same number of rows and the same data as when the backup was
+made, then deletes the scratch database. Keep the output (it states the number of tables and
+rows and how long the restore took) as evidence for the report. CI runs the same check on the
+test database on every push.
+
+**Restore for real** (if the Aiven database is lost):
+
+1. Create a new MySQL service on Aiven and put its settings in `backend/.env.live`.
+2. Run `npm run restore-check -- <latest backup> --keep` with `RESTORE_DB_HOST`,
+   `RESTORE_DB_PORT`, `RESTORE_DB_USER`, `RESTORE_DB_PASSWORD`, `RESTORE_DB_SSL=true` and
+   `RESTORE_DB_SSL_CA` set to the new service in the terminal. It builds `alumnet_restore_test`
+   there and checks it.
+3. Point the Render `DB_NAME` (and host settings) at that database and restart. Anything
+   written after the backup was made is lost, which is why backups should be frequent.
+
 ## Security settings to check after deploying
 
 - `ML_API_KEY` must be set on Hugging Face. On a Space the service refuses to start without it

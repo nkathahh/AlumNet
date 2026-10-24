@@ -11,6 +11,7 @@ const { createNotification } = require('../utils/notify');
 const { setSessionCookie, clearSessionCookie } = require('../utils/session');
 const { normaliseStaffNumber, normaliseEmail, findStaff, hrEmailFor, roleForStaff, canJoin, resolveRole, endOpenMentorships } = require('../utils/hr');
 const { assessSignup } = require('../utils/risk');
+const { PRIVACY_VERSION } = require('../utils/privacy');
 
 const SALT_ROUNDS = 10;
 const RESET_TOKEN_MINUTES = 30;
@@ -88,21 +89,27 @@ async function bumpSessionVersion(userId) {
 }
 
 // Creates a verified account from an HR record, in one transaction
-async function createAccount({ staff, email, passwordHash, googleId = null, privacyAcceptedAt = null }) {
+async function createAccount({ staff, email, passwordHash, googleId = null, privacyAcceptedAt = null, privacyVersion = null }) {
   const role = roleForStaff(staff);
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
     const [result] = await conn.execute(
       `INSERT INTO users (name, email, password_hash, staff_number, department, google_id,
-                          country, email_verified_at, privacy_accepted_at)
-       VALUES (:name, :email, :passwordHash, :staffNumber, :department, :googleId, 'Kenya', NOW(), :privacy)`,
+                          country, email_verified_at, privacy_accepted_at, privacy_version)
+       VALUES (:name, :email, :passwordHash, :staffNumber, :department, :googleId, 'Kenya', NOW(), :privacy, :version)`,
       {
         name: staff.full_name, email, passwordHash, staffNumber: staff.staff_number,
-        department: staff.department, googleId, privacy: privacyAcceptedAt || new Date()
+        department: staff.department, googleId, privacy: privacyAcceptedAt || new Date(), version: privacyVersion
       }
     );
     const userId = result.insertId;
+    // A request started before the notice changed carries the old version (or
+    // none): the member is then asked to accept the current one at sign-in
+    if (privacyVersion) {
+      await conn.execute('INSERT INTO privacy_acceptances (user_id, version, accepted_at) VALUES (:userId, :version, :at)',
+        { userId, version: privacyVersion, at: privacyAcceptedAt || new Date() });
+    }
     await conn.execute(`INSERT INTO ${role === 'mentor' ? 'mentors' : 'mentees'} (user_id) VALUES (:userId)`, { userId });
     await conn.execute('INSERT INTO profiles (user_id) VALUES (:userId)', { userId });
     await conn.commit();
@@ -193,9 +200,9 @@ async function signupStart(req, res, next) {
     );
     const token = newToken();
     await pool.execute(
-      `INSERT INTO signup_requests (staff_number, email, token_hash, hr_match, ip_address, privacy_accepted_at, expires_at)
-       VALUES (:staffNumber, :email, :tokenHash, :hrMatch, :ip, NOW(), DATE_ADD(NOW(), INTERVAL ${SIGNUP_LINK_HOURS} HOUR))`,
-      { staffNumber, email, tokenHash: sha256(token), hrMatch: hrMatch ? 1 : 0, ip: req.ip || null }
+      `INSERT INTO signup_requests (staff_number, email, token_hash, hr_match, ip_address, privacy_accepted_at, privacy_version, expires_at)
+       VALUES (:staffNumber, :email, :tokenHash, :hrMatch, :ip, NOW(), :version, DATE_ADD(NOW(), INTERVAL ${SIGNUP_LINK_HOURS} HOUR))`,
+      { staffNumber, email, tokenHash: sha256(token), hrMatch: hrMatch ? 1 : 0, ip: req.ip || null, version: PRIVACY_VERSION }
     );
 
     const link = `${appUrl()}/signup.html?token=${token}`;
@@ -288,7 +295,8 @@ async function signupComplete(req, res, next) {
     }
 
     const { userId } = await createAccount({
-      staff, email: request.email, passwordHash, googleId, privacyAcceptedAt: request.privacy_accepted_at
+      staff, email: request.email, passwordHash, googleId,
+      privacyAcceptedAt: request.privacy_accepted_at, privacyVersion: request.privacy_version
     });
     await pool.execute(`UPDATE signup_requests SET status = 'completed' WHERE request_id = :id`, { id: request.request_id });
     return startSession(req, res, userId);
@@ -592,11 +600,32 @@ async function setAlerts(req, res, next) {
   } catch (err) { next(err); }
 }
 
+/*
+ * Accepting a changed privacy notice. The version sent must be the current
+ * one, so a page left open on an older notice cannot accept text the member
+ * never saw.
+ */
+async function acceptPrivacy(req, res, next) {
+  if (req.body.version !== PRIVACY_VERSION) {
+    return res.status(409).json({ error: 'The privacy notice has changed again. Reload the page and read the latest version.', version: PRIVACY_VERSION });
+  }
+  try {
+    const { userId } = req.user;
+    await pool.execute('UPDATE users SET privacy_version = :version, privacy_accepted_at = NOW() WHERE user_id = :userId',
+      { version: PRIVACY_VERSION, userId });
+    await pool.execute('INSERT IGNORE INTO privacy_acceptances (user_id, version) VALUES (:userId, :version)',
+      { userId, version: PRIVACY_VERSION });
+    res.json({ message: 'Thank you. You can carry on using AlumNet.', version: PRIVACY_VERSION });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function getAccount(req, res, next) {
   try {
     const [[user]] = await pool.execute(
       `SELECT u.name, u.email, u.department, u.totp_enabled, u.google_id, u.password_changed_at, u.created_at,
-              u.alert_opportunities, u.alert_events,
+              u.alert_opportunities, u.alert_events, u.privacy_version, u.privacy_accepted_at,
               sd.employment_status,
               (SELECT COUNT(*) FROM two_factor_backup_codes b WHERE b.user_id = u.user_id AND b.used_at IS NULL) AS backup_codes_left
        FROM users u LEFT JOIN staff_directory sd ON sd.staff_number = u.staff_number
@@ -616,6 +645,7 @@ async function getAccount(req, res, next) {
       googleLinked: Boolean(user.google_id),
       passwordChangedAt: user.password_changed_at,
       alerts: { opportunities: Boolean(user.alert_opportunities), events: Boolean(user.alert_events) },
+      privacy: { accepted: user.privacy_version, acceptedAt: user.privacy_accepted_at, current: PRIVACY_VERSION },
       createdAt: user.created_at
     });
   } catch (err) {
@@ -741,7 +771,7 @@ async function exportMyData(req, res, next) {
   try {
     const [[account]] = await pool.execute(
       `SELECT name, email, department, city, country, status, created_at, last_login_at,
-              privacy_accepted_at, totp_enabled, (google_id IS NOT NULL) AS google_linked,
+              privacy_accepted_at, privacy_version, totp_enabled, (google_id IS NOT NULL) AS google_linked,
               alert_opportunities, alert_events
        FROM users WHERE user_id = :userId`,
       { userId }
@@ -777,6 +807,7 @@ async function exportMyData(req, res, next) {
     const [alerts] = await pool.execute('SELECT item_type, item_id, sent_at FROM alerts_sent WHERE user_id = :userId', { userId });
     const [meetings] = await pool.execute('SELECT met_on, mode, minutes, note, created_at FROM mentorship_meetings WHERE logged_by = :userId', { userId });
     const [feedback] = await pool.execute('SELECT side, met, helpful, goals_progress, felt_safe, comment, created_at FROM mentorship_feedback WHERE user_id = :userId', { userId });
+    const [privacy] = await pool.execute('SELECT version, accepted_at FROM privacy_acceptances WHERE user_id = :userId ORDER BY accepted_at', { userId });
     const [notifications] = await pool.execute(
       'SELECT type, message, is_read, created_at FROM notifications WHERE user_id = :userId ORDER BY created_at DESC',
       { userId }
@@ -796,6 +827,7 @@ async function exportMyData(req, res, next) {
       reports_you_made: reportsMade,
       people_you_blocked: blocked,
       alerts_sent_to_you: alerts,
+      privacy_notices_you_accepted: privacy,
       // Matching also keeps a list of numbers worked out from your profile text (an embedding).
       // It is not readable as text, is replaced when your profile changes and deleted with your account.
       derived_data: 'Profile embedding used for matching (not included: numbers only, rebuilt from your profile)',
@@ -878,7 +910,7 @@ module.exports = {
   signupStart, signupLink, signupComplete, signupRequestReview,
   login, googleLogin, verifyTwoFactor, logout, logoutEverywhere,
   forgotPassword, resetPassword, changePassword,
-  getAccount,
+  getAccount, acceptPrivacy,
   warnAccountUnderAttack, setAlerts, setupTwoFactor, enableTwoFactor, regenerateBackupCodes, disableTwoFactor,
   linkGoogle, unlinkGoogle, exportMyData, deleteMyAccount,
   // shared with the admin controller and tests

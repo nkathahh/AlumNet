@@ -4,6 +4,7 @@ const { chooseLane, finishSubmission } = require('../utils/moderation');
 const { splitList } = require('../utils/fit');
 const { annotateOpportunities } = require('../utils/recommend');
 const { reviewEdit } = require('../utils/liveEdit');
+const { checkText } = require('../utils/fields');
 const logAdminAction = (...args) => require('./admin.controller').logAdminAction(...args);
 
 // Up to 8 skills, so the checklist stays readable
@@ -16,7 +17,10 @@ function cleanSkills(text) {
 
 const OPPORTUNITY_TYPES = ['full_time', 'part_time', 'contract', 'consultancy', 'internal_transfer', 'volunteer'];
 
-function validateOpportunityInput({ title, company, opportunityType, description, applyLink, closingDate, requiredSkills }) {
+function validateOpportunityInput(body) {
+  const { title, company, opportunityType, description, applyLink, closingDate, requiredSkills } = body;
+  const wrongSize = checkText(body, 'opportunity');
+  if (wrongSize) return wrongSize;
   if (!title || !title.trim()) return 'Title is required';
   const skills = cleanSkills(requiredSkills);
   if (skills.error) return skills.error;

@@ -1727,6 +1727,9 @@ textarea:focus-visible {
    ------------------------------------------------------------------ */
 .dlg { max-width: 480px; }
 .dlg h3 { margin: 0 0 12px; font-size: 1.1rem; }
+/* Links inside dialogs and banners look like links in both themes */
+.dlg .st-text a, .md-banner-body a { color: inherit; font-weight: 600; text-decoration: underline; text-decoration-color: var(--kq-red); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.dlg .st-text a:hover, .md-banner-body a:hover { color: var(--kq-red); }
 .dlg-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
 .dlg-safety { font-size: 0.8rem; color: var(--ink-soft); background: var(--wash, rgba(0,0,0,0.04)); border-radius: var(--radius); padding: 10px 12px; margin: 12px 0 4px; line-height: 1.45; }
 .dlg-safety .btn-quiet { padding: 0; color: var(--kq-red); }
