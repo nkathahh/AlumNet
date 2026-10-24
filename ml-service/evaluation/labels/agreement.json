@@ -1,0 +1,14 @@
+{
+  "pairs": 165,
+  "exact_agreement": 0.515,
+  "cohen_kappa": 0.21,
+  "cohen_kappa_linear": 0.367,
+  "disagreements": 80,
+  "pooled": true,
+  "pairs_judged": 165,
+  "pairs_assumed_not_relevant": 135,
+  "pool_depth": 5,
+  "random_check_pairs": 30,
+  "random_check_relevant": 0,
+  "unresolved": 0
+}

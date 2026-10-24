@@ -1,0 +1,301 @@
+pair_id,split,mentee_id,mentor_id,judge_a,judge_b,judge_c,final_label,judged
+D01-M01,dev,D01,M01,2,2,,2,yes
+D01-M02,dev,D01,M02,2,1,2,2,yes
+D01-M03,dev,D01,M03,1,1,,1,yes
+D01-M04,dev,D01,M04,2,1,1,1,yes
+D01-M05,dev,D01,M05,0,0,,0,yes
+D01-M06,dev,D01,M06,0,0,,0,yes
+D01-M07,dev,D01,M07,0,0,,0,yes
+D01-M08,dev,D01,M08,,,,0,no (outside the pool)
+D01-M09,dev,D01,M09,0,0,,0,yes
+D01-M10,dev,D01,M10,,,,0,no (outside the pool)
+D01-M11,dev,D01,M11,1,0,0,0,yes
+D01-M12,dev,D01,M12,,,,0,no (outside the pool)
+D01-M13,dev,D01,M13,,,,0,no (outside the pool)
+D01-M14,dev,D01,M14,,,,0,no (outside the pool)
+D01-M15,dev,D01,M15,,,,0,no (outside the pool)
+D01-M16,dev,D01,M16,,,,0,no (outside the pool)
+D01-M17,dev,D01,M17,,,,0,no (outside the pool)
+D01-M18,dev,D01,M18,,,,0,no (outside the pool)
+D01-M19,dev,D01,M19,,,,0,no (outside the pool)
+D01-M20,dev,D01,M20,,,,0,no (outside the pool)
+D02-M01,dev,D02,M01,,,,0,no (outside the pool)
+D02-M02,dev,D02,M02,0,0,,0,yes
+D02-M03,dev,D02,M03,0,0,,0,yes
+D02-M04,dev,D02,M04,,,,0,no (outside the pool)
+D02-M05,dev,D02,M05,2,2,,2,yes
+D02-M06,dev,D02,M06,1,0,1,1,yes
+D02-M07,dev,D02,M07,2,1,1,1,yes
+D02-M08,dev,D02,M08,2,1,2,2,yes
+D02-M09,dev,D02,M09,,,,0,no (outside the pool)
+D02-M10,dev,D02,M10,0,0,,0,yes
+D02-M11,dev,D02,M11,,,,0,no (outside the pool)
+D02-M12,dev,D02,M12,,,,0,no (outside the pool)
+D02-M13,dev,D02,M13,,,,0,no (outside the pool)
+D02-M14,dev,D02,M14,0,0,,0,yes
+D02-M15,dev,D02,M15,0,0,,0,yes
+D02-M16,dev,D02,M16,,,,0,no (outside the pool)
+D02-M17,dev,D02,M17,,,,0,no (outside the pool)
+D02-M18,dev,D02,M18,,,,0,no (outside the pool)
+D02-M19,dev,D02,M19,,,,0,no (outside the pool)
+D02-M20,dev,D02,M20,0,0,,0,yes
+D03-M01,dev,D03,M01,2,2,,2,yes
+D03-M02,dev,D03,M02,2,0,1,1,yes
+D03-M03,dev,D03,M03,2,1,2,2,yes
+D03-M04,dev,D03,M04,2,1,1,1,yes
+D03-M05,dev,D03,M05,0,0,,0,yes
+D03-M06,dev,D03,M06,,,,0,no (outside the pool)
+D03-M07,dev,D03,M07,0,0,,0,yes
+D03-M08,dev,D03,M08,,,,0,no (outside the pool)
+D03-M09,dev,D03,M09,,,,0,no (outside the pool)
+D03-M10,dev,D03,M10,1,0,0,0,yes
+D03-M11,dev,D03,M11,1,0,1,1,yes
+D03-M12,dev,D03,M12,,,,0,no (outside the pool)
+D03-M13,dev,D03,M13,1,0,0,0,yes
+D03-M14,dev,D03,M14,1,0,0,0,yes
+D03-M15,dev,D03,M15,1,0,0,0,yes
+D03-M16,dev,D03,M16,1,0,0,0,yes
+D03-M17,dev,D03,M17,,,,0,no (outside the pool)
+D03-M18,dev,D03,M18,,,,0,no (outside the pool)
+D03-M19,dev,D03,M19,,,,0,no (outside the pool)
+D03-M20,dev,D03,M20,,,,0,no (outside the pool)
+D04-M01,dev,D04,M01,0,0,,0,yes
+D04-M02,dev,D04,M02,0,0,,0,yes
+D04-M03,dev,D04,M03,,,,0,no (outside the pool)
+D04-M04,dev,D04,M04,2,0,1,1,yes
+D04-M05,dev,D04,M05,,,,0,no (outside the pool)
+D04-M06,dev,D04,M06,,,,0,no (outside the pool)
+D04-M07,dev,D04,M07,,,,0,no (outside the pool)
+D04-M08,dev,D04,M08,,,,0,no (outside the pool)
+D04-M09,dev,D04,M09,2,2,,2,yes
+D04-M10,dev,D04,M10,1,1,,1,yes
+D04-M11,dev,D04,M11,1,0,0,0,yes
+D04-M12,dev,D04,M12,1,0,0,0,yes
+D04-M13,dev,D04,M13,,,,0,no (outside the pool)
+D04-M14,dev,D04,M14,,,,0,no (outside the pool)
+D04-M15,dev,D04,M15,,,,0,no (outside the pool)
+D04-M16,dev,D04,M16,1,0,0,0,yes
+D04-M17,dev,D04,M17,0,0,,0,yes
+D04-M18,dev,D04,M18,,,,0,no (outside the pool)
+D04-M19,dev,D04,M19,,,,0,no (outside the pool)
+D04-M20,dev,D04,M20,,,,0,no (outside the pool)
+D05-M01,dev,D05,M01,1,0,1,1,yes
+D05-M02,dev,D05,M02,1,0,0,0,yes
+D05-M03,dev,D05,M03,1,0,0,0,yes
+D05-M04,dev,D05,M04,,,,0,no (outside the pool)
+D05-M05,dev,D05,M05,0,0,,0,yes
+D05-M06,dev,D05,M06,,,,0,no (outside the pool)
+D05-M07,dev,D05,M07,0,0,,0,yes
+D05-M08,dev,D05,M08,0,0,,0,yes
+D05-M09,dev,D05,M09,,,,0,no (outside the pool)
+D05-M10,dev,D05,M10,,,,0,no (outside the pool)
+D05-M11,dev,D05,M11,,,,0,no (outside the pool)
+D05-M12,dev,D05,M12,0,0,,0,yes
+D05-M13,dev,D05,M13,2,2,,2,yes
+D05-M14,dev,D05,M14,1,0,1,1,yes
+D05-M15,dev,D05,M15,1,0,0,0,yes
+D05-M16,dev,D05,M16,2,1,1,1,yes
+D05-M17,dev,D05,M17,0,0,,0,yes
+D05-M18,dev,D05,M18,,,,0,no (outside the pool)
+D05-M19,dev,D05,M19,1,0,0,0,yes
+D05-M20,dev,D05,M20,,,,0,no (outside the pool)
+T01-M01,test,T01,M01,2,1,1,1,yes
+T01-M02,test,T01,M02,1,0,1,1,yes
+T01-M03,test,T01,M03,0,0,,0,yes
+T01-M04,test,T01,M04,2,2,,2,yes
+T01-M05,test,T01,M05,,,,0,no (outside the pool)
+T01-M06,test,T01,M06,,,,0,no (outside the pool)
+T01-M07,test,T01,M07,,,,0,no (outside the pool)
+T01-M08,test,T01,M08,,,,0,no (outside the pool)
+T01-M09,test,T01,M09,0,0,,0,yes
+T01-M10,test,T01,M10,0,0,,0,yes
+T01-M11,test,T01,M11,,,,0,no (outside the pool)
+T01-M12,test,T01,M12,0,0,,0,yes
+T01-M13,test,T01,M13,0,0,,0,yes
+T01-M14,test,T01,M14,,,,0,no (outside the pool)
+T01-M15,test,T01,M15,1,0,0,0,yes
+T01-M16,test,T01,M16,0,0,,0,yes
+T01-M17,test,T01,M17,0,0,,0,yes
+T01-M18,test,T01,M18,,,,0,no (outside the pool)
+T01-M19,test,T01,M19,,,,0,no (outside the pool)
+T01-M20,test,T01,M20,,,,0,no (outside the pool)
+T02-M01,test,T02,M01,2,1,2,2,yes
+T02-M02,test,T02,M02,2,0,1,1,yes
+T02-M03,test,T02,M03,2,2,,2,yes
+T02-M04,test,T02,M04,1,0,0,0,yes
+T02-M05,test,T02,M05,,,,0,no (outside the pool)
+T02-M06,test,T02,M06,0,0,,0,yes
+T02-M07,test,T02,M07,,,,0,no (outside the pool)
+T02-M08,test,T02,M08,,,,0,no (outside the pool)
+T02-M09,test,T02,M09,0,0,,0,yes
+T02-M10,test,T02,M10,,,,0,no (outside the pool)
+T02-M11,test,T02,M11,1,0,0,0,yes
+T02-M12,test,T02,M12,0,0,,0,yes
+T02-M13,test,T02,M13,,,,0,no (outside the pool)
+T02-M14,test,T02,M14,1,0,0,0,yes
+T02-M15,test,T02,M15,,,,0,no (outside the pool)
+T02-M16,test,T02,M16,,,,0,no (outside the pool)
+T02-M17,test,T02,M17,,,,0,no (outside the pool)
+T02-M18,test,T02,M18,0,0,,0,yes
+T02-M19,test,T02,M19,,,,0,no (outside the pool)
+T02-M20,test,T02,M20,,,,0,no (outside the pool)
+T03-M01,test,T03,M01,1,0,1,1,yes
+T03-M02,test,T03,M02,,,,0,no (outside the pool)
+T03-M03,test,T03,M03,,,,0,no (outside the pool)
+T03-M04,test,T03,M04,1,0,0,0,yes
+T03-M05,test,T03,M05,2,1,2,2,yes
+T03-M06,test,T03,M06,1,0,0,0,yes
+T03-M07,test,T03,M07,1,0,0,0,yes
+T03-M08,test,T03,M08,2,2,,2,yes
+T03-M09,test,T03,M09,,,,0,no (outside the pool)
+T03-M10,test,T03,M10,,,,0,no (outside the pool)
+T03-M11,test,T03,M11,0,0,,0,yes
+T03-M12,test,T03,M12,0,0,,0,yes
+T03-M13,test,T03,M13,0,0,,0,yes
+T03-M14,test,T03,M14,,,,0,no (outside the pool)
+T03-M15,test,T03,M15,,,,0,no (outside the pool)
+T03-M16,test,T03,M16,,,,0,no (outside the pool)
+T03-M17,test,T03,M17,0,0,,0,yes
+T03-M18,test,T03,M18,,,,0,no (outside the pool)
+T03-M19,test,T03,M19,,,,0,no (outside the pool)
+T03-M20,test,T03,M20,,,,0,no (outside the pool)
+T04-M01,test,T04,M01,0,0,,0,yes
+T04-M02,test,T04,M02,0,0,,0,yes
+T04-M03,test,T04,M03,,,,0,no (outside the pool)
+T04-M04,test,T04,M04,0,0,,0,yes
+T04-M05,test,T04,M05,2,0,1,1,yes
+T04-M06,test,T04,M06,1,1,,1,yes
+T04-M07,test,T04,M07,2,2,,2,yes
+T04-M08,test,T04,M08,1,0,0,0,yes
+T04-M09,test,T04,M09,,,,0,no (outside the pool)
+T04-M10,test,T04,M10,,,,0,no (outside the pool)
+T04-M11,test,T04,M11,0,0,,0,yes
+T04-M12,test,T04,M12,0,0,,0,yes
+T04-M13,test,T04,M13,0,0,,0,yes
+T04-M14,test,T04,M14,,,,0,no (outside the pool)
+T04-M15,test,T04,M15,,,,0,no (outside the pool)
+T04-M16,test,T04,M16,0,0,,0,yes
+T04-M17,test,T04,M17,,,,0,no (outside the pool)
+T04-M18,test,T04,M18,,,,0,no (outside the pool)
+T04-M19,test,T04,M19,0,0,,0,yes
+T04-M20,test,T04,M20,,,,0,no (outside the pool)
+T05-M01,test,T05,M01,0,0,,0,yes
+T05-M02,test,T05,M02,,,,0,no (outside the pool)
+T05-M03,test,T05,M03,1,0,0,0,yes
+T05-M04,test,T05,M04,1,0,1,1,yes
+T05-M05,test,T05,M05,,,,0,no (outside the pool)
+T05-M06,test,T05,M06,,,,0,no (outside the pool)
+T05-M07,test,T05,M07,,,,0,no (outside the pool)
+T05-M08,test,T05,M08,,,,0,no (outside the pool)
+T05-M09,test,T05,M09,2,0,1,1,yes
+T05-M10,test,T05,M10,2,2,,2,yes
+T05-M11,test,T05,M11,1,0,0,0,yes
+T05-M12,test,T05,M12,1,0,0,0,yes
+T05-M13,test,T05,M13,,,,0,no (outside the pool)
+T05-M14,test,T05,M14,1,0,1,1,yes
+T05-M15,test,T05,M15,,,,0,no (outside the pool)
+T05-M16,test,T05,M16,,,,0,no (outside the pool)
+T05-M17,test,T05,M17,0,0,,0,yes
+T05-M18,test,T05,M18,,,,0,no (outside the pool)
+T05-M19,test,T05,M19,0,0,,0,yes
+T05-M20,test,T05,M20,,,,0,no (outside the pool)
+T06-M01,test,T06,M01,,,,0,no (outside the pool)
+T06-M02,test,T06,M02,0,0,,0,yes
+T06-M03,test,T06,M03,0,0,,0,yes
+T06-M04,test,T06,M04,,,,0,no (outside the pool)
+T06-M05,test,T06,M05,0,0,,0,yes
+T06-M06,test,T06,M06,0,0,,0,yes
+T06-M07,test,T06,M07,,,,0,no (outside the pool)
+T06-M08,test,T06,M08,,,,0,no (outside the pool)
+T06-M09,test,T06,M09,1,0,0,0,yes
+T06-M10,test,T06,M10,1,0,0,0,yes
+T06-M11,test,T06,M11,1,0,0,0,yes
+T06-M12,test,T06,M12,2,2,,2,yes
+T06-M13,test,T06,M13,,,,0,no (outside the pool)
+T06-M14,test,T06,M14,1,0,0,0,yes
+T06-M15,test,T06,M15,0,0,,0,yes
+T06-M16,test,T06,M16,0,0,,0,yes
+T06-M17,test,T06,M17,,,,0,no (outside the pool)
+T06-M18,test,T06,M18,,,,0,no (outside the pool)
+T06-M19,test,T06,M19,,,,0,no (outside the pool)
+T06-M20,test,T06,M20,,,,0,no (outside the pool)
+T07-M01,test,T07,M01,1,0,0,0,yes
+T07-M02,test,T07,M02,1,0,0,0,yes
+T07-M03,test,T07,M03,0,0,,0,yes
+T07-M04,test,T07,M04,1,0,0,0,yes
+T07-M05,test,T07,M05,,,,0,no (outside the pool)
+T07-M06,test,T07,M06,,,,0,no (outside the pool)
+T07-M07,test,T07,M07,,,,0,no (outside the pool)
+T07-M08,test,T07,M08,,,,0,no (outside the pool)
+T07-M09,test,T07,M09,1,0,0,0,yes
+T07-M10,test,T07,M10,1,0,1,1,yes
+T07-M11,test,T07,M11,1,0,0,0,yes
+T07-M12,test,T07,M12,,,,0,no (outside the pool)
+T07-M13,test,T07,M13,2,1,1,1,yes
+T07-M14,test,T07,M14,2,2,,2,yes
+T07-M15,test,T07,M15,1,0,0,0,yes
+T07-M16,test,T07,M16,1,0,0,0,yes
+T07-M17,test,T07,M17,,,,0,no (outside the pool)
+T07-M18,test,T07,M18,0,0,,0,yes
+T07-M19,test,T07,M19,,,,0,no (outside the pool)
+T07-M20,test,T07,M20,,,,0,no (outside the pool)
+T08-M01,test,T08,M01,1,0,0,0,yes
+T08-M02,test,T08,M02,1,0,1,1,yes
+T08-M03,test,T08,M03,1,0,0,0,yes
+T08-M04,test,T08,M04,1,0,0,0,yes
+T08-M05,test,T08,M05,1,0,0,0,yes
+T08-M06,test,T08,M06,,,,0,no (outside the pool)
+T08-M07,test,T08,M07,,,,0,no (outside the pool)
+T08-M08,test,T08,M08,,,,0,no (outside the pool)
+T08-M09,test,T08,M09,1,0,0,0,yes
+T08-M10,test,T08,M10,0,0,,0,yes
+T08-M11,test,T08,M11,,,,0,no (outside the pool)
+T08-M12,test,T08,M12,,,,0,no (outside the pool)
+T08-M13,test,T08,M13,2,1,1,1,yes
+T08-M14,test,T08,M14,1,0,0,0,yes
+T08-M15,test,T08,M15,0,0,,0,yes
+T08-M16,test,T08,M16,2,2,,2,yes
+T08-M17,test,T08,M17,0,0,,0,yes
+T08-M18,test,T08,M18,,,,0,no (outside the pool)
+T08-M19,test,T08,M19,,,,0,no (outside the pool)
+T08-M20,test,T08,M20,,,,0,no (outside the pool)
+T09-M01,test,T09,M01,1,0,0,0,yes
+T09-M02,test,T09,M02,,,,0,no (outside the pool)
+T09-M03,test,T09,M03,,,,0,no (outside the pool)
+T09-M04,test,T09,M04,,,,0,no (outside the pool)
+T09-M05,test,T09,M05,1,0,0,0,yes
+T09-M06,test,T09,M06,,,,0,no (outside the pool)
+T09-M07,test,T09,M07,,,,0,no (outside the pool)
+T09-M08,test,T09,M08,1,0,1,1,yes
+T09-M09,test,T09,M09,,,,0,no (outside the pool)
+T09-M10,test,T09,M10,,,,0,no (outside the pool)
+T09-M11,test,T09,M11,,,,0,no (outside the pool)
+T09-M12,test,T09,M12,0,0,,0,yes
+T09-M13,test,T09,M13,,,,0,no (outside the pool)
+T09-M14,test,T09,M14,0,0,,0,yes
+T09-M15,test,T09,M15,2,1,1,1,yes
+T09-M16,test,T09,M16,,,,0,no (outside the pool)
+T09-M17,test,T09,M17,1,0,1,1,yes
+T09-M18,test,T09,M18,2,2,,2,yes
+T09-M19,test,T09,M19,1,0,1,1,yes
+T09-M20,test,T09,M20,1,0,0,0,yes
+T10-M01,test,T10,M01,0,0,,0,yes
+T10-M02,test,T10,M02,1,0,0,0,yes
+T10-M03,test,T10,M03,1,0,0,0,yes
+T10-M04,test,T10,M04,,,,0,no (outside the pool)
+T10-M05,test,T10,M05,0,0,,0,yes
+T10-M06,test,T10,M06,1,0,1,1,yes
+T10-M07,test,T10,M07,,,,0,no (outside the pool)
+T10-M08,test,T10,M08,0,0,,0,yes
+T10-M09,test,T10,M09,,,,0,no (outside the pool)
+T10-M10,test,T10,M10,0,0,,0,yes
+T10-M11,test,T10,M11,,,,0,no (outside the pool)
+T10-M12,test,T10,M12,1,0,0,0,yes
+T10-M13,test,T10,M13,0,0,,0,yes
+T10-M14,test,T10,M14,0,0,,0,yes
+T10-M15,test,T10,M15,1,0,0,0,yes
+T10-M16,test,T10,M16,0,0,,0,yes
+T10-M17,test,T10,M17,,,,0,no (outside the pool)
+T10-M18,test,T10,M18,,,,0,no (outside the pool)
+T10-M19,test,T10,M19,0,0,,0,yes
+T10-M20,test,T10,M20,2,2,,2,yes

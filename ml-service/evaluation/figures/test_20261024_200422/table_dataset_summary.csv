@@ -1,0 +1,34 @@
+﻿Group,Category,Count
+Mentors by department,Cabin Services,4
+Mentors by department,Cargo,4
+Mentors by department,Engineering & Maintenance,4
+Mentors by department,Flight Operations,4
+Mentors by department,Ground Operations,4
+Development mentees,Total,5
+Development mentees,Cabin Services,1
+Development mentees,Engineering & Maintenance,1
+Development mentees,Flight Operations,2
+Development mentees,Ground Operations,1
+Development mentees,Paraphrased wording,2
+Development mentees,Career switch,1
+Test mentees,Total,10
+Test mentees,Cabin Services,2
+Test mentees,Cargo,1
+Test mentees,Engineering & Maintenance,2
+Test mentees,Flight Operations,2
+Test mentees,Ground Operations,3
+Test mentees,Paraphrased wording,3
+Test mentees,Career switch,4
+Labels (dev),Relevant,8
+Labels (dev),Partly relevant,12
+Labels (dev),Not relevant,33
+Labels (dev),Outside the pool (taken as not relevant),47
+Labels (test),Relevant,12
+Labels (test),Partly relevant,18
+Labels (test),Not relevant,82
+Labels (test),Outside the pool (taken as not relevant),88
+Label agreement,Exact agreement,0.515
+Label agreement,Cohen's kappa,0.21
+Label agreement,Cohen's kappa (linear weights),0.367
+Label agreement,Pairs judged (pooled),165
+Label agreement,Random check pairs labelled relevant,0 of 30

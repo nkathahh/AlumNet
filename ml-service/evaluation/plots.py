@@ -337,9 +337,14 @@ def table_dataset(path):
         with open(labels_path, encoding='utf-8') as f:
             labels = list(csv.DictReader(f))
         for split in ('dev', 'test'):
-            counts = Counter(r['final_label'] for r in labels if r['split'] == split)
+            # With pooled judging, pairs outside the pool are counted separately, not as judged "not relevant"
+            judged = [r for r in labels if r['split'] == split and r.get('judged', 'yes') == 'yes']
+            counts = Counter(r['final_label'] for r in judged)
             for value, name in (('2', 'Relevant'), ('1', 'Partly relevant'), ('0', 'Not relevant')):
                 rows.append({'Group': f'Labels ({split})', 'Category': name, 'Count': counts.get(value, 0)})
+            outside = sum(1 for r in labels if r['split'] == split and r.get('judged', 'yes') != 'yes')
+            if outside:
+                rows.append({'Group': f'Labels ({split})', 'Category': 'Outside the pool (taken as not relevant)', 'Count': outside})
     agreement_path = os.path.join(HERE, 'labels', 'agreement.json')
     if os.path.exists(agreement_path):
         with open(agreement_path, encoding='utf-8') as f:
@@ -348,6 +353,10 @@ def table_dataset(path):
         rows.append({'Group': 'Label agreement', 'Category': "Cohen's kappa", 'Count': a['cohen_kappa']})
         rows.append({'Group': 'Label agreement', 'Category': "Cohen's kappa (linear weights)",
                      'Count': a['cohen_kappa_linear']})
+        if a.get('pooled'):
+            rows.append({'Group': 'Label agreement', 'Category': 'Pairs judged (pooled)', 'Count': a['pairs_judged']})
+            rows.append({'Group': 'Label agreement', 'Category': 'Random check pairs labelled relevant',
+                         'Count': f"{a['random_check_relevant']} of {a['random_check_pairs']}"})
     write_csv(path, rows)
 
 

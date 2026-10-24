@@ -1,0 +1,13 @@
+Figure 5.X: Hit@3 for each matching method (test set, 10 mentees against 20 mentors, run 20261024_200422, commit 334dba1). Bars show the share of mentees with at least one relevant mentor in the top three, with counts in brackets.
+
+Figure 5.X: Similarity scores of relevant, partly relevant and non-relevant mentee-mentor pairs for each method (test set, 10 mentees against 20 mentors, run 20261024_200422, commit 334dba1). Separation is the probability that a relevant mentor outscores a non-relevant one for the same mentee (0.5 is chance, 1.0 is perfect).
+
+Figure 5.X: Hit@3 for mentees described in standard and paraphrased wording (test set, 10 mentees against 20 mentors, run 20261024_200422, commit 334dba1).
+
+Figure 5.X: Median recommendation time as the number of mentors compared grows, measured on the development laptop, run 20261024_200422. The dashed line marks the NFR-01 target of 3 seconds.
+
+Table 5.X: Comparison of matching methods (test set, 10 mentees against 20 mentors, run 20261024_200422, commit 334dba1).
+
+Table 5.X: Error analysis for BGE-small field (equal): mentees with no relevant mentor in the top three, or whose relevant mentor was not ranked first (test set, 10 mentees against 20 mentors, run 20261024_200422, commit 334dba1).
+
+Table 5.X: Composition of the evaluation dataset and relevance labels.

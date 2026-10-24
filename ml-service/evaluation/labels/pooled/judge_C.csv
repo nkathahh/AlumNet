@@ -1,0 +1,561 @@
+﻿pair_id,mentee_profile,mentor_profile,label
+D01-M02,"Department: Flight Operations
+Skills: Flight dispatch coordination, route planning software, crew scheduling systems, operational safety reporting.
+Experience: Flight operations officer at Kenya Airways for 3 years, supporting route planning and dispatch for intercontinental flights.
+Career interests: Moving into a senior flight operations or crew scheduling leadership role, learning more about operational safety audits.","Department: Flight Operations
+Skills: Route planning, flight dispatch, operational reporting, team coordination.
+Experience: Flight operations supervisor, 9 years at Kenya Airways, oversaw dispatch coordination for regional routes.
+Career interests: Advising on flight operations career progression and dispatch systems.",2
+D01-M04,"Department: Flight Operations
+Skills: Flight dispatch coordination, route planning software, crew scheduling systems, operational safety reporting.
+Experience: Flight operations officer at Kenya Airways for 3 years, supporting route planning and dispatch for intercontinental flights.
+Career interests: Moving into a senior flight operations or crew scheduling leadership role, learning more about operational safety audits.","Department: Flight Operations
+Skills: Line training, crew resource management instruction, flight safety investigations, simulator assessment.
+Experience: Retired captain on the long-haul fleet. Spent the last eight years as a line training captain and sat on the flight safety committee.
+Career interests: Mentoring first officers and staff interested in flight training or safety management.",1
+D01-M11,"Department: Flight Operations
+Skills: Flight dispatch coordination, route planning software, crew scheduling systems, operational safety reporting.
+Experience: Flight operations officer at Kenya Airways for 3 years, supporting route planning and dispatch for intercontinental flights.
+Career interests: Moving into a senior flight operations or crew scheduling leadership role, learning more about operational safety audits.","Department: Cabin Services
+Skills: Crew wellbeing programmes, fatigue awareness, peer support.
+Experience: Cabin crew for 8 years and the crew welfare representative for the last three.
+Career interests: Mentoring crew on balancing a flying career with life at home, and on moving into people and HR roles.",0
+D02-M06,"Department: Engineering & Maintenance
+Skills: Aircraft systems troubleshooting, maintenance logbook records, inspection checklists.
+Experience: Junior maintenance technician at Kenya Airways for 2 years, assisting on line maintenance checks.
+Career interests: Becoming a licensed aircraft maintenance engineer and learning technical compliance and quality control.","Department: Engineering & Maintenance
+Skills: Engine overhaul planning, borescope inspections, reliability data analysis.
+Experience: Ran the engine shop at the maintenance base for 18 years and set up the fleet reliability programme.
+Career interests: Guiding young engineers into reliability engineering and maintenance planning.",1
+D02-M07,"Department: Engineering & Maintenance
+Skills: Aircraft systems troubleshooting, maintenance logbook records, inspection checklists.
+Experience: Junior maintenance technician at Kenya Airways for 2 years, assisting on line maintenance checks.
+Career interests: Becoming a licensed aircraft maintenance engineer and learning technical compliance and quality control.","Department: Engineering & Maintenance
+Skills: Avionics troubleshooting, wiring diagram interpretation, test equipment calibration.
+Experience: Avionics supervisor in the hangar for 12 years. Introduced the digital technical log for avionics defects.
+Career interests: Mentoring technicians working towards avionics licences and digital maintenance records.",1
+D02-M08,"Department: Engineering & Maintenance
+Skills: Aircraft systems troubleshooting, maintenance logbook records, inspection checklists.
+Experience: Junior maintenance technician at Kenya Airways for 2 years, assisting on line maintenance checks.
+Career interests: Becoming a licensed aircraft maintenance engineer and learning technical compliance and quality control.","Department: Engineering & Maintenance
+Skills: Continuing airworthiness management, regulatory audit preparation, maintenance programme approvals.
+Experience: Quality assurance manager for maintenance. Led audits with the civil aviation regulator for over a decade.
+Career interests: Helping staff move into quality, compliance and airworthiness roles.",2
+D03-M02,"Department: Flight Operations
+Skills: Building duty rosters for pilots and cabin staff, preparing flight plans, tracking rest-time rules.
+Experience: Two years in the operations control centre at Kenya Airways, handling same-day changes to flight timetables.
+Career interests: Leading the team that assigns aircrew to flights, and taking part in reviews of operational safety.","Department: Flight Operations
+Skills: Route planning, flight dispatch, operational reporting, team coordination.
+Experience: Flight operations supervisor, 9 years at Kenya Airways, oversaw dispatch coordination for regional routes.
+Career interests: Advising on flight operations career progression and dispatch systems.",1
+D03-M03,"Department: Flight Operations
+Skills: Building duty rosters for pilots and cabin staff, preparing flight plans, tracking rest-time rules.
+Experience: Two years in the operations control centre at Kenya Airways, handling same-day changes to flight timetables.
+Career interests: Leading the team that assigns aircrew to flights, and taking part in reviews of operational safety.","Department: Flight Operations
+Skills: Crew rostering, administrative coordination, scheduling software.
+Experience: Crew rostering coordinator at Kenya Airways for 5 years.
+Career interests: Open to mentoring on rostering and administrative operations.",2
+D03-M04,"Department: Flight Operations
+Skills: Building duty rosters for pilots and cabin staff, preparing flight plans, tracking rest-time rules.
+Experience: Two years in the operations control centre at Kenya Airways, handling same-day changes to flight timetables.
+Career interests: Leading the team that assigns aircrew to flights, and taking part in reviews of operational safety.","Department: Flight Operations
+Skills: Line training, crew resource management instruction, flight safety investigations, simulator assessment.
+Experience: Retired captain on the long-haul fleet. Spent the last eight years as a line training captain and sat on the flight safety committee.
+Career interests: Mentoring first officers and staff interested in flight training or safety management.",1
+D03-M10,"Department: Flight Operations
+Skills: Building duty rosters for pilots and cabin staff, preparing flight plans, tracking rest-time rules.
+Experience: Two years in the operations control centre at Kenya Airways, handling same-day changes to flight timetables.
+Career interests: Leading the team that assigns aircrew to flights, and taking part in reviews of operational safety.","Department: Cabin Services
+Skills: In-flight service management, premium cabin service, handling difficult passengers.
+Experience: Business class cabin supervisor for 10 years on Europe and Asia routes.
+Career interests: Coaching crew on customer experience and leading a team on board.",0
+D03-M11,"Department: Flight Operations
+Skills: Building duty rosters for pilots and cabin staff, preparing flight plans, tracking rest-time rules.
+Experience: Two years in the operations control centre at Kenya Airways, handling same-day changes to flight timetables.
+Career interests: Leading the team that assigns aircrew to flights, and taking part in reviews of operational safety.","Department: Cabin Services
+Skills: Crew wellbeing programmes, fatigue awareness, peer support.
+Experience: Cabin crew for 8 years and the crew welfare representative for the last three.
+Career interests: Mentoring crew on balancing a flying career with life at home, and on moving into people and HR roles.",1
+D03-M13,"Department: Flight Operations
+Skills: Building duty rosters for pilots and cabin staff, preparing flight plans, tracking rest-time rules.
+Experience: Two years in the operations control centre at Kenya Airways, handling same-day changes to flight timetables.
+Career interests: Leading the team that assigns aircrew to flights, and taking part in reviews of operational safety.","Department: Ground Operations
+Skills: Ramp operations, turnaround coordination, load control, ground handling contracts.
+Experience: Station operations manager at JKIA, responsible for aircraft turnarounds and ground handling agreements.
+Career interests: Mentoring ramp and station staff moving into operations management.",0
+D03-M14,"Department: Flight Operations
+Skills: Building duty rosters for pilots and cabin staff, preparing flight plans, tracking rest-time rules.
+Experience: Two years in the operations control centre at Kenya Airways, handling same-day changes to flight timetables.
+Career interests: Leading the team that assigns aircrew to flights, and taking part in reviews of operational safety.","Department: Ground Operations
+Skills: Passenger services, check-in and boarding systems, irregular operations recovery.
+Experience: Customer service duty manager at the airport. Handled disruption and rebooking during irregular operations.
+Career interests: Coaching ground staff on customer service leadership and handling disruptions.",0
+D03-M15,"Department: Flight Operations
+Skills: Building duty rosters for pilots and cabin staff, preparing flight plans, tracking rest-time rules.
+Experience: Two years in the operations control centre at Kenya Airways, handling same-day changes to flight timetables.
+Career interests: Leading the team that assigns aircrew to flights, and taking part in reviews of operational safety.","Department: Ground Operations
+Skills: Aviation security screening, threat assessment, security awareness training.
+Experience: Security manager responsible for passenger and baggage screening and compliance with the aviation security programme.
+Career interests: Guiding staff into aviation security and risk management roles.",0
+D03-M16,"Department: Flight Operations
+Skills: Building duty rosters for pilots and cabin staff, preparing flight plans, tracking rest-time rules.
+Experience: Two years in the operations control centre at Kenya Airways, handling same-day changes to flight timetables.
+Career interests: Leading the team that assigns aircrew to flights, and taking part in reviews of operational safety.","Department: Ground Operations
+Skills: Load sheets, weight and balance calculations, departure control systems.
+Experience: Load controller at the hub for 9 years, preparing load and trim sheets for wide-body and narrow-body flights.
+Career interests: Teaching load control and weight and balance to new staff.",0
+D04-M04,"Department: Cabin Services
+Skills: Safety demonstrations, first aid, passenger service on regional routes.
+Experience: Cabin crew member for 4 years, mostly on regional routes with some long-haul flights.
+Career interests: Becoming a cabin crew instructor and eventually designing training courses.","Department: Flight Operations
+Skills: Line training, crew resource management instruction, flight safety investigations, simulator assessment.
+Experience: Retired captain on the long-haul fleet. Spent the last eight years as a line training captain and sat on the flight safety committee.
+Career interests: Mentoring first officers and staff interested in flight training or safety management.",1
+D04-M11,"Department: Cabin Services
+Skills: Safety demonstrations, first aid, passenger service on regional routes.
+Experience: Cabin crew member for 4 years, mostly on regional routes with some long-haul flights.
+Career interests: Becoming a cabin crew instructor and eventually designing training courses.","Department: Cabin Services
+Skills: Crew wellbeing programmes, fatigue awareness, peer support.
+Experience: Cabin crew for 8 years and the crew welfare representative for the last three.
+Career interests: Mentoring crew on balancing a flying career with life at home, and on moving into people and HR roles.",0
+D04-M12,"Department: Cabin Services
+Skills: Safety demonstrations, first aid, passenger service on regional routes.
+Experience: Cabin crew member for 4 years, mostly on regional routes with some long-haul flights.
+Career interests: Becoming a cabin crew instructor and eventually designing training courses.","Department: Cabin Services
+Skills: Inflight catering coordination, galley planning, supplier liaison.
+Experience: Moved from cabin crew into inflight product and catering planning, where she worked for 14 years.
+Career interests: Advising crew who want to move from flying into product, catering or procurement work.",0
+D04-M16,"Department: Cabin Services
+Skills: Safety demonstrations, first aid, passenger service on regional routes.
+Experience: Cabin crew member for 4 years, mostly on regional routes with some long-haul flights.
+Career interests: Becoming a cabin crew instructor and eventually designing training courses.","Department: Ground Operations
+Skills: Load sheets, weight and balance calculations, departure control systems.
+Experience: Load controller at the hub for 9 years, preparing load and trim sheets for wide-body and narrow-body flights.
+Career interests: Teaching load control and weight and balance to new staff.",0
+D05-M01,"Department: Ground Operations
+Skills: Marshalling aircraft on the apron, directing baggage loading teams, radio contact with ground control.
+Experience: Three years on the ramp at JKIA handling quick turnarounds for narrow-body aircraft.
+Career interests: Moving up to run the station's day-to-day operations.","Department: Flight Operations
+Skills: Crew scheduling, route planning, operational safety audits, dispatch coordination, regulatory compliance reporting.
+Experience: Former Head of Flight Operations with 15 years experience across intercontinental routes, led the crew scheduling team.
+Career interests: Mentoring flight operations staff moving into scheduling and safety leadership roles.",1
+D05-M02,"Department: Ground Operations
+Skills: Marshalling aircraft on the apron, directing baggage loading teams, radio contact with ground control.
+Experience: Three years on the ramp at JKIA handling quick turnarounds for narrow-body aircraft.
+Career interests: Moving up to run the station's day-to-day operations.","Department: Flight Operations
+Skills: Route planning, flight dispatch, operational reporting, team coordination.
+Experience: Flight operations supervisor, 9 years at Kenya Airways, oversaw dispatch coordination for regional routes.
+Career interests: Advising on flight operations career progression and dispatch systems.",0
+D05-M03,"Department: Ground Operations
+Skills: Marshalling aircraft on the apron, directing baggage loading teams, radio contact with ground control.
+Experience: Three years on the ramp at JKIA handling quick turnarounds for narrow-body aircraft.
+Career interests: Moving up to run the station's day-to-day operations.","Department: Flight Operations
+Skills: Crew rostering, administrative coordination, scheduling software.
+Experience: Crew rostering coordinator at Kenya Airways for 5 years.
+Career interests: Open to mentoring on rostering and administrative operations.",0
+D05-M14,"Department: Ground Operations
+Skills: Marshalling aircraft on the apron, directing baggage loading teams, radio contact with ground control.
+Experience: Three years on the ramp at JKIA handling quick turnarounds for narrow-body aircraft.
+Career interests: Moving up to run the station's day-to-day operations.","Department: Ground Operations
+Skills: Passenger services, check-in and boarding systems, irregular operations recovery.
+Experience: Customer service duty manager at the airport. Handled disruption and rebooking during irregular operations.
+Career interests: Coaching ground staff on customer service leadership and handling disruptions.",1
+D05-M15,"Department: Ground Operations
+Skills: Marshalling aircraft on the apron, directing baggage loading teams, radio contact with ground control.
+Experience: Three years on the ramp at JKIA handling quick turnarounds for narrow-body aircraft.
+Career interests: Moving up to run the station's day-to-day operations.","Department: Ground Operations
+Skills: Aviation security screening, threat assessment, security awareness training.
+Experience: Security manager responsible for passenger and baggage screening and compliance with the aviation security programme.
+Career interests: Guiding staff into aviation security and risk management roles.",0
+D05-M16,"Department: Ground Operations
+Skills: Marshalling aircraft on the apron, directing baggage loading teams, radio contact with ground control.
+Experience: Three years on the ramp at JKIA handling quick turnarounds for narrow-body aircraft.
+Career interests: Moving up to run the station's day-to-day operations.","Department: Ground Operations
+Skills: Load sheets, weight and balance calculations, departure control systems.
+Experience: Load controller at the hub for 9 years, preparing load and trim sheets for wide-body and narrow-body flights.
+Career interests: Teaching load control and weight and balance to new staff.",1
+D05-M19,"Department: Ground Operations
+Skills: Marshalling aircraft on the apron, directing baggage loading teams, radio contact with ground control.
+Experience: Three years on the ramp at JKIA handling quick turnarounds for narrow-body aircraft.
+Career interests: Moving up to run the station's day-to-day operations.","Department: Cargo
+Skills: Warehouse management, cold chain handling, cargo build-up.
+Experience: Cargo terminal supervisor managing warehouse shifts and cold storage for perishables.
+Career interests: Coaching supervisors on running warehouse teams.",0
+T01-M01,"Department: Flight Operations
+Skills: Flight planning, weather briefing, NOTAM review.
+Experience: Flight dispatcher in the operations control centre for 2 years.
+Career interests: Getting into pilot training or becoming a flight safety officer.","Department: Flight Operations
+Skills: Crew scheduling, route planning, operational safety audits, dispatch coordination, regulatory compliance reporting.
+Experience: Former Head of Flight Operations with 15 years experience across intercontinental routes, led the crew scheduling team.
+Career interests: Mentoring flight operations staff moving into scheduling and safety leadership roles.",1
+T01-M02,"Department: Flight Operations
+Skills: Flight planning, weather briefing, NOTAM review.
+Experience: Flight dispatcher in the operations control centre for 2 years.
+Career interests: Getting into pilot training or becoming a flight safety officer.","Department: Flight Operations
+Skills: Route planning, flight dispatch, operational reporting, team coordination.
+Experience: Flight operations supervisor, 9 years at Kenya Airways, oversaw dispatch coordination for regional routes.
+Career interests: Advising on flight operations career progression and dispatch systems.",1
+T01-M15,"Department: Flight Operations
+Skills: Flight planning, weather briefing, NOTAM review.
+Experience: Flight dispatcher in the operations control centre for 2 years.
+Career interests: Getting into pilot training or becoming a flight safety officer.","Department: Ground Operations
+Skills: Aviation security screening, threat assessment, security awareness training.
+Experience: Security manager responsible for passenger and baggage screening and compliance with the aviation security programme.
+Career interests: Guiding staff into aviation security and risk management roles.",0
+T02-M01,"Department: Flight Operations
+Skills: Keeping track of how many hours pilots have flown, finding cover when someone calls in sick, using the rostering tool.
+Experience: Crew control assistant for 18 months.
+Career interests: I would like to manage the crew planning team one day.","Department: Flight Operations
+Skills: Crew scheduling, route planning, operational safety audits, dispatch coordination, regulatory compliance reporting.
+Experience: Former Head of Flight Operations with 15 years experience across intercontinental routes, led the crew scheduling team.
+Career interests: Mentoring flight operations staff moving into scheduling and safety leadership roles.",2
+T02-M02,"Department: Flight Operations
+Skills: Keeping track of how many hours pilots have flown, finding cover when someone calls in sick, using the rostering tool.
+Experience: Crew control assistant for 18 months.
+Career interests: I would like to manage the crew planning team one day.","Department: Flight Operations
+Skills: Route planning, flight dispatch, operational reporting, team coordination.
+Experience: Flight operations supervisor, 9 years at Kenya Airways, oversaw dispatch coordination for regional routes.
+Career interests: Advising on flight operations career progression and dispatch systems.",1
+T02-M04,"Department: Flight Operations
+Skills: Keeping track of how many hours pilots have flown, finding cover when someone calls in sick, using the rostering tool.
+Experience: Crew control assistant for 18 months.
+Career interests: I would like to manage the crew planning team one day.","Department: Flight Operations
+Skills: Line training, crew resource management instruction, flight safety investigations, simulator assessment.
+Experience: Retired captain on the long-haul fleet. Spent the last eight years as a line training captain and sat on the flight safety committee.
+Career interests: Mentoring first officers and staff interested in flight training or safety management.",0
+T02-M11,"Department: Flight Operations
+Skills: Keeping track of how many hours pilots have flown, finding cover when someone calls in sick, using the rostering tool.
+Experience: Crew control assistant for 18 months.
+Career interests: I would like to manage the crew planning team one day.","Department: Cabin Services
+Skills: Crew wellbeing programmes, fatigue awareness, peer support.
+Experience: Cabin crew for 8 years and the crew welfare representative for the last three.
+Career interests: Mentoring crew on balancing a flying career with life at home, and on moving into people and HR roles.",0
+T02-M14,"Department: Flight Operations
+Skills: Keeping track of how many hours pilots have flown, finding cover when someone calls in sick, using the rostering tool.
+Experience: Crew control assistant for 18 months.
+Career interests: I would like to manage the crew planning team one day.","Department: Ground Operations
+Skills: Passenger services, check-in and boarding systems, irregular operations recovery.
+Experience: Customer service duty manager at the airport. Handled disruption and rebooking during irregular operations.
+Career interests: Coaching ground staff on customer service leadership and handling disruptions.",0
+T03-M01,"Department: Engineering & Maintenance
+Skills: Line maintenance, defect rectification, aircraft technical logs.
+Experience: Licensed aircraft maintenance engineer for 4 years on the regional fleet.
+Career interests: Moving into quality assurance and regulatory audits.","Department: Flight Operations
+Skills: Crew scheduling, route planning, operational safety audits, dispatch coordination, regulatory compliance reporting.
+Experience: Former Head of Flight Operations with 15 years experience across intercontinental routes, led the crew scheduling team.
+Career interests: Mentoring flight operations staff moving into scheduling and safety leadership roles.",1
+T03-M04,"Department: Engineering & Maintenance
+Skills: Line maintenance, defect rectification, aircraft technical logs.
+Experience: Licensed aircraft maintenance engineer for 4 years on the regional fleet.
+Career interests: Moving into quality assurance and regulatory audits.","Department: Flight Operations
+Skills: Line training, crew resource management instruction, flight safety investigations, simulator assessment.
+Experience: Retired captain on the long-haul fleet. Spent the last eight years as a line training captain and sat on the flight safety committee.
+Career interests: Mentoring first officers and staff interested in flight training or safety management.",0
+T03-M05,"Department: Engineering & Maintenance
+Skills: Line maintenance, defect rectification, aircraft technical logs.
+Experience: Licensed aircraft maintenance engineer for 4 years on the regional fleet.
+Career interests: Moving into quality assurance and regulatory audits.","Department: Engineering & Maintenance
+Skills: Aircraft maintenance inspection, technical compliance documentation, engineering quality control.
+Experience: Aircraft maintenance engineer at Kenya Airways for 11 years, specializing in technical inspections.
+Career interests: Mentoring engineers entering aircraft maintenance and technical compliance roles.",2
+T03-M06,"Department: Engineering & Maintenance
+Skills: Line maintenance, defect rectification, aircraft technical logs.
+Experience: Licensed aircraft maintenance engineer for 4 years on the regional fleet.
+Career interests: Moving into quality assurance and regulatory audits.","Department: Engineering & Maintenance
+Skills: Engine overhaul planning, borescope inspections, reliability data analysis.
+Experience: Ran the engine shop at the maintenance base for 18 years and set up the fleet reliability programme.
+Career interests: Guiding young engineers into reliability engineering and maintenance planning.",0
+T03-M07,"Department: Engineering & Maintenance
+Skills: Line maintenance, defect rectification, aircraft technical logs.
+Experience: Licensed aircraft maintenance engineer for 4 years on the regional fleet.
+Career interests: Moving into quality assurance and regulatory audits.","Department: Engineering & Maintenance
+Skills: Avionics troubleshooting, wiring diagram interpretation, test equipment calibration.
+Experience: Avionics supervisor in the hangar for 12 years. Introduced the digital technical log for avionics defects.
+Career interests: Mentoring technicians working towards avionics licences and digital maintenance records.",0
+T04-M05,"Department: Engineering & Maintenance
+Skills: Fixing faults in cockpit instruments and radios, reading circuit drawings, using multimeters.
+Experience: Two years as an apprentice in the hangar electrical shop.
+Career interests: Getting licensed to work on aircraft electronics.","Department: Engineering & Maintenance
+Skills: Aircraft maintenance inspection, technical compliance documentation, engineering quality control.
+Experience: Aircraft maintenance engineer at Kenya Airways for 11 years, specializing in technical inspections.
+Career interests: Mentoring engineers entering aircraft maintenance and technical compliance roles.",1
+T04-M08,"Department: Engineering & Maintenance
+Skills: Fixing faults in cockpit instruments and radios, reading circuit drawings, using multimeters.
+Experience: Two years as an apprentice in the hangar electrical shop.
+Career interests: Getting licensed to work on aircraft electronics.","Department: Engineering & Maintenance
+Skills: Continuing airworthiness management, regulatory audit preparation, maintenance programme approvals.
+Experience: Quality assurance manager for maintenance. Led audits with the civil aviation regulator for over a decade.
+Career interests: Helping staff move into quality, compliance and airworthiness roles.",0
+T05-M03,"Department: Cabin Services
+Skills: Premium cabin service, wine service, handling passenger complaints.
+Experience: Cabin crew on long-haul routes for 6 years.
+Career interests: Becoming a cabin supervisor and leading the crew on board.","Department: Flight Operations
+Skills: Crew rostering, administrative coordination, scheduling software.
+Experience: Crew rostering coordinator at Kenya Airways for 5 years.
+Career interests: Open to mentoring on rostering and administrative operations.",0
+T05-M04,"Department: Cabin Services
+Skills: Premium cabin service, wine service, handling passenger complaints.
+Experience: Cabin crew on long-haul routes for 6 years.
+Career interests: Becoming a cabin supervisor and leading the crew on board.","Department: Flight Operations
+Skills: Line training, crew resource management instruction, flight safety investigations, simulator assessment.
+Experience: Retired captain on the long-haul fleet. Spent the last eight years as a line training captain and sat on the flight safety committee.
+Career interests: Mentoring first officers and staff interested in flight training or safety management.",1
+T05-M09,"Department: Cabin Services
+Skills: Premium cabin service, wine service, handling passenger complaints.
+Experience: Cabin crew on long-haul routes for 6 years.
+Career interests: Becoming a cabin supervisor and leading the crew on board.","Department: Cabin Services
+Skills: Cabin crew training design, safety and emergency procedures instruction, service standards.
+Experience: Senior purser on long-haul routes, then six years as a cabin crew training instructor.
+Career interests: Supporting crew who want to become instructors or move into training design.",1
+T05-M11,"Department: Cabin Services
+Skills: Premium cabin service, wine service, handling passenger complaints.
+Experience: Cabin crew on long-haul routes for 6 years.
+Career interests: Becoming a cabin supervisor and leading the crew on board.","Department: Cabin Services
+Skills: Crew wellbeing programmes, fatigue awareness, peer support.
+Experience: Cabin crew for 8 years and the crew welfare representative for the last three.
+Career interests: Mentoring crew on balancing a flying career with life at home, and on moving into people and HR roles.",0
+T05-M12,"Department: Cabin Services
+Skills: Premium cabin service, wine service, handling passenger complaints.
+Experience: Cabin crew on long-haul routes for 6 years.
+Career interests: Becoming a cabin supervisor and leading the crew on board.","Department: Cabin Services
+Skills: Inflight catering coordination, galley planning, supplier liaison.
+Experience: Moved from cabin crew into inflight product and catering planning, where she worked for 14 years.
+Career interests: Advising crew who want to move from flying into product, catering or procurement work.",0
+T05-M14,"Department: Cabin Services
+Skills: Premium cabin service, wine service, handling passenger complaints.
+Experience: Cabin crew on long-haul routes for 6 years.
+Career interests: Becoming a cabin supervisor and leading the crew on board.","Department: Ground Operations
+Skills: Passenger services, check-in and boarding systems, irregular operations recovery.
+Experience: Customer service duty manager at the airport. Handled disruption and rebooking during irregular operations.
+Career interests: Coaching ground staff on customer service leadership and handling disruptions.",1
+T06-M09,"Department: Cabin Services
+Skills: Cabin service, galley inventory, working with caterers at outstations.
+Experience: Cabin crew for 8 years, often helping to resolve catering shortages.
+Career interests: Moving off the aircraft into inflight product or procurement work.","Department: Cabin Services
+Skills: Cabin crew training design, safety and emergency procedures instruction, service standards.
+Experience: Senior purser on long-haul routes, then six years as a cabin crew training instructor.
+Career interests: Supporting crew who want to become instructors or move into training design.",0
+T06-M10,"Department: Cabin Services
+Skills: Cabin service, galley inventory, working with caterers at outstations.
+Experience: Cabin crew for 8 years, often helping to resolve catering shortages.
+Career interests: Moving off the aircraft into inflight product or procurement work.","Department: Cabin Services
+Skills: In-flight service management, premium cabin service, handling difficult passengers.
+Experience: Business class cabin supervisor for 10 years on Europe and Asia routes.
+Career interests: Coaching crew on customer experience and leading a team on board.",0
+T06-M11,"Department: Cabin Services
+Skills: Cabin service, galley inventory, working with caterers at outstations.
+Experience: Cabin crew for 8 years, often helping to resolve catering shortages.
+Career interests: Moving off the aircraft into inflight product or procurement work.","Department: Cabin Services
+Skills: Crew wellbeing programmes, fatigue awareness, peer support.
+Experience: Cabin crew for 8 years and the crew welfare representative for the last three.
+Career interests: Mentoring crew on balancing a flying career with life at home, and on moving into people and HR roles.",0
+T06-M14,"Department: Cabin Services
+Skills: Cabin service, galley inventory, working with caterers at outstations.
+Experience: Cabin crew for 8 years, often helping to resolve catering shortages.
+Career interests: Moving off the aircraft into inflight product or procurement work.","Department: Ground Operations
+Skills: Passenger services, check-in and boarding systems, irregular operations recovery.
+Experience: Customer service duty manager at the airport. Handled disruption and rebooking during irregular operations.
+Career interests: Coaching ground staff on customer service leadership and handling disruptions.",0
+T07-M01,"Department: Ground Operations
+Skills: Check-in, boarding gate control, rebooking passengers.
+Experience: Customer service agent at JKIA for 3 years.
+Career interests: Becoming a duty manager who handles disruptions.","Department: Flight Operations
+Skills: Crew scheduling, route planning, operational safety audits, dispatch coordination, regulatory compliance reporting.
+Experience: Former Head of Flight Operations with 15 years experience across intercontinental routes, led the crew scheduling team.
+Career interests: Mentoring flight operations staff moving into scheduling and safety leadership roles.",0
+T07-M02,"Department: Ground Operations
+Skills: Check-in, boarding gate control, rebooking passengers.
+Experience: Customer service agent at JKIA for 3 years.
+Career interests: Becoming a duty manager who handles disruptions.","Department: Flight Operations
+Skills: Route planning, flight dispatch, operational reporting, team coordination.
+Experience: Flight operations supervisor, 9 years at Kenya Airways, oversaw dispatch coordination for regional routes.
+Career interests: Advising on flight operations career progression and dispatch systems.",0
+T07-M04,"Department: Ground Operations
+Skills: Check-in, boarding gate control, rebooking passengers.
+Experience: Customer service agent at JKIA for 3 years.
+Career interests: Becoming a duty manager who handles disruptions.","Department: Flight Operations
+Skills: Line training, crew resource management instruction, flight safety investigations, simulator assessment.
+Experience: Retired captain on the long-haul fleet. Spent the last eight years as a line training captain and sat on the flight safety committee.
+Career interests: Mentoring first officers and staff interested in flight training or safety management.",0
+T07-M09,"Department: Ground Operations
+Skills: Check-in, boarding gate control, rebooking passengers.
+Experience: Customer service agent at JKIA for 3 years.
+Career interests: Becoming a duty manager who handles disruptions.","Department: Cabin Services
+Skills: Cabin crew training design, safety and emergency procedures instruction, service standards.
+Experience: Senior purser on long-haul routes, then six years as a cabin crew training instructor.
+Career interests: Supporting crew who want to become instructors or move into training design.",0
+T07-M10,"Department: Ground Operations
+Skills: Check-in, boarding gate control, rebooking passengers.
+Experience: Customer service agent at JKIA for 3 years.
+Career interests: Becoming a duty manager who handles disruptions.","Department: Cabin Services
+Skills: In-flight service management, premium cabin service, handling difficult passengers.
+Experience: Business class cabin supervisor for 10 years on Europe and Asia routes.
+Career interests: Coaching crew on customer experience and leading a team on board.",1
+T07-M11,"Department: Ground Operations
+Skills: Check-in, boarding gate control, rebooking passengers.
+Experience: Customer service agent at JKIA for 3 years.
+Career interests: Becoming a duty manager who handles disruptions.","Department: Cabin Services
+Skills: Crew wellbeing programmes, fatigue awareness, peer support.
+Experience: Cabin crew for 8 years and the crew welfare representative for the last three.
+Career interests: Mentoring crew on balancing a flying career with life at home, and on moving into people and HR roles.",0
+T07-M13,"Department: Ground Operations
+Skills: Check-in, boarding gate control, rebooking passengers.
+Experience: Customer service agent at JKIA for 3 years.
+Career interests: Becoming a duty manager who handles disruptions.","Department: Ground Operations
+Skills: Ramp operations, turnaround coordination, load control, ground handling contracts.
+Experience: Station operations manager at JKIA, responsible for aircraft turnarounds and ground handling agreements.
+Career interests: Mentoring ramp and station staff moving into operations management.",1
+T07-M15,"Department: Ground Operations
+Skills: Check-in, boarding gate control, rebooking passengers.
+Experience: Customer service agent at JKIA for 3 years.
+Career interests: Becoming a duty manager who handles disruptions.","Department: Ground Operations
+Skills: Aviation security screening, threat assessment, security awareness training.
+Experience: Security manager responsible for passenger and baggage screening and compliance with the aviation security programme.
+Career interests: Guiding staff into aviation security and risk management roles.",0
+T07-M16,"Department: Ground Operations
+Skills: Check-in, boarding gate control, rebooking passengers.
+Experience: Customer service agent at JKIA for 3 years.
+Career interests: Becoming a duty manager who handles disruptions.","Department: Ground Operations
+Skills: Load sheets, weight and balance calculations, departure control systems.
+Experience: Load controller at the hub for 9 years, preparing load and trim sheets for wide-body and narrow-body flights.
+Career interests: Teaching load control and weight and balance to new staff.",0
+T08-M01,"Department: Ground Operations
+Skills: Working out how much each aircraft can safely carry, preparing the paperwork pilots sign before departure, spreading passengers and bags evenly.
+Experience: Junior in the departure control office for one year.
+Career interests: Becoming fully qualified in that area and training others.","Department: Flight Operations
+Skills: Crew scheduling, route planning, operational safety audits, dispatch coordination, regulatory compliance reporting.
+Experience: Former Head of Flight Operations with 15 years experience across intercontinental routes, led the crew scheduling team.
+Career interests: Mentoring flight operations staff moving into scheduling and safety leadership roles.",0
+T08-M02,"Department: Ground Operations
+Skills: Working out how much each aircraft can safely carry, preparing the paperwork pilots sign before departure, spreading passengers and bags evenly.
+Experience: Junior in the departure control office for one year.
+Career interests: Becoming fully qualified in that area and training others.","Department: Flight Operations
+Skills: Route planning, flight dispatch, operational reporting, team coordination.
+Experience: Flight operations supervisor, 9 years at Kenya Airways, oversaw dispatch coordination for regional routes.
+Career interests: Advising on flight operations career progression and dispatch systems.",1
+T08-M03,"Department: Ground Operations
+Skills: Working out how much each aircraft can safely carry, preparing the paperwork pilots sign before departure, spreading passengers and bags evenly.
+Experience: Junior in the departure control office for one year.
+Career interests: Becoming fully qualified in that area and training others.","Department: Flight Operations
+Skills: Crew rostering, administrative coordination, scheduling software.
+Experience: Crew rostering coordinator at Kenya Airways for 5 years.
+Career interests: Open to mentoring on rostering and administrative operations.",0
+T08-M04,"Department: Ground Operations
+Skills: Working out how much each aircraft can safely carry, preparing the paperwork pilots sign before departure, spreading passengers and bags evenly.
+Experience: Junior in the departure control office for one year.
+Career interests: Becoming fully qualified in that area and training others.","Department: Flight Operations
+Skills: Line training, crew resource management instruction, flight safety investigations, simulator assessment.
+Experience: Retired captain on the long-haul fleet. Spent the last eight years as a line training captain and sat on the flight safety committee.
+Career interests: Mentoring first officers and staff interested in flight training or safety management.",0
+T08-M05,"Department: Ground Operations
+Skills: Working out how much each aircraft can safely carry, preparing the paperwork pilots sign before departure, spreading passengers and bags evenly.
+Experience: Junior in the departure control office for one year.
+Career interests: Becoming fully qualified in that area and training others.","Department: Engineering & Maintenance
+Skills: Aircraft maintenance inspection, technical compliance documentation, engineering quality control.
+Experience: Aircraft maintenance engineer at Kenya Airways for 11 years, specializing in technical inspections.
+Career interests: Mentoring engineers entering aircraft maintenance and technical compliance roles.",0
+T08-M09,"Department: Ground Operations
+Skills: Working out how much each aircraft can safely carry, preparing the paperwork pilots sign before departure, spreading passengers and bags evenly.
+Experience: Junior in the departure control office for one year.
+Career interests: Becoming fully qualified in that area and training others.","Department: Cabin Services
+Skills: Cabin crew training design, safety and emergency procedures instruction, service standards.
+Experience: Senior purser on long-haul routes, then six years as a cabin crew training instructor.
+Career interests: Supporting crew who want to become instructors or move into training design.",0
+T08-M13,"Department: Ground Operations
+Skills: Working out how much each aircraft can safely carry, preparing the paperwork pilots sign before departure, spreading passengers and bags evenly.
+Experience: Junior in the departure control office for one year.
+Career interests: Becoming fully qualified in that area and training others.","Department: Ground Operations
+Skills: Ramp operations, turnaround coordination, load control, ground handling contracts.
+Experience: Station operations manager at JKIA, responsible for aircraft turnarounds and ground handling agreements.
+Career interests: Mentoring ramp and station staff moving into operations management.",1
+T08-M14,"Department: Ground Operations
+Skills: Working out how much each aircraft can safely carry, preparing the paperwork pilots sign before departure, spreading passengers and bags evenly.
+Experience: Junior in the departure control office for one year.
+Career interests: Becoming fully qualified in that area and training others.","Department: Ground Operations
+Skills: Passenger services, check-in and boarding systems, irregular operations recovery.
+Experience: Customer service duty manager at the airport. Handled disruption and rebooking during irregular operations.
+Career interests: Coaching ground staff on customer service leadership and handling disruptions.",0
+T09-M01,"Department: Cargo
+Skills: Cargo acceptance, air waybills, shipment screening.
+Experience: Cargo agent at the terminal for 2 years.
+Career interests: Specialising in dangerous goods and becoming an inspector.","Department: Flight Operations
+Skills: Crew scheduling, route planning, operational safety audits, dispatch coordination, regulatory compliance reporting.
+Experience: Former Head of Flight Operations with 15 years experience across intercontinental routes, led the crew scheduling team.
+Career interests: Mentoring flight operations staff moving into scheduling and safety leadership roles.",0
+T09-M05,"Department: Cargo
+Skills: Cargo acceptance, air waybills, shipment screening.
+Experience: Cargo agent at the terminal for 2 years.
+Career interests: Specialising in dangerous goods and becoming an inspector.","Department: Engineering & Maintenance
+Skills: Aircraft maintenance inspection, technical compliance documentation, engineering quality control.
+Experience: Aircraft maintenance engineer at Kenya Airways for 11 years, specializing in technical inspections.
+Career interests: Mentoring engineers entering aircraft maintenance and technical compliance roles.",0
+T09-M08,"Department: Cargo
+Skills: Cargo acceptance, air waybills, shipment screening.
+Experience: Cargo agent at the terminal for 2 years.
+Career interests: Specialising in dangerous goods and becoming an inspector.","Department: Engineering & Maintenance
+Skills: Continuing airworthiness management, regulatory audit preparation, maintenance programme approvals.
+Experience: Quality assurance manager for maintenance. Led audits with the civil aviation regulator for over a decade.
+Career interests: Helping staff move into quality, compliance and airworthiness roles.",1
+T09-M15,"Department: Cargo
+Skills: Cargo acceptance, air waybills, shipment screening.
+Experience: Cargo agent at the terminal for 2 years.
+Career interests: Specialising in dangerous goods and becoming an inspector.","Department: Ground Operations
+Skills: Aviation security screening, threat assessment, security awareness training.
+Experience: Security manager responsible for passenger and baggage screening and compliance with the aviation security programme.
+Career interests: Guiding staff into aviation security and risk management roles.",1
+T09-M17,"Department: Cargo
+Skills: Cargo acceptance, air waybills, shipment screening.
+Experience: Cargo agent at the terminal for 2 years.
+Career interests: Specialising in dangerous goods and becoming an inspector.","Department: Cargo
+Skills: Cargo sales, freight forwarder relationships, perishable exports.
+Experience: Cargo commercial manager who grew fresh produce and flower exports to Europe.
+Career interests: Mentoring staff interested in cargo commercial and logistics careers.",1
+T09-M19,"Department: Cargo
+Skills: Cargo acceptance, air waybills, shipment screening.
+Experience: Cargo agent at the terminal for 2 years.
+Career interests: Specialising in dangerous goods and becoming an inspector.","Department: Cargo
+Skills: Warehouse management, cold chain handling, cargo build-up.
+Experience: Cargo terminal supervisor managing warehouse shifts and cold storage for perishables.
+Career interests: Coaching supervisors on running warehouse teams.",1
+T09-M20,"Department: Cargo
+Skills: Cargo acceptance, air waybills, shipment screening.
+Experience: Cargo agent at the terminal for 2 years.
+Career interests: Specialising in dangerous goods and becoming an inspector.","Department: Cargo
+Skills: Cargo revenue analysis, pricing, data reporting with Excel and Power BI.
+Experience: Cargo revenue analyst for 7 years, producing route profitability and pricing reports.
+Career interests: Mentoring anyone moving into analytics or revenue management.",0
+T10-M02,"Department: Ground Operations
+Skills: Reporting with Excel, tracking on-time performance figures, preparing monthly station reports.
+Experience: Station administration clerk for 3 years.
+Career interests: Moving into data analysis and revenue or pricing work.","Department: Flight Operations
+Skills: Route planning, flight dispatch, operational reporting, team coordination.
+Experience: Flight operations supervisor, 9 years at Kenya Airways, oversaw dispatch coordination for regional routes.
+Career interests: Advising on flight operations career progression and dispatch systems.",0
+T10-M03,"Department: Ground Operations
+Skills: Reporting with Excel, tracking on-time performance figures, preparing monthly station reports.
+Experience: Station administration clerk for 3 years.
+Career interests: Moving into data analysis and revenue or pricing work.","Department: Flight Operations
+Skills: Crew rostering, administrative coordination, scheduling software.
+Experience: Crew rostering coordinator at Kenya Airways for 5 years.
+Career interests: Open to mentoring on rostering and administrative operations.",0
+T10-M06,"Department: Ground Operations
+Skills: Reporting with Excel, tracking on-time performance figures, preparing monthly station reports.
+Experience: Station administration clerk for 3 years.
+Career interests: Moving into data analysis and revenue or pricing work.","Department: Engineering & Maintenance
+Skills: Engine overhaul planning, borescope inspections, reliability data analysis.
+Experience: Ran the engine shop at the maintenance base for 18 years and set up the fleet reliability programme.
+Career interests: Guiding young engineers into reliability engineering and maintenance planning.",1
+T10-M12,"Department: Ground Operations
+Skills: Reporting with Excel, tracking on-time performance figures, preparing monthly station reports.
+Experience: Station administration clerk for 3 years.
+Career interests: Moving into data analysis and revenue or pricing work.","Department: Cabin Services
+Skills: Inflight catering coordination, galley planning, supplier liaison.
+Experience: Moved from cabin crew into inflight product and catering planning, where she worked for 14 years.
+Career interests: Advising crew who want to move from flying into product, catering or procurement work.",0
+T10-M15,"Department: Ground Operations
+Skills: Reporting with Excel, tracking on-time performance figures, preparing monthly station reports.
+Experience: Station administration clerk for 3 years.
+Career interests: Moving into data analysis and revenue or pricing work.","Department: Ground Operations
+Skills: Aviation security screening, threat assessment, security awareness training.
+Experience: Security manager responsible for passenger and baggage screening and compliance with the aviation security programme.
+Career interests: Guiding staff into aviation security and risk management roles.",0

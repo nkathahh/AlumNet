@@ -28,14 +28,34 @@ into a different kind of role), so results can be broken down by those groups.
 
 Run everything from the `ml-service` folder with the virtual environment active.
 
-1. **Create the labelling sheets:** `python evaluation/labels.py make`
-   This writes `labels/judge_A.csv` and `labels/judge_B.csv`. Each judge rates all
-   300 mentee-mentor pairs: 2 = relevant, 1 = partly relevant, 0 = not relevant.
-   The sheets show IDs and profile text only, with no names and no model scores.
+1. **Create the labelling sheets**, one of two ways:
+   - `python evaluation/labels.py pool` (recommended). Pooled judging: for each
+     mentee, judges rate only the mentors that at least one method ranks in its top
+     5, plus 2 random mentors as a check. Pairs outside the pool count as not
+     relevant. This writes `labels/pooled/judge_A.csv`, `judge_B.csv` and
+     `pool.json`, which records exactly how the pool was built. Expect roughly
+     half of the 300 pairs.
+   - `python evaluation/labels.py make`: every pair, 300 per judge, in `labels/`.
+
+   Ratings: 2 = relevant, 1 = partly relevant, 0 = not relevant. The sheets show
+   IDs and profile text only, with no names and no model scores. Two different
+   people label, each alone, without seeing the other's sheet.
+
+   **Labelling page:** open `evaluation/labeller.html` in a browser (double-click),
+   load your sheet, rate with the 0, 1 and 2 keys, then download it and save it over
+   the original. It works offline, saves progress in the browser and never shows
+   scores or the other judge's labels.
 2. **Combine the labels:** `python evaluation/labels.py combine`
    This reports agreement (Cohen's kappa) and writes `labels/final_labels.csv`. Any
-   disagreements go to `labels/judge_C.csv` for a third judge; fill that in and run
-   `combine` again.
+   disagreements go to `judge_C.csv` (in the same folder as the sheets) for a third
+   judge; fill that in and run `combine` again. With pooled judging it also reports
+   how many random check pairs were labelled relevant: report that number, as it
+   estimates how many relevant mentors the pool missed.
+
+   **In the report**, describe pooled judging if you used it (depth 5, every method
+   in the development run, 2 random pairs per mentee), and say who the judges were.
+   If any labels come from a language model, name it as a model judge and keep it
+   separate from the human judges.
 3. **Development run:** `python evaluation/evaluate.py --split dev --latency`
    Add `--include-base` to also try `bge-base-en-v1.5`. This suggests a method and
    saves it to `selected_method.json`. Review that choice before going further.

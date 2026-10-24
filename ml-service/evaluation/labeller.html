@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AlumNet relevance labelling</title>
+<!--
+  Opens straight from the folder (double-click): no server, no internet, nothing is sent anywhere.
+  Load your judge sheet (judge_A.csv or judge_B.csv), rate each pair with the 0, 1 and 2 keys, then
+  download the sheet and put it back where it came from. Progress is kept in this browser while you
+  work, so closing the page by mistake loses nothing.
+  It never shows model scores or the other judge's labels, so the labels stay blind.
+-->
+<style>
+  :root {
+    --bg: #f6f5f2; --card: #ffffff; --ink: #1d2320; --soft: #56615b; --line: #dcdcd6;
+    --accent: #c8102e; --accent-soft: rgba(200, 16, 46, 0.08);
+    --l0: #5c6863; --l1: #92400e; --l2: #166534;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #141816; --card: #1d2320; --ink: #edefec; --soft: #b8c2bc; --line: #333b37;
+      --accent: #f0566c; --accent-soft: rgba(240, 86, 108, 0.12); --l0: #b8c2bc; --l1: #f0b46a; --l2: #6fd39a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1080px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 1.35rem; margin: 0 0 4px; }
+  .sub { color: var(--soft); margin: 0 0 20px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; }
+  .guide { margin-bottom: 18px; }
+  .guide ul { margin: 8px 0 0; padding-left: 20px; }
+  .guide li { margin: 4px 0; }
+  kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 6px; font: 600 0.9em ui-monospace, monospace; background: var(--bg); }
+  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  button, .file { font: inherit; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--ink); padding: 8px 14px; cursor: pointer; }
+  button:hover, .file:hover { border-color: var(--soft); }
+  button:focus-visible, .file:focus-within { outline: 3px solid var(--accent); outline-offset: 2px; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .file input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .progress { height: 8px; background: var(--line); border-radius: 99px; overflow: hidden; flex: 1; min-width: 160px; }
+  .progress > div { height: 100%; background: var(--accent); width: 0; transition: width 0.2s; }
+  .status { color: var(--soft); font-size: 0.92rem; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 18px 0; }
+  .pair h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--soft); margin: 0 0 10px; }
+  dl { margin: 0; }
+  dt { font-size: 0.8rem; font-weight: 600; color: var(--soft); margin-top: 10px; }
+  dd { margin: 2px 0 0; }
+  dd.goal { background: var(--accent-soft); border-radius: 6px; padding: 6px 8px; font-weight: 500; }
+  .choices { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .choice { text-align: left; padding: 12px 14px; border-width: 2px; }
+  .choice strong { display: block; font-size: 1.05rem; }
+  .choice span { color: var(--soft); font-size: 0.88rem; }
+  .choice[aria-pressed="true"][data-v="0"] { border-color: var(--l0); background: color-mix(in srgb, var(--l0) 12%, transparent); }
+  .choice[aria-pressed="true"][data-v="1"] { border-color: var(--l1); background: color-mix(in srgb, var(--l1) 12%, transparent); }
+  .choice[aria-pressed="true"][data-v="2"] { border-color: var(--l2); background: color-mix(in srgb, var(--l2) 12%, transparent); }
+  .nav { margin-top: 14px; justify-content: space-between; }
+  .done { border-color: var(--l2); }
+  .msg { color: var(--accent); font-weight: 500; }
+  .hidden { display: none !important; }
+  @media (max-width: 720px) { .pair, .choices { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>AlumNet relevance labelling</h1>
+  <p class="sub">Rate how well each mentor suits each mentee. Work alone and do not compare answers with the other judge until both sheets are done.</p>
+
+  <section class="card guide" aria-labelledby="guide-h">
+    <strong id="guide-h">How to rate</strong>
+    <ul>
+      <li>Ask: <em>if I were this mentee, would this mentor be a good person to learn from?</em> Judge mainly by the mentee's <strong>career interests</strong> (where they want to go), not only a shared department.</li>
+      <li><kbd>2</kbd> relevant: a good choice for this mentee. <kbd>1</kbd> partly relevant: some useful overlap, not a strong choice. <kbd>0</kbd> not relevant.</li>
+      <li>There is no target number of 2s. Rate each pair on its own, without trying to balance your answers, and trust your first careful reading.</li>
+      <li>Keys: <kbd>0</kbd> <kbd>1</kbd> <kbd>2</kbd> rate and move on, <kbd>←</kbd> back, <kbd>→</kbd> forward, <kbd>N</kbd> next unrated.</li>
+    </ul>
+  </section>
+
+  <section class="card" aria-label="Sheet">
+    <div class="row">
+      <label class="file">Load judge sheet (.csv)<input type="file" id="file" accept=".csv,text/csv"></label>
+      <button type="button" class="primary" id="download" disabled>Download labelled sheet</button>
+      <span class="status" id="sheet-name">No sheet loaded</span>
+    </div>
+    <p class="msg" id="msg" role="alert"></p>
+    <div class="row hidden" id="progress-row">
+      <div class="progress" role="progressbar" aria-label="Pairs rated" aria-valuemin="0" id="bar"><div></div></div>
+      <span class="status" id="count"></span>
+    </div>
+  </section>
+
+  <section class="hidden" id="work" aria-live="polite">
+    <div class="pair">
+      <article class="card"><h2>Mentee</h2><dl id="mentee"></dl></article>
+      <article class="card"><h2>Mentor</h2><dl id="mentor"></dl></article>
+    </div>
+    <div class="choices" role="group" aria-label="Rating">
+      <button type="button" class="choice" data-v="2" aria-pressed="false"><strong>2 · Relevant</strong><span>A good choice for this mentee</span></button>
+      <button type="button" class="choice" data-v="1" aria-pressed="false"><strong>1 · Partly relevant</strong><span>Some useful overlap, not a strong choice</span></button>
+      <button type="button" class="choice" data-v="0" aria-pressed="false"><strong>0 · Not relevant</strong><span>Would not help with their goals</span></button>
+    </div>
+    <div class="row nav">
+      <button type="button" id="prev">← Back</button>
+      <span class="status" id="position"></span>
+      <button type="button" id="next-unrated">Next unrated (N)</button>
+      <button type="button" id="next">Forward →</button>
+    </div>
+  </section>
+
+  <section class="card done hidden" id="finished">
+    <strong>Every pair is rated.</strong>
+    <p>Download the sheet and save it over the original <span id="finished-name"></span> in <code>ml-service/evaluation/labels</code> (or <code>labels/pooled</code>), then tell the person running the evaluation. You can still go back and change any rating first.</p>
+  </section>
+</main>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  let header = [], rows = [], labelCol = -1, idCol = -1, meCol = -1, mtCol = -1, pos = 0, fileName = '', storeKey = '';
+
+  // CSV reading and writing, including quoted fields that span lines
+  function parseCSV(text) {
+    text = text.replace(/^﻿/, '');
+    const out = []; let row = [], field = '', q = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (q) {
+        if (c === '"' && text[i + 1] === '"') { field += '"'; i++; }
+        else if (c === '"') q = false;
+        else field += c;
+      } else if (c === '"') q = true;
+      else if (c === ',') { row.push(field); field = ''; }
+      else if (c === '\n' || c === '\r') {
+        if (c === '\r' && text[i + 1] === '\n') i++;
+        row.push(field); field = '';
+        if (row.length > 1 || row[0] !== '') out.push(row);
+        row = [];
+      } else field += c;
+    }
+    if (field !== '' || row.length) { row.push(field); out.push(row); }
+    return out;
+  }
+  const cell = (v) => (/[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+  const toCSV = () => '﻿' + [header, ...rows].map((r) => r.map(cell).join(',')).join('\r\n') + '\r\n';
+
+  // "Department: x\nSkills: y" becomes labelled lines
+  function profile(el, text) {
+    el.textContent = '';
+    for (const line of text.split(/\r?\n/)) {
+      const at = line.indexOf(':');
+      if (at < 0) continue;
+      const name = line.slice(0, at).trim(), value = line.slice(at + 1).trim();
+      const dt = document.createElement('dt'); dt.textContent = name;
+      const dd = document.createElement('dd'); dd.textContent = value;
+      if (el.id === 'mentee' && /career interests/i.test(name)) dd.className = 'goal';
+      el.append(dt, dd);
+    }
+  }
+
+  const rated = () => rows.filter((r) => ['0', '1', '2'].includes((r[labelCol] || '').trim())).length;
+
+  function save() {
+    try { localStorage.setItem(storeKey, JSON.stringify({ labels: rows.map((r) => r[labelCol]), pos })); } catch { /* storage off: work still continues */ }
+  }
+
+  function show() {
+    const r = rows[pos];
+    profile($('mentee'), r[meCol]);
+    profile($('mentor'), r[mtCol]);
+    const v = (r[labelCol] || '').trim();
+    document.querySelectorAll('.choice').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === v)));
+    $('position').textContent = `Pair ${pos + 1} of ${rows.length}`;
+    $('prev').disabled = pos === 0;
+    $('next').disabled = pos === rows.length - 1;
+    const n = rated();
+    $('count').textContent = `${n} of ${rows.length} rated`;
+    $('bar').firstElementChild.style.width = `${(100 * n) / rows.length}%`;
+    $('bar').setAttribute('aria-valuemax', rows.length); $('bar').setAttribute('aria-valuenow', n);
+    $('finished').classList.toggle('hidden', n !== rows.length);
+  }
+
+  function nextUnrated() {
+    for (let k = 1; k <= rows.length; k++) {
+      const i = (pos + k) % rows.length;
+      if (!['0', '1', '2'].includes((rows[i][labelCol] || '').trim())) { pos = i; show(); return; }
+    }
+    show();
+  }
+
+  function rate(v) {
+    rows[pos][labelCol] = v;
+    save();
+    if (pos < rows.length - 1) pos++;
+    show();
+  }
+
+  $('file').addEventListener('change', async (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    $('msg').textContent = '';
+    const data = parseCSV(await f.text());
+    header = data[0] || [];
+    idCol = header.indexOf('pair_id'); meCol = header.indexOf('mentee_profile');
+    mtCol = header.indexOf('mentor_profile'); labelCol = header.indexOf('label');
+    if ([idCol, meCol, mtCol, labelCol].includes(-1)) { $('msg').textContent = 'This is not a judge sheet (it needs pair_id, mentee_profile, mentor_profile and label columns).'; return; }
+    rows = data.slice(1).filter((r) => r[idCol]);
+    while (rows.some((r) => r.length < header.length)) rows.forEach((r) => { while (r.length < header.length) r.push(''); });
+    pos = 0;
+    fileName = f.name;
+    storeKey = `alumnet-labels:${f.name}:${rows.length}:${rows[0][idCol]}`;
+    // Pick up where this sheet was left, unless the file itself already has more ratings
+    try {
+      const saved = JSON.parse(localStorage.getItem(storeKey) || 'null');
+      if (saved && saved.labels.length === rows.length) {
+        const savedCount = saved.labels.filter((v) => ['0', '1', '2'].includes(v)).length;
+        if (savedCount > rated()) { rows.forEach((r, i) => { r[labelCol] = saved.labels[i] || ''; }); pos = Math.min(saved.pos || 0, rows.length - 1); }
+      }
+    } catch { /* nothing saved */ }
+    $('sheet-name').textContent = `${fileName}: ${rows.length} pairs`;
+    $('finished-name').textContent = fileName;
+    $('download').disabled = false;
+    $('progress-row').classList.remove('hidden');
+    $('work').classList.remove('hidden');
+    // Start at the first unrated pair (or where this sheet was left)
+    if (!pos) { pos = rows.length - 1; nextUnrated(); } else show();
+  });
+
+  document.querySelectorAll('.choice').forEach((b) => b.addEventListener('click', () => rate(b.dataset.v)));
+  $('prev').onclick = () => { if (pos > 0) { pos--; save(); show(); } };
+  $('next').onclick = () => { if (pos < rows.length - 1) { pos++; save(); show(); } };
+  $('next-unrated').onclick = nextUnrated;
+  $('download').onclick = () => {
+    const url = URL.createObjectURL(new Blob([toCSV()], { type: 'text/csv;charset=utf-8' }));
+    const a = Object.assign(document.createElement('a'), { href: url, download: fileName || 'judge.csv' });
+    document.body.append(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  };
+
+  document.addEventListener('keydown', (e) => {
+    if (!rows.length || e.ctrlKey || e.metaKey || e.altKey || e.target.tagName === 'INPUT') return;
+    if (['0', '1', '2'].includes(e.key)) { e.preventDefault(); rate(e.key); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); $('prev').click(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); $('next').click(); }
+    else if (e.key.toLowerCase() === 'n') { e.preventDefault(); nextUnrated(); }
+  });
+  window.addEventListener('beforeunload', (e) => {
+    if (rows.length && rated() && rated() < rows.length) { e.preventDefault(); e.returnValue = ''; }
+  });
+})();
+</script>
+</body>
+</html>

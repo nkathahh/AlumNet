@@ -1,0 +1,31 @@
+run_id,split,method,mentee_id,department,phrasing,career_switch,n_relevant,hit_at_3,precision_at_3,precision_at_3_capped,first_relevant_rank,top_3
+20261024_195900,dev,Department baseline,D01,Flight Operations,standard,False,2,True,0.333,0.5,1,M01; M03; M04
+20261024_195900,dev,Department baseline,D02,Engineering & Maintenance,standard,False,2,True,0.667,1.0,1,M05; M06; M08
+20261024_195900,dev,Department baseline,D03,Flight Operations,paraphrase,False,2,True,0.667,1.0,1,M01; M04; M03
+20261024_195900,dev,Department baseline,D04,Cabin Services,standard,True,1,True,0.333,1.0,2,M12; M09; M10
+20261024_195900,dev,Department baseline,D05,Ground Operations,paraphrase,False,1,True,0.333,1.0,1,M13; M14; M16
+20261024_195900,dev,TF-IDF baseline,D01,Flight Operations,standard,False,2,True,0.667,1.0,1,M01; M02; M03
+20261024_195900,dev,TF-IDF baseline,D02,Engineering & Maintenance,standard,False,2,True,0.667,1.0,1,M05; M08; M07
+20261024_195900,dev,TF-IDF baseline,D03,Flight Operations,paraphrase,False,2,True,0.333,0.5,2,M02; M01; M10
+20261024_195900,dev,TF-IDF baseline,D04,Cabin Services,standard,True,1,True,0.333,1.0,1,M09; M10; M11
+20261024_195900,dev,TF-IDF baseline,D05,Ground Operations,paraphrase,False,1,True,0.333,1.0,1,M13; M05; M16
+20261024_195900,dev,BGE-small whole profile,D01,Flight Operations,standard,False,2,True,0.667,1.0,1,M02; M01; M03
+20261024_195900,dev,BGE-small whole profile,D02,Engineering & Maintenance,standard,False,2,True,0.333,0.5,1,M05; M03; M02
+20261024_195900,dev,BGE-small whole profile,D03,Flight Operations,paraphrase,False,2,True,0.667,1.0,2,M02; M03; M01
+20261024_195900,dev,BGE-small whole profile,D04,Cabin Services,standard,True,1,True,0.333,1.0,1,M09; M11; M10
+20261024_195900,dev,BGE-small whole profile,D05,Ground Operations,paraphrase,False,1,True,0.333,1.0,1,M13; M02; M01
+20261024_195900,dev,BGE-small field (equal),D01,Flight Operations,standard,False,2,True,0.667,1.0,1,M02; M01; M03
+20261024_195900,dev,BGE-small field (equal),D02,Engineering & Maintenance,standard,False,2,True,0.667,1.0,1,M05; M08; M07
+20261024_195900,dev,BGE-small field (equal),D03,Flight Operations,paraphrase,False,2,True,0.667,1.0,2,M02; M01; M03
+20261024_195900,dev,BGE-small field (equal),D04,Cabin Services,standard,True,1,True,0.333,1.0,1,M09; M01; M10
+20261024_195900,dev,BGE-small field (equal),D05,Ground Operations,paraphrase,False,1,True,0.333,1.0,1,M13; M02; M03
+20261024_195900,dev,BGE-small field (goals 40%),D01,Flight Operations,standard,False,2,True,0.667,1.0,1,M01; M02; M03
+20261024_195900,dev,BGE-small field (goals 40%),D02,Engineering & Maintenance,standard,False,2,True,0.667,1.0,1,M05; M08; M07
+20261024_195900,dev,BGE-small field (goals 40%),D03,Flight Operations,paraphrase,False,2,True,0.667,1.0,2,M02; M01; M03
+20261024_195900,dev,BGE-small field (goals 40%),D04,Cabin Services,standard,True,1,True,0.333,1.0,1,M09; M04; M01
+20261024_195900,dev,BGE-small field (goals 40%),D05,Ground Operations,paraphrase,False,1,True,0.333,1.0,1,M13; M02; M03
+20261024_195900,dev,BGE-small field (goals 50%),D01,Flight Operations,standard,False,2,True,0.667,1.0,1,M01; M02; M03
+20261024_195900,dev,BGE-small field (goals 50%),D02,Engineering & Maintenance,standard,False,2,True,0.667,1.0,1,M05; M08; M07
+20261024_195900,dev,BGE-small field (goals 50%),D03,Flight Operations,paraphrase,False,2,True,0.667,1.0,2,M02; M01; M03
+20261024_195900,dev,BGE-small field (goals 50%),D04,Cabin Services,standard,True,1,True,0.333,1.0,1,M09; M04; M01
+20261024_195900,dev,BGE-small field (goals 50%),D05,Ground Operations,paraphrase,False,1,True,0.333,1.0,1,M13; M02; M03

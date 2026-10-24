@@ -1,0 +1,17 @@
+{
+  "method": "BGE-small field (equal)",
+  "chosen_on": "development set",
+  "dev_run_id": "20261024_195900",
+  "dev_metrics": {
+    "mentees": 5,
+    "excluded_no_relevant": 0,
+    "hit_at_3": 1.0,
+    "hit_at_3_count": "5/5",
+    "precision_at_3": 0.533,
+    "precision_at_3_capped": 1.0,
+    "mrr": 0.9,
+    "hit_at_3_lenient": 1.0
+  },
+  "git_commit": "334dba1",
+  "note": "Review this choice before running the test split. Ties favour the deployed method."
+}

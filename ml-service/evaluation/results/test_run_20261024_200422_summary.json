@@ -1,0 +1,545 @@
+{
+  "run_id": "20261024_200422",
+  "split": "test",
+  "git_commit": "334dba1",
+  "python": "3.12.4",
+  "sentence_transformers": "3.0.1",
+  "scikit_learn": "1.5.1",
+  "models": {
+    "small": "BAAI/bge-small-en-v1.5"
+  },
+  "k": 3,
+  "relevant_label": 2,
+  "weight_presets": {
+    "equal": {
+      "skills": 0.3333333333333333,
+      "experience": 0.3333333333333333,
+      "goals": 0.3333333333333333
+    },
+    "goals 40%": {
+      "skills": 0.35,
+      "experience": 0.25,
+      "goals": 0.4
+    },
+    "goals 50%": {
+      "skills": 0.25,
+      "experience": 0.25,
+      "goals": 0.5
+    }
+  },
+  "tfidf_settings": {
+    "stop_words": "english",
+    "ngram_range": [
+      1,
+      2
+    ]
+  },
+  "department_tiebreak_seed": 42,
+  "mentees": 10,
+  "mentors": 20,
+  "results": {
+    "Department baseline": {
+      "overall": {
+        "mentees": 10,
+        "excluded_no_relevant": 0,
+        "hit_at_3": 0.7,
+        "hit_at_3_count": "7/10",
+        "precision_at_3": 0.267,
+        "precision_at_3_capped": 0.65,
+        "mrr": 0.512,
+        "hit_at_3_lenient": 0.8
+      },
+      "subsets": {
+        "department": {
+          "Cabin Services": {
+            "mentees": 2,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 0.0,
+            "hit_at_3_count": "0/2",
+            "precision_at_3": 0.0,
+            "precision_at_3_capped": 0.0,
+            "mrr": 0.25,
+            "hit_at_3_lenient": 0.5
+          },
+          "Cargo": {
+            "mentees": 1,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 1.0,
+            "hit_at_3_count": "1/1",
+            "precision_at_3": 0.333,
+            "precision_at_3_capped": 1.0,
+            "mrr": 0.5,
+            "hit_at_3_lenient": 1.0
+          },
+          "Engineering & Maintenance": {
+            "mentees": 2,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 1.0,
+            "hit_at_3_count": "2/2",
+            "precision_at_3": 0.333,
+            "precision_at_3_capped": 0.75,
+            "mrr": 0.667,
+            "hit_at_3_lenient": 1.0
+          },
+          "Flight Operations": {
+            "mentees": 2,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 1.0,
+            "hit_at_3_count": "2/2",
+            "precision_at_3": 0.5,
+            "precision_at_3_capped": 1.0,
+            "mrr": 0.667,
+            "hit_at_3_lenient": 1.0
+          },
+          "Ground Operations": {
+            "mentees": 3,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 0.667,
+            "hit_at_3_count": "2/3",
+            "precision_at_3": 0.222,
+            "precision_at_3_capped": 0.667,
+            "mrr": 0.486,
+            "hit_at_3_lenient": 0.667
+          }
+        },
+        "phrasing": {
+          "paraphrase": {
+            "mentees": 3,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 1.0,
+            "hit_at_3_count": "3/3",
+            "precision_at_3": 0.444,
+            "precision_at_3_capped": 1.0,
+            "mrr": 0.556,
+            "hit_at_3_lenient": 1.0
+          },
+          "standard": {
+            "mentees": 7,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 0.571,
+            "hit_at_3_count": "4/7",
+            "precision_at_3": 0.19,
+            "precision_at_3_capped": 0.5,
+            "mrr": 0.494,
+            "hit_at_3_lenient": 0.714
+          }
+        },
+        "career_switch": {
+          "False": {
+            "mentees": 6,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 0.833,
+            "hit_at_3_count": "5/6",
+            "precision_at_3": 0.333,
+            "precision_at_3_capped": 0.833,
+            "mrr": 0.569,
+            "hit_at_3_lenient": 1.0
+          },
+          "True": {
+            "mentees": 4,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 0.5,
+            "hit_at_3_count": "2/4",
+            "precision_at_3": 0.167,
+            "precision_at_3_capped": 0.375,
+            "mrr": 0.427,
+            "hit_at_3_lenient": 0.5
+          }
+        }
+      }
+    },
+    "TF-IDF baseline": {
+      "overall": {
+        "mentees": 10,
+        "excluded_no_relevant": 0,
+        "hit_at_3": 0.9,
+        "hit_at_3_count": "9/10",
+        "precision_at_3": 0.333,
+        "precision_at_3_capped": 0.85,
+        "mrr": 0.925,
+        "hit_at_3_lenient": 1.0
+      },
+      "subsets": {
+        "department": {
+          "Cabin Services": {
+            "mentees": 2,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 1.0,
+            "hit_at_3_count": "2/2",
+            "precision_at_3": 0.333,
+            "precision_at_3_capped": 1.0,
+            "mrr": 1.0,
+            "hit_at_3_lenient": 1.0
+          },
+          "Cargo": {
+            "mentees": 1,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 1.0,
+            "hit_at_3_count": "1/1",
+            "precision_at_3": 0.333,
+            "precision_at_3_capped": 1.0,
+            "mrr": 1.0,
+            "hit_at_3_lenient": 1.0
+          },
+          "Engineering & Maintenance": {
+            "mentees": 2,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 0.5,
+            "hit_at_3_count": "1/2",
+            "precision_at_3": 0.333,
+            "precision_at_3_capped": 0.5,
+            "mrr": 0.625,
+            "hit_at_3_lenient": 1.0
+          },
+          "Flight Operations": {
+            "mentees": 2,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 1.0,
+            "hit_at_3_count": "2/2",
+            "precision_at_3": 0.333,
+            "precision_at_3_capped": 0.75,
+            "mrr": 1.0,
+            "hit_at_3_lenient": 1.0
+          },
+          "Ground Operations": {
+            "mentees": 3,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 1.0,
+            "hit_at_3_count": "3/3",
+            "precision_at_3": 0.333,
+            "precision_at_3_capped": 1.0,
+            "mrr": 1.0,
+            "hit_at_3_lenient": 1.0
+          }
+        },
+        "phrasing": {
+          "paraphrase": {
+            "mentees": 3,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 0.667,
+            "hit_at_3_count": "2/3",
+            "precision_at_3": 0.222,
+            "precision_at_3_capped": 0.5,
+            "mrr": 0.75,
+            "hit_at_3_lenient": 1.0
+          },
+          "standard": {
+            "mentees": 7,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 1.0,
+            "hit_at_3_count": "7/7",
+            "precision_at_3": 0.381,
+            "precision_at_3_capped": 1.0,
+            "mrr": 1.0,
+            "hit_at_3_lenient": 1.0
+          }
+        },
+        "career_switch": {
+          "False": {
+            "mentees": 6,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 0.833,
+            "hit_at_3_count": "5/6",
+            "precision_at_3": 0.278,
+            "precision_at_3_capped": 0.75,
+            "mrr": 0.875,
+            "hit_at_3_lenient": 1.0
+          },
+          "True": {
+            "mentees": 4,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 1.0,
+            "hit_at_3_count": "4/4",
+            "precision_at_3": 0.417,
+            "precision_at_3_capped": 1.0,
+            "mrr": 1.0,
+            "hit_at_3_lenient": 1.0
+          }
+        }
+      }
+    },
+    "BGE-small whole profile": {
+      "overall": {
+        "mentees": 10,
+        "excluded_no_relevant": 0,
+        "hit_at_3": 0.9,
+        "hit_at_3_count": "9/10",
+        "precision_at_3": 0.367,
+        "precision_at_3_capped": 0.9,
+        "mrr": 0.859,
+        "hit_at_3_lenient": 1.0
+      },
+      "subsets": {
+        "department": {
+          "Cabin Services": {
+            "mentees": 2,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 1.0,
+            "hit_at_3_count": "2/2",
+            "precision_at_3": 0.333,
+            "precision_at_3_capped": 1.0,
+            "mrr": 1.0,
+            "hit_at_3_lenient": 1.0
+          },
+          "Cargo": {
+            "mentees": 1,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 1.0,
+            "hit_at_3_count": "1/1",
+            "precision_at_3": 0.333,
+            "precision_at_3_capped": 1.0,
+            "mrr": 1.0,
+            "hit_at_3_lenient": 1.0
+          },
+          "Engineering & Maintenance": {
+            "mentees": 2,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 1.0,
+            "hit_at_3_count": "2/2",
+            "precision_at_3": 0.5,
+            "precision_at_3_capped": 1.0,
+            "mrr": 1.0,
+            "hit_at_3_lenient": 1.0
+          },
+          "Flight Operations": {
+            "mentees": 2,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 1.0,
+            "hit_at_3_count": "2/2",
+            "precision_at_3": 0.5,
+            "precision_at_3_capped": 1.0,
+            "mrr": 0.75,
+            "hit_at_3_lenient": 1.0
+          },
+          "Ground Operations": {
+            "mentees": 3,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 0.667,
+            "hit_at_3_count": "2/3",
+            "precision_at_3": 0.222,
+            "precision_at_3_capped": 0.667,
+            "mrr": 0.697,
+            "hit_at_3_lenient": 1.0
+          }
+        },
+        "phrasing": {
+          "paraphrase": {
+            "mentees": 3,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 0.667,
+            "hit_at_3_count": "2/3",
+            "precision_at_3": 0.333,
+            "precision_at_3_capped": 0.667,
+            "mrr": 0.697,
+            "hit_at_3_lenient": 1.0
+          },
+          "standard": {
+            "mentees": 7,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 1.0,
+            "hit_at_3_count": "7/7",
+            "precision_at_3": 0.381,
+            "precision_at_3_capped": 1.0,
+            "mrr": 0.929,
+            "hit_at_3_lenient": 1.0
+          }
+        },
+        "career_switch": {
+          "False": {
+            "mentees": 6,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 0.833,
+            "hit_at_3_count": "5/6",
+            "precision_at_3": 0.333,
+            "precision_at_3_capped": 0.833,
+            "mrr": 0.848,
+            "hit_at_3_lenient": 1.0
+          },
+          "True": {
+            "mentees": 4,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 1.0,
+            "hit_at_3_count": "4/4",
+            "precision_at_3": 0.417,
+            "precision_at_3_capped": 1.0,
+            "mrr": 0.875,
+            "hit_at_3_lenient": 1.0
+          }
+        }
+      }
+    },
+    "BGE-small field (equal)": {
+      "overall": {
+        "mentees": 10,
+        "excluded_no_relevant": 0,
+        "hit_at_3": 0.9,
+        "hit_at_3_count": "9/10",
+        "precision_at_3": 0.367,
+        "precision_at_3_capped": 0.9,
+        "mrr": 0.857,
+        "hit_at_3_lenient": 1.0
+      },
+      "subsets": {
+        "department": {
+          "Cabin Services": {
+            "mentees": 2,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 1.0,
+            "hit_at_3_count": "2/2",
+            "precision_at_3": 0.333,
+            "precision_at_3_capped": 1.0,
+            "mrr": 1.0,
+            "hit_at_3_lenient": 1.0
+          },
+          "Cargo": {
+            "mentees": 1,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 1.0,
+            "hit_at_3_count": "1/1",
+            "precision_at_3": 0.333,
+            "precision_at_3_capped": 1.0,
+            "mrr": 1.0,
+            "hit_at_3_lenient": 1.0
+          },
+          "Engineering & Maintenance": {
+            "mentees": 2,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 1.0,
+            "hit_at_3_count": "2/2",
+            "precision_at_3": 0.5,
+            "precision_at_3_capped": 1.0,
+            "mrr": 1.0,
+            "hit_at_3_lenient": 1.0
+          },
+          "Flight Operations": {
+            "mentees": 2,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 1.0,
+            "hit_at_3_count": "2/2",
+            "precision_at_3": 0.5,
+            "precision_at_3_capped": 1.0,
+            "mrr": 0.75,
+            "hit_at_3_lenient": 1.0
+          },
+          "Ground Operations": {
+            "mentees": 3,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 0.667,
+            "hit_at_3_count": "2/3",
+            "precision_at_3": 0.222,
+            "precision_at_3_capped": 0.667,
+            "mrr": 0.689,
+            "hit_at_3_lenient": 1.0
+          }
+        },
+        "phrasing": {
+          "paraphrase": {
+            "mentees": 3,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 0.667,
+            "hit_at_3_count": "2/3",
+            "precision_at_3": 0.333,
+            "precision_at_3_capped": 0.667,
+            "mrr": 0.689,
+            "hit_at_3_lenient": 1.0
+          },
+          "standard": {
+            "mentees": 7,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 1.0,
+            "hit_at_3_count": "7/7",
+            "precision_at_3": 0.381,
+            "precision_at_3_capped": 1.0,
+            "mrr": 0.929,
+            "hit_at_3_lenient": 1.0
+          }
+        },
+        "career_switch": {
+          "False": {
+            "mentees": 6,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 0.833,
+            "hit_at_3_count": "5/6",
+            "precision_at_3": 0.333,
+            "precision_at_3_capped": 0.833,
+            "mrr": 0.844,
+            "hit_at_3_lenient": 1.0
+          },
+          "True": {
+            "mentees": 4,
+            "excluded_no_relevant": 0,
+            "hit_at_3": 1.0,
+            "hit_at_3_count": "4/4",
+            "precision_at_3": 0.417,
+            "precision_at_3_capped": 1.0,
+            "mrr": 0.875,
+            "hit_at_3_lenient": 1.0
+          }
+        }
+      }
+    }
+  },
+  "latency": {
+    "BAAI/bge-small-en-v1.5": {
+      "20": {
+        "median_s": 1.317,
+        "max_s": 1.323
+      },
+      "100": {
+        "median_s": 5.231,
+        "max_s": 5.386
+      },
+      "200": {
+        "median_s": 10.098,
+        "max_s": 10.235
+      }
+    }
+  },
+  "labels": {
+    "pairs": 165,
+    "exact_agreement": 0.515,
+    "cohen_kappa": 0.21,
+    "cohen_kappa_linear": 0.367,
+    "disagreements": 80,
+    "pooled": true,
+    "pairs_judged": 165,
+    "pairs_assumed_not_relevant": 135,
+    "pool_depth": 5,
+    "random_check_pairs": 30,
+    "random_check_relevant": 0,
+    "unresolved": 0
+  },
+  "selection": {
+    "method": "BGE-small field (equal)",
+    "chosen_on": "development set",
+    "dev_run_id": "20261024_195900",
+    "dev_metrics": {
+      "mentees": 5,
+      "excluded_no_relevant": 0,
+      "hit_at_3": 1.0,
+      "hit_at_3_count": "5/5",
+      "precision_at_3": 0.533,
+      "precision_at_3_capped": 1.0,
+      "mrr": 0.9,
+      "hit_at_3_lenient": 1.0
+    },
+    "git_commit": "334dba1",
+    "note": "Review this choice before running the test split. Ties favour the deployed method."
+  },
+  "test_set_untouched": true,
+  "acceptance_targets": {
+    "AC1_hit_rate_at_3": 0.8,
+    "AC2_precision_at_3": 0.5,
+    "AC5_median_latency_seconds": 3.0,
+    "AC6_max_department_gap": 0.2
+  },
+  "acceptance_source": "Default targets, fixed before the test run on 24 October 2026. The supervisor could not be reached, so they were not changed or approved.",
+  "acceptance_checks": {
+    "AC1 Hit@3": true,
+    "AC2 P@3 (capped)": true,
+    "AC3 beats both baselines": false,
+    "AC4 beats TF-IDF on paraphrases": false,
+    "AC6 department gap": false,
+    "AC5 latency (20 mentors)": true
+  }
+}

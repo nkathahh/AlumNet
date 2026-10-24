@@ -66,6 +66,9 @@ ACCEPTANCE = {
     'AC5_median_latency_seconds': 3.0,
     'AC6_max_department_gap': 0.20,
 }
+# Where the targets came from, saved with every test run
+ACCEPTANCE_SOURCE = ('Default targets, fixed before the test run on 24 October 2026. '
+                     'The supervisor could not be reached, so they were not changed or approved.')
 
 LATENCY_POOL_SIZES = [20, 100, 200]
 LATENCY_REPEATS = 5
@@ -372,6 +375,11 @@ def main():
         'results': summary,
         'latency': latency,
     }
+    # How the labels were made (pooled or every pair, and how far the judges agreed)
+    agreement_file = os.path.join(HERE, 'labels', 'agreement.json')
+    if os.path.exists(agreement_file):
+        with open(agreement_file, encoding='utf-8') as f:
+            meta['labels'] = json.load(f)
 
     if args.split == 'dev':
         # Suggest the best embedding method on the development set. Baselines are
@@ -418,6 +426,7 @@ def main():
             median_20 = latency[MODELS[key]]['20']['median_s']
             checks['AC5 latency (20 mentors)'] = median_20 <= ACCEPTANCE['AC5_median_latency_seconds']
         meta['acceptance_targets'] = ACCEPTANCE
+        meta['acceptance_source'] = ACCEPTANCE_SOURCE
         meta['acceptance_checks'] = checks
 
         print(f'\nAcceptance checks for the selected method ({selection["method"]}):')
