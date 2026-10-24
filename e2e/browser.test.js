@@ -288,8 +288,8 @@ test('a member asked to accept a changed privacy notice can accept it, or still 
   assert.equal(await pg.getByRole('dialog').count(), 0);
   assert.equal(await pg.locator('#st-name').textContent(), 'Old Notice');
 
-  await pg.locator('#privacy-banner button').click();
-  await pg.waitForLoadState('load');
+  // Accepting saves, then reloads the page: wait for that reload, not just the click
+  await Promise.all([pg.waitForEvent('load'), pg.locator('#privacy-banner button').click()]);
   await pg.waitForLoadState('networkidle');
   assert.equal(await pg.locator('#privacy-banner').count(), 0);
   assert.equal((await api(pg, 'GET', '/profile/me')).status, 200);
