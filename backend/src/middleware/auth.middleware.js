@@ -16,6 +16,13 @@ const PRIVACY_EXEMPT = new Set([
   'POST /api/auth/logout-everywhere'
 ]);
 
+// After an admin resets two-factor, the member sets it up again before anything else
+const TWO_FACTOR_SETUP_ALLOWED = new Set([
+  ...PRIVACY_EXEMPT,
+  'POST /api/auth/2fa/setup',
+  'POST /api/auth/2fa/enable'
+]);
+
 const UNSAFE = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 /*
@@ -51,7 +58,7 @@ async function requireAuth(req, res, next) {
 
   try {
     const [[u]] = await pool.execute(
-      `SELECT u.status, u.session_version, u.totp_enabled, u.privacy_version, sd.alumni_eligible
+      `SELECT u.status, u.session_version, u.totp_enabled, u.totp_setup_required, u.privacy_version, sd.alumni_eligible
        FROM users u LEFT JOIN staff_directory sd ON sd.staff_number = u.staff_number
        WHERE u.user_id = :userId`,
       { userId: decoded.userId }
@@ -81,6 +88,12 @@ async function requireAuth(req, res, next) {
         code: 'privacy_update',
         version: PRIVACY_VERSION,
         error: 'The privacy notice has changed. Please read and accept it to carry on.'
+      });
+    }
+    if (u.totp_setup_required && !TWO_FACTOR_SETUP_ALLOWED.has(`${req.method} ${req.originalUrl.split('?')[0]}`)) {
+      return res.status(403).json({
+        code: 'two_factor_setup_required',
+        error: 'The alumni office reset two-factor on your account. Set it up again in Account settings to carry on.'
       });
     }
     next();

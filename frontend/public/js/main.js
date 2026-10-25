@@ -43,6 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
   wireSafetyLinks();
   wireMentorDirectory();
   wireHrImport();
+  wireAdminAdmins();
   checkAdminTwoFactor();
   wireOnboarding();
 });
@@ -76,6 +77,7 @@ const AUTH_PATHS = ['/auth/login', '/auth/google', '/auth/2fa/verify', '/auth/si
     if (res.status === 403 && path !== '/auth/privacy') {
       const data = await res.clone().json().catch(() => null);
       if (data && data.code === 'privacy_update') showPrivacyUpdate(data.version);
+      if (data && data.code === 'two_factor_setup_required') showTwoFactorSetupPrompt();
     }
     return res;
   };
@@ -101,6 +103,43 @@ function clearSession() {
     if (PAGE_ROLES[page] || page === 'onboarding.html') window.location.reload();
   });
 })();
+
+/*
+ * An admin reset this member's two-factor (they had lost their phone and
+ * backup codes). The server refuses everything else until they set it up
+ * again, so send them to Account settings, where a banner explains.
+ */
+let twoFactorPromptShown = false;
+function showTwoFactorSetupPrompt() {
+  if (twoFactorPromptShown || privacyPromptShown) return;
+  twoFactorPromptShown = true;
+  if (location.pathname.split('/').pop() === 'settings.html') {
+    const banner = document.getElementById('st-2fa-reset');
+    if (banner) banner.style.display = 'block';
+    return;
+  }
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal-card dlg" role="dialog" aria-modal="true" aria-labelledby="tf-title" aria-describedby="tf-text">
+      <h3 id="tf-title">Set up two-factor again</h3>
+      <p class="st-text" id="tf-text">The alumni office reset two-factor authentication on your account. Set it up again with your authenticator app to carry on using AlumNet. It takes about a minute.</p>
+      <p class="st-text">If you did not ask for this, contact the alumni office straight away.</p>
+      <div class="dlg-actions">
+        <button type="button" class="btn btn-secondary" data-tf="out">Log out</button>
+        <button type="button" class="btn btn-primary" data-tf="go">Set it up now</button>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop);
+  backdrop.querySelector('[data-tf="out"]').onclick = async () => {
+    try { await fetch(`${API_BASE}/auth/logout`, { method: 'POST' }); } catch { /* offline */ }
+    clearSession();
+    window.location.href = 'login.html';
+  };
+  const go = backdrop.querySelector('[data-tf="go"]');
+  go.onclick = () => { window.location.href = 'settings.html#twofa-panel'; };
+  go.focus();
+}
 
 /*
  * The privacy notice changed since this member accepted it, and the server
@@ -225,6 +264,7 @@ const NAV_CONFIG = {
         { tab: 'verification', label: 'Verification' },
         { tab: 'reports', label: 'Reports' },
         { tab: 'users', label: 'User management' },
+        { tab: 'admins', label: 'Admins' },
         { tab: 'hr', label: 'HR records' },
         { tab: 'events', label: 'Event management' },
         { tab: 'opportunities', label: 'Content moderation' },
@@ -2709,13 +2749,14 @@ async function openUserDetail(userId) {
         ${row('Last signed in', a.last_login_at ? `${d(a.last_login_at)} (${escapeHTML(timeAgo(a.last_login_at))})` : 'Never')}
         ${row('Department', escapeHTML(a.department || 'Not set'))}
         ${row('Location', escapeHTML([a.city, a.country].filter(Boolean).join(', ') || 'Not set'))}
-        ${row('Two-factor', a.two_factor ? 'On' : 'Off')}
+        ${row('Two-factor', a.two_factor ? 'On' : a.two_factor_setup_required ? 'Off (reset, must set it up again)' : 'Off')}
         ${row('Google sign-in', a.google_linked ? 'Linked' : 'Not linked')}
       </dl></section>
       <section><h4>HR record</h4>${data.hr ? `<dl class="ud-dl">
         ${row('Status', data.hr.employment_status === 'former' ? 'Former staff' : 'Current staff')}
         ${row('Alumni network', data.hr.alumni_eligible ? 'Eligible' : '<strong class="ud-warn">Not eligible</strong>')}
         ${row('HR department', escapeHTML(data.hr.department || ''))}
+        ${row('Phone (HR)', data.hr.mobile ? escapeHTML(data.hr.mobile) : '<span class="md-muted">None on record</span>')}
         ${row('Name in HR', `${escapeHTML(data.hr.name || '')}${data.hr.name_matches ? '' : ' <strong class="ud-warn">(differs from the account)</strong>'}`)}
       </dl>` : '<p class="md-muted st-small">Not linked to an HR record (older demo account).</p>'}</section>
     </div>
@@ -2757,16 +2798,53 @@ async function openUserDetail(userId) {
       <p class="md-muted st-small">Opening this page is recorded in the activity log.</p></section>
 
     <div class="dlg-actions">
+      ${a.two_factor && !a.is_me && a.status === 'active' ? '<button type="button" class="btn btn-secondary" id="ud-reset-2fa">Reset two-factor</button>' : ''}
       ${a.role === 'admin' ? '' : `<button type="button" class="btn ${a.status === 'suspended' ? 'btn-secondary' : 'btn-danger'}" data-action="toggle-status" data-user-id="${a.user_id}" data-name="${escapeHTML(a.name)}" data-suspended="${a.status === 'suspended' ? 1 : 0}">${a.status === 'suspended' ? 'Reactivate' : 'Suspend'}</button>`}
       <button type="button" class="btn btn-secondary" id="ud-close">Close</button>
     </div>`;
   box.querySelector('#ud-close').onclick = close;
+  const resetBtn = box.querySelector('#ud-reset-2fa');
+  if (resetBtn) resetBtn.onclick = () => { close(); openResetTwoFactorDialog(a, data.hr); };
   // The same suspend and reactivate flow as the table; this view closes so it never shows an old status
   wireAdminActions(box);
   const toggle = box.querySelector('[data-action="toggle-status"]');
   if (toggle) toggle.addEventListener('click', () => setTimeout(close, 0));
   // Links to the other person in a mentorship open their details instead
   box.querySelectorAll('[data-user-detail]').forEach((b) => { b.onclick = () => { close(); openUserDetail(b.dataset.userDetail); }; });
+}
+
+/* A member lost their phone and backup codes: reset two-factor after checking who they are */
+function openResetTwoFactorDialog(account, hr) {
+  openDialog({
+    title: `Reset two-factor for ${account.name}?`,
+    confirmText: 'Reset two-factor',
+    danger: true,
+    bodyHTML: `
+      <p class="st-text">Only do this after checking that the person asking really is ${escapeHTML(account.name)}. Someone pretending to be them could take over the account.</p>
+      <div class="dlg-safety">${hr && hr.mobile
+        ? `Phone the number HR holds: <strong>${escapeHTML(hr.mobile)}</strong>. Never use a number the caller gives you.`
+        : 'HR holds no phone number for them, so check in person or on a video call with their staff ID.'}</div>
+      <fieldset class="fb-q"><legend>How did you check who they are?</legend>
+        <label class="check-row"><input type="radio" name="rt-method" value="hr_phone"${hr && hr.mobile ? '' : ' disabled'}><span>Phoned the number HR holds</span></label>
+        <label class="check-row"><input type="radio" name="rt-method" value="in_person"><span>Met in person and saw their staff ID</span></label>
+        <label class="check-row"><input type="radio" name="rt-method" value="video_call"><span>Video call with their staff ID shown</span></label>
+      </fieldset>
+      <div class="field"><label for="rt-note">What you checked (kept in the activity log)</label>
+        <textarea id="rt-note" rows="3" maxlength="200" placeholder="For example: called 0722 000 000, confirmed staff number and department, lost phone on 20 October"></textarea></div>
+      <p class="st-text md-muted st-small">They are signed out everywhere, told by email and in the app, and must set two-factor up again before using AlumNet.</p>`,
+    onConfirm: async (dlg) => {
+      const method = dlg.querySelector('input[name="rt-method"]:checked');
+      if (!method) return 'Choose how you checked who they are.';
+      const { ok, data } = await apiSend('POST', `/admin/users/${account.user_id}/reset-two-factor`, {
+        method: method.value, note: dlg.querySelector('#rt-note').value
+      });
+      if (!ok) return data.error || 'Could not reset two-factor.';
+      toast(data.message);
+      renderAdminTable();
+      renderAdminLogs();
+      return null;
+    }
+  });
 }
 
 const REPORT_REASON_WORDS = {
@@ -2908,6 +2986,7 @@ function wireHrImport() {
         <div><strong>${data.invalid.length}</strong><span>Rows with problems</span></div>
       </div>
       ${data.retiring.length ? `<p class="st-text"><strong>These members become mentors.</strong> Their open requests as mentees will be closed and they will be told why.</p>${list(data.retiring, (x) => `${escapeHTML(x.full_name)} (${escapeHTML(x.staff_number)})`).replace(/class="bad"/g, '')}` : ''}
+      ${(data.email_changes || []).length ? `<p class="st-text"><strong>Their sign-in email changes</strong> to the one HR now holds. Both the old and the new address are told.</p>${list(data.email_changes, (x) => `${escapeHTML(x.full_name)}: ${escapeHTML(x.from)} to ${escapeHTML(x.to)}`).replace(/class="bad"/g, '')}` : ''}
       ${data.ineligible.length ? `<p class="st-text"><strong>These members lose access</strong> because HR marks them not eligible.</p>${list(data.ineligible, (x) => `${escapeHTML(x.full_name)} (${escapeHTML(x.staff_number)})`)}` : ''}
       ${data.invalid.length ? `<p class="st-text"><strong>Skipped rows:</strong></p>${list(data.invalid, (x) => `Line ${x.line}${x.staff_number ? ' (' + escapeHTML(x.staff_number) + ')' : ''}: ${escapeHTML(x.errors.join(', '))}`)}` : ''}
       <div class="st-actions">
@@ -2968,6 +3047,88 @@ async function renderHrRequests() {
   });
 }
 
+/* ---------- Admins: add, remove and approve changes ---------- */
+
+async function renderAdminAdmins() {
+  const body = document.getElementById('admin-admins-body');
+  if (!body) return;
+  const { ok, data } = await apiSend('GET', '/admin/admins');
+  if (!ok) { body.innerHTML = `<tr><td colspan="5">${escapeHTML(data.error || 'Could not load admins.')}</td></tr>`; return; }
+  const day = (v) => (v ? new Date(v).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
+  document.getElementById('admin-admins-count').textContent = plural(data.active_admins, 'active admin');
+  const waitingFor = new Set(data.requests.map((r) => r.target_id));
+  body.innerHTML = data.admins.map((a) => `
+    <tr>
+      <td><strong>${escapeHTML(a.name)}</strong>${a.me ? ' <span class="md-muted st-small">(you)</span>' : ''}<br><span class="md-muted st-small">${escapeHTML(a.email)}</span>${a.status !== 'active' ? ' <span class="md-pill rejected">Suspended</span>' : ''}</td>
+      <td>${a.totp_enabled ? 'On' : '<strong class="ud-warn">Off: tools locked</strong>'}</td>
+      <td>${a.last_login_at ? escapeHTML(timeAgo(a.last_login_at)) : 'Never'}</td>
+      <td>${a.added_at ? `${day(a.added_at)}${a.added_by_name ? `<br><span class="md-muted st-small">by ${escapeHTML(a.added_by_name)}</span>` : ''}` : '<span class="md-muted st-small">Set up with the script</span>'}</td>
+      <td>${waitingFor.has(a.user_id) ? '<span class="md-muted st-small">Change waiting</span>'
+        : data.active_admins <= 1 ? '<span class="md-muted st-small">Last admin</span>'
+          : `<button type="button" class="btn-quiet st-small" data-remove-admin="${a.user_id}" data-name="${escapeHTML(a.name)}">${a.me ? 'Step down' : 'Remove'}</button>`}</td>
+    </tr>`).join('');
+
+  body.querySelectorAll('[data-remove-admin]').forEach((btn) => {
+    btn.onclick = async () => {
+      const note = await askDialog({
+        title: `Remove ${btn.dataset.name} as an admin?`,
+        text: 'A different admin must approve this. Once approved they are signed out, and keep only their member account, if they have one.',
+        confirmText: 'Ask for approval', danger: true,
+        input: { label: 'Reason (kept in the log)', placeholder: 'e.g. Left the alumni office', required: 'Give a reason.' }
+      });
+      if (note === null) return;
+      const r = await apiSend('POST', '/admin/admins/requests', { action: 'remove', userId: Number(btn.dataset.removeAdmin), note });
+      toast(r.ok ? r.data.message : (r.data.error || 'Could not do that'));
+      renderAdminAdmins();
+      renderAdminLogs();
+    };
+  });
+
+  const panel = document.getElementById('admin-requests-panel');
+  const mount = document.getElementById('admin-requests');
+  panel.style.display = data.requests.length ? '' : 'none';
+  mount.innerHTML = data.requests.map((r) => `
+    <div class="request-card request-card-rich">
+      <div class="req-main"><strong>${r.action === 'add' ? 'Make' : 'Remove'} ${escapeHTML(r.target_name)} ${r.action === 'add' ? 'an admin' : 'as an admin'}</strong>
+        <span class="md-muted st-small">(${escapeHTML(r.target_email)})</span><br>
+        <span class="md-muted st-small">Asked by ${r.mine ? 'you' : escapeHTML(r.requested_by_name)} · ${escapeHTML(timeAgo(r.created_at))}${r.note ? ` · ${escapeHTML(r.note)}` : ''}</span></div>
+      <div class="post-side">${r.mine
+        ? `<span class="md-muted st-small">Waiting for another admin</span> <button class="btn-quiet st-small" data-admin-decide="cancel" data-id="${r.request_id}">Cancel</button>`
+        : `<button class="btn btn-primary md-btn-sm" data-admin-decide="approve" data-id="${r.request_id}">Approve</button>
+           <button class="btn-quiet st-small" data-admin-decide="reject" data-id="${r.request_id}">Reject</button>`}</div>
+    </div>`).join('');
+  mount.querySelectorAll('[data-admin-decide]').forEach((btn) => {
+    btn.onclick = async () => {
+      const decision = btn.dataset.adminDecide;
+      if (decision === 'approve' && !(await askConfirm('Approve this change?', 'It applies straight away and the person is told by email.', { confirmText: 'Approve' }))) return;
+      const r = await apiSend('POST', `/admin/admins/requests/${btn.dataset.id}/decision`, { decision });
+      toast(r.ok ? r.data.message : (r.data.error || 'Could not do that'));
+      renderAdminAdmins();
+      renderAdminLogs();
+    };
+  });
+}
+
+function wireAdminAdmins() {
+  const form = document.getElementById('admin-add-form');
+  if (!form) return;
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const msg = document.getElementById('admin-add-msg');
+    const email = document.getElementById('admin-add-email').value.trim();
+    if (!email) { setMsg(msg, 'Enter their email.'); return; }
+    const btn = form.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    const r = await apiSend('POST', '/admin/admins/requests', { action: 'add', email, note: document.getElementById('admin-add-note').value });
+    btn.disabled = false;
+    if (!r.ok) { setMsg(msg, r.data.error || 'Could not add them.'); return; }
+    setMsg(msg, r.data.message, true);
+    form.reset();
+    renderAdminAdmins();
+    renderAdminLogs();
+  });
+}
+
 /* Admin tools need 2FA: show one clear message instead of empty tabs */
 async function checkAdminTwoFactor() {
   const banner = document.getElementById('admin-2fa-required');
@@ -2983,7 +3144,7 @@ async function checkAdminTwoFactor() {
 }
 
 
-const ADMIN_TABS = ['overview', 'verification', 'reports', 'users', 'hr', 'events', 'opportunities', 'impact', 'logs'];
+const ADMIN_TABS = ['overview', 'verification', 'reports', 'users', 'admins', 'hr', 'events', 'opportunities', 'impact', 'logs'];
 
 function showAdminTab(name) {
   ADMIN_TABS.forEach((t) => {
@@ -2998,6 +3159,7 @@ function showAdminTab(name) {
   // Fresh data each time a tab opens, so admins never act on an old list
   if (name === 'events' && typeof renderAdminEvents === 'function') renderAdminEvents();
   if (name === 'impact') renderImpact();
+  if (name === 'admins') renderAdminAdmins();
 }
 
 function wireAdminTabs() {
@@ -3986,6 +4148,10 @@ async function renderAccountSettings() {
     return;
   }
   if (account.privacy && account.privacy.accepted !== account.privacy.current) showPrivacyUpdate(account.privacy.current);
+  if (account.twoFactorSetupRequired) {
+    const banner = document.getElementById('st-2fa-reset');
+    if (banner) banner.style.display = 'block';
+  }
 
   document.getElementById('st-name').textContent = account.name;
   document.getElementById('st-email').textContent = account.email;
@@ -4202,7 +4368,11 @@ function drawTwoFactorPanel(enabled, codesLeft = 0, newCodes = null) {
     document.getElementById('twofa-enable-form').onsubmit = async (e) => {
       e.preventDefault();
       const result = await apiSend('POST', '/auth/2fa/enable', { code: document.getElementById('tf-code').value });
-      if (result.ok) drawTwoFactorPanel(true, result.data.backupCodes.length, result.data.backupCodes);
+      if (result.ok) {
+        drawTwoFactorPanel(true, result.data.backupCodes.length, result.data.backupCodes);
+        const resetBanner = document.getElementById('st-2fa-reset');
+        if (resetBanner) resetBanner.style.display = 'none';
+      }
       else setMsg(document.getElementById('tf-msg'), result.data.error);
     };
   };
@@ -5304,22 +5474,30 @@ async function renderImpact() {
         ${tileHTML(o.ended, 'Mentorships ended')}
         ${tileHTML(p(o.response_rate), 'Answered the feedback', plural(o.answers, 'answer'))}
         ${tileHTML(p(o.met_rate), 'Said they met')}
-        ${tileHTML(o.avg_helpful_mentees === null ? null : `${o.avg_helpful_mentees} / 5`, 'How helpful, say mentees')}
+        ${tileHTML(o.helpful_by_side.mentee.avg === null ? null : `${o.helpful_by_side.mentee.avg} / 5`, 'How helpful, say mentees', plural(o.helpful_by_side.mentee.rated, 'rating'))}
+        ${tileHTML(o.helpful_by_side.mentor.avg === null ? null : `${o.helpful_by_side.mentor.avg} / 5`, 'How helpful, say mentors', plural(o.helpful_by_side.mentor.rated, 'rating'))}
         ${tileHTML(o.felt_unsafe, 'Did not feel safe', o.felt_unsafe ? 'each one opened a report' : '')}
       </div>
+      <p class="md-muted st-small">Only people who chose to answer are counted, and the numbers are small, so read these as signs rather than proof.</p>
       <div class="ic-two">
         ${barChartHTML({
-          title: 'How helpful it was',
-          caption: 'Answers from 1 (not at all) to 5 (very), mentees and mentors',
-          bars: o.rating_counts.map((n, i) => ({ label: `${i + 1} out of 5`, short: String(i + 1), value: n })),
-          valueLabel: (v) => `${v} answer${v === 1 ? '' : 's'}`
-        })}
-        ${barChartHTML({
-          title: 'Goals reached, say mentees',
-          bars: [['none', 'None'], ['some', 'Some'], ['most', 'Most'], ['all', 'All']].map(([k, l]) => ({ label: l, value: o.goals_progress[k] })),
+          title: 'How helpful it was, say mentees',
+          caption: `1 (not at all) to 5 (very). ${plural(o.helpful_by_side.mentee.rated, 'mentee rating')}`,
+          bars: o.helpful_by_side.mentee.counts.map((n, i) => ({ label: `${i + 1} out of 5`, short: String(i + 1), value: n })),
           valueLabel: (v) => `${v} mentee${v === 1 ? '' : 's'}`
         })}
+        ${barChartHTML({
+          title: 'How helpful it was, say mentors',
+          caption: `1 (not at all) to 5 (very). ${plural(o.helpful_by_side.mentor.rated, 'mentor rating')}`,
+          bars: o.helpful_by_side.mentor.counts.map((n, i) => ({ label: `${i + 1} out of 5`, short: String(i + 1), value: n })),
+          valueLabel: (v) => `${v} mentor${v === 1 ? '' : 's'}`
+        })}
       </div>
+      ${barChartHTML({
+        title: 'Goals reached, say mentees',
+        bars: [['none', 'None'], ['some', 'Some'], ['most', 'Most'], ['all', 'All']].map(([k, l]) => ({ label: l, value: o.goals_progress[k] })),
+        valueLabel: (v) => `${v} mentee${v === 1 ? '' : 's'}`
+      })}
     </section>
 
     <section class="ic-section">

@@ -68,7 +68,12 @@ Strathmore University.
   mentor they are waiting on becomes full or pauses, so they can ask someone else.
 - **Admin tools:** identity verification queue, HR records import with a preview of changes,
   a user table with role, department, last activity and 2FA, suspensions with a reason, and a
-  readable activity log ("Approved sign-up for Daniel Gitonga (KQ27651) as mentor")
+  readable activity log ("Approved sign-up for Daniel Gitonga (KQ27651) as mentor"); an Admins
+  page to add and remove admins, with a second admin approving each change; and account
+  recovery: an admin can reset a member's two-factor after checking who they are against the
+  phone number HR holds, and the member must set it up again
+- **HR stays the source of truth:** when the email HR holds for someone changes (a work email
+  becoming a personal one on retirement), their sign-in email follows and both addresses are told
 - **Account security:** password rules, change password, forgot password with single-use
   emailed links that expire after 30 minutes, two-factor authentication with an authenticator
   app and one-time backup codes (required for admins), and rate limiting on sign-in, code and reset endpoints
@@ -213,7 +218,8 @@ The first run downloads the embedding model (about 130 MB).
 Go to **http://localhost:4000**. Opening the HTML files directly from the folder still works
 for most pages, but Google sign-in only works when the app is opened through the server.
 
-To create an admin account: `node scripts/create-admin.js "Full Name" email@example.com password`.
+To create the first admin account: `node scripts/create-admin.js "Full Name" email@example.com password`.
+After that, add and remove admins on the **Admins** page of the admin tools.
 Admin tools stay locked until that admin turns on two-factor authentication in Account
 settings. For local development only, `ADMIN_2FA_REQUIRED=false` in `backend/.env` skips this.
 from the `backend` folder.
@@ -298,7 +304,7 @@ progress, and the full development and test results will follow.
 Every push and pull request to `main` runs `.github/workflows/ci.yml`. Each job starts an
 empty MySQL 8 database, builds it from `database/migrations` and tests the real code:
 
-- **Backend API tests** (`backend/tests/api.test.js`, 93 tests): sign-up by HR email match,
+- **Backend API tests** (`backend/tests/api.test.js`, 96 tests): sign-up by HR email match,
   the alumni office review path with risk signals, impostor detection, roles from HR, HttpOnly
   session cookies, CSRF protection, log out everywhere, suspension, single-use reset links,
   two-factor with backup codes, admin 2FA requirement, HR import with retirement conversion,
@@ -311,7 +317,10 @@ empty MySQL 8 database, builds it from `database/migrations` and tests the real 
   feedback, member detail, the impact figures, activity log filters and export, encrypted two-factor secrets, second-admin
   approval of HR imports, re-checking live posts after a scam, length and type checks on every
   post and event field, privacy notice versions, a backup restored with every row checked,
-  security headers and rate limiting.
+  two-factor reset after an identity check, adding and removing admins with a second admin,
+  account emails following HR, mentee and mentor ratings kept apart, security headers and rate
+  limiting. CI measures coverage with c8 (about 90% of backend lines and 70% of branches) and
+  fails if it drops below 80% of lines or 65% of branches; run `npm run coverage` locally.
 - **Browser checks** (`e2e/browser.test.js`): script payloads in every field members can type
   into, checked on every page for every role; an axe-core accessibility check (WCAG 2.1 AA) of the
   main pages and the busiest admin screens in light and dark mode; keyboard focus kept inside
@@ -356,8 +365,8 @@ screenshots are in Chapter 5 of the project report.
   in the pilot, but only narrowly, and the full evaluation will test it.
 - **Scam checks are rules, not a model:** text inside images and links whose page changes after
   approval are not caught; reports from members and the re-check are the backstop.
-- **Single-admin installations** cannot use the second-admin rule for HR imports; the log
-  records that no second check was possible.
+- **Single-admin installations** cannot use the second-admin rule for HR imports or for adding
+  the second admin; the log records that no second check was possible.
 - **Two-factor library:** otplib is kept on version 12. Version 13 rejects the shorter secrets
   that existing accounts already use, so upgrading needs a planned move of every two-factor
   user to a new secret.

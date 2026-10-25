@@ -625,7 +625,7 @@ async function getAccount(req, res, next) {
   try {
     const [[user]] = await pool.execute(
       `SELECT u.name, u.email, u.department, u.totp_enabled, u.google_id, u.password_changed_at, u.created_at,
-              u.alert_opportunities, u.alert_events, u.privacy_version, u.privacy_accepted_at,
+              u.alert_opportunities, u.alert_events, u.privacy_version, u.privacy_accepted_at, u.totp_setup_required,
               sd.employment_status,
               (SELECT COUNT(*) FROM two_factor_backup_codes b WHERE b.user_id = u.user_id AND b.used_at IS NULL) AS backup_codes_left
        FROM users u LEFT JOIN staff_directory sd ON sd.staff_number = u.staff_number
@@ -641,6 +641,7 @@ async function getAccount(req, res, next) {
       verified: Boolean(user.employment_status),
       employmentStatus: user.employment_status,
       twoFactorEnabled: Boolean(user.totp_enabled),
+      twoFactorSetupRequired: Boolean(user.totp_setup_required),
       backupCodesLeft: user.backup_codes_left,
       googleLinked: Boolean(user.google_id),
       passwordChangedAt: user.password_changed_at,
@@ -693,7 +694,7 @@ async function enableTwoFactor(req, res, next) {
     if (!authenticator.verify({ token: code, secret: openSecret(user.totp_secret) })) {
       return res.status(400).json({ error: 'That code is incorrect. Check the time on your phone and try again.' });
     }
-    await pool.execute('UPDATE users SET totp_enabled = 1 WHERE user_id = :userId', { userId: req.user.userId });
+    await pool.execute('UPDATE users SET totp_enabled = 1, totp_setup_required = 0 WHERE user_id = :userId', { userId: req.user.userId });
     const backupCodes = await makeBackupCodes(req.user.userId);
     await createNotification(req.user.userId, 'security', 'Two-factor authentication was turned on for your account.', 'settings.html');
     res.json({ twoFactorEnabled: true, backupCodes });

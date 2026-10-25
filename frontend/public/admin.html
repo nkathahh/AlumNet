@@ -140,6 +140,39 @@
                 </div>
             </div>
 
+            <!-- ================= Admins ================= -->
+            <div id="admin-tab-admins" class="md" style="display:none;">
+                <header class="md-top">
+                    <h1 class="md-greeting">Admins</h1>
+                    <p class="md-sub">Who can use the admin tools. With two or more admins, a different admin approves every change, so no one person can hand out admin rights alone.</p>
+                </header>
+                <section class="md-panel" id="admin-requests-panel" style="margin-bottom:20px; display:none;">
+                    <div class="md-panel-head"><h2>Waiting for a second admin</h2></div>
+                    <div class="st-body"><div id="admin-requests"></div></div>
+                </section>
+                <section class="md-panel">
+                    <div class="md-panel-head"><h2>Current admins</h2><span class="md-muted st-small" id="admin-admins-count"></span></div>
+                    <div class="table-card">
+                        <table class="data-table">
+                            <thead><tr><th>Name</th><th>Two-factor</th><th>Last signed in</th><th>Added</th><th></th></tr></thead>
+                            <tbody id="admin-admins-body"></tbody>
+                        </table>
+                    </div>
+                </section>
+                <section class="md-panel" style="margin-top:20px;">
+                    <div class="md-panel-head"><h2>Add an admin</h2></div>
+                    <form class="st-body" id="admin-add-form" novalidate>
+                        <p class="st-text">They need an AlumNet account already. Once added, they are signed out and must turn on two-factor before the admin tools open. An admin no longer has a member account (mentee or mentor) while they are an admin.</p>
+                        <div class="field"><label for="admin-add-email">Email of their AlumNet account</label>
+                            <input type="email" id="admin-add-email" maxlength="190" autocomplete="off" required></div>
+                        <div class="field"><label for="admin-add-note">Reason (shown to the approving admin and kept in the log)</label>
+                            <input type="text" id="admin-add-note" maxlength="200" placeholder="e.g. Joined the alumni office in October"></div>
+                        <p class="st-msg" id="admin-add-msg" role="alert"></p>
+                        <button type="submit" class="btn btn-primary">Add admin</button>
+                    </form>
+                </section>
+            </div>
+
             <!-- ================= Verification ================= -->
             <div id="admin-tab-verification" class="md" style="display:none;">
                 <header class="md-top">

@@ -150,4 +150,14 @@ setInterval(remindEvents, 60 * 60 * 1000).unref();
 setInterval(() => require('./controllers/moderation.controller').remindStale(), 12 * 60 * 60 * 1000).unref();
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => console.log(`AlumNet running at http://localhost:${PORT}`));
+const server = app.listen(PORT, () => console.log(`AlumNet running at http://localhost:${PORT}`));
+
+// Stop cleanly when asked (Render redeploying, or the tests finishing): finish
+// requests in progress, close the database pool, then exit. A clean exit is
+// also what lets the coverage tool record which code the tests ran.
+function shutDown() {
+  server.close(() => pool.end().catch(() => null).finally(() => process.exit(0)));
+  setTimeout(() => process.exit(0), 5000).unref();
+}
+process.on('SIGTERM', shutDown);
+process.on('SIGINT', shutDown);

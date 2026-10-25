@@ -161,6 +161,15 @@ Space. If the service is ever compromised, it cannot change accounts, posts
 or reports.
 
 
+## Admins and account recovery
+
+- Create only the first admin with `node scripts/create-admin.js`. Add the others on the
+  **Admins** page; once there are two admins, each further change needs the other to approve it.
+- Every admin should be a person, not a shared account, so the activity log says who did what.
+- When a member has lost their phone and backup codes, open them in **User management** and
+  use **Reset two-factor**. Phone the number HR holds (shown there), never a number the caller
+  gives. Write down what you checked; it goes in the activity log.
+
 ## Backups and restoring
 
 Aiven's free plan keeps a single backup for its own disaster recovery, cannot restore to a

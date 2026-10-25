@@ -1926,6 +1926,7 @@ textarea:focus-visible {
 .ud-table { overflow-x: auto; }
 .ud-list { list-style: none; padding: 0; margin: 0 0 8px; display: grid; gap: 6px; font-size: 0.9rem; }
 .ud-warn { color: var(--kq-red, #c8102e); }
+:root[data-theme="dark"] .ud-warn { color: #ff8f9f; }
 .adm-name { font: inherit; padding: 0; text-align: left; }
 .adm-user-filters { align-items: center; margin-bottom: 8px; }
 

@@ -3,7 +3,7 @@ const { validateEventInput } = require('./events.controller');
 const bcrypt = require('bcrypt');
 const { createNotification, notifyMany } = require('../utils/notify');
 const { sendMail, emailLayout } = require('../utils/mailer');
-const { findStaff, canJoin, roleForStaff, normaliseStaffNumber, normaliseEmail, resolveRole } = require('../utils/hr');
+const { findStaff, canJoin, roleForStaff, normaliseStaffNumber, normaliseEmail, resolveRole, hrEmailFor } = require('../utils/hr');
 
 async function getStats(req, res, next) {
     try {
@@ -62,8 +62,8 @@ async function getUserDetail(req, res, next) {
         const id = Number(req.params.id);
         const [[u]] = await pool.execute(
           `SELECT u.user_id, u.name, u.email, u.status, u.created_at, u.last_login_at, u.department, u.staff_number,
-                  u.totp_enabled, u.google_id IS NOT NULL AS google_linked, u.city, u.country, u.onboarded_at,
-                  sd.full_name AS hr_name, sd.department AS hr_department, sd.employment_status, sd.alumni_eligible,
+                  u.totp_enabled, u.totp_setup_required, u.google_id IS NOT NULL AS google_linked, u.city, u.country, u.onboarded_at,
+                  sd.full_name AS hr_name, sd.department AS hr_department, sd.employment_status, sd.alumni_eligible, sd.mobile_number AS hr_mobile,
                   ad.user_id IS NOT NULL AS is_admin, me.user_id IS NOT NULL AS is_mentee, mo.user_id IS NOT NULL AS is_mentor,
                   mo.accepting_mentees, mo.max_mentees, mo.meeting_mode, mo.years_of_experience,
                   p.headline, p.skills, p.career_interests
@@ -151,10 +151,11 @@ async function getUserDetail(req, res, next) {
             user_id: u.user_id, name: u.name, email: u.email, status: u.status, role,
             created_at: u.created_at, last_login_at: u.last_login_at, onboarded: Boolean(u.onboarded_at),
             department: u.department, city: u.city, country: u.country, staff_number: u.staff_number,
-            two_factor: Boolean(u.totp_enabled), google_linked: Boolean(Number(u.google_linked))
+            two_factor: Boolean(u.totp_enabled), google_linked: Boolean(Number(u.google_linked)),
+            two_factor_setup_required: Boolean(u.totp_setup_required), is_me: u.user_id === req.user.userId
           },
           hr: u.employment_status ? {
-            name: u.hr_name, department: u.hr_department, employment_status: u.employment_status,
+            name: u.hr_name, department: u.hr_department, employment_status: u.employment_status, mobile: u.hr_mobile,
             alumni_eligible: Boolean(u.alumni_eligible), name_matches: String(u.hr_name || '').trim().toLowerCase() === String(u.name || '').trim().toLowerCase()
           } : null,
           profile: { headline: u.headline, skills: u.skills, career_interests: u.career_interests },
@@ -562,11 +563,11 @@ async function diffHr(rows) {
     });
 
     const [existing] = await pool.query(`
-      SELECT sd.*, u.user_id, u.name AS account_name FROM staff_directory sd
+      SELECT sd.*, u.user_id, u.name AS account_name, u.email AS account_email FROM staff_directory sd
       LEFT JOIN users u ON u.staff_number = sd.staff_number`);
     const byNumber = new Map(existing.map((e) => [e.staff_number, e]));
 
-    const result = { added: [], updated: [], unchanged: 0, invalid: [], retiring: [], ineligible: [] };
+    const result = { added: [], updated: [], unchanged: 0, invalid: [], retiring: [], ineligible: [], email_changes: [] };
     for (const c of checked) {
       if (c.errors.length) { result.invalid.push({ line: c.line, staff_number: c.row.staff_number, errors: c.errors }); continue; }
       const old = byNumber.get(c.row.staff_number);
@@ -579,6 +580,15 @@ async function diffHr(rows) {
       }
       if (old.user_id && old.alumni_eligible && !c.row.alumni_eligible) {
         result.ineligible.push({ staff_number: c.row.staff_number, full_name: c.row.full_name });
+      }
+      // The email HR holds for them changed (for example a work email on
+      // retirement becoming a personal one). Their account follows it, but only
+      // if the account used the email HR held before; an email they chose
+      // themselves is left alone.
+      const oldHr = hrEmailFor(old);
+      const newHr = hrEmailFor(c.row);
+      if (old.user_id && newHr && newHr !== oldHr && old.account_email && oldHr && normaliseEmail(old.account_email) === oldHr) {
+        result.email_changes.push({ staff_number: c.row.staff_number, full_name: c.row.full_name, user_id: old.user_id, from: old.account_email, to: newHr });
       }
     }
     return { result, checked: checked.filter((c) => !c.errors.length).map((c) => c.row) };
@@ -635,8 +645,27 @@ async function applyHrRows(rows, adminId, note = '') {
           if (u) await resolveRole(u.user_id);
         }
 
+        // Account emails that follow the new HR email; both addresses are told
+        result.email_skipped = [];
+        for (const e of result.email_changes) {
+          const [[taken]] = await pool.execute('SELECT user_id FROM users WHERE email = :to AND user_id != :id', { to: e.to, id: e.user_id });
+          if (taken) { result.email_skipped.push({ ...e, reason: 'another account already uses the new email' }); continue; }
+          const [upd] = await pool.execute('UPDATE users SET email = :to WHERE user_id = :id AND email = :from', { to: e.to, id: e.user_id, from: e.from });
+          if (!upd.affectedRows) { result.email_skipped.push({ ...e, reason: 'the account email changed in the meantime' }); continue; }
+          await logAdminAction(adminId, 'change_email_from_hr', 'users', e.user_id, `Account email for ${e.full_name} changed to the one HR now holds`, e.full_name);
+          const text = `Your AlumNet account email has changed from ${e.from} to ${e.to}, because that is the email Kenya Airways HR now holds for you. Use the new email to sign in. If this is wrong, contact the alumni office.`;
+          await createNotification(e.user_id, 'security', text, 'settings.html');
+          for (const to of [e.from, e.to]) {
+            await sendMail({
+              to, subject: 'Your AlumNet sign-in email has changed', text,
+              html: emailLayout('Your sign-in email has changed', `<p>${text.replace(/[<>&"]/g, '')}</p>`)
+            }).catch((err) => console.error('Email failed:', err.message));
+          }
+        }
+
         const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
-        const summary = `${result.added.length} new, ${result.updated.length} updated, ${result.retiring.length} now former staff, ${plural(result.invalid.length, 'row')} skipped`;
+        const emails = result.email_changes.length - result.email_skipped.length;
+        const summary = `${result.added.length} new, ${result.updated.length} updated, ${result.retiring.length} now former staff, ${plural(result.invalid.length, 'row')} skipped${emails ? `, ${plural(emails, 'account email')} updated` : ''}`;
         await logAdminAction(adminId, 'import_hr', 'staff_directory', 0, `Imported HR update: ${summary}${note}`, 'HR records');
         return { status: 200, body: { ...result, summary } };
 }
@@ -713,7 +742,7 @@ async function decideHrImport(req, res, next) {
 }
 
 module.exports = {
-  logAdminAction,
+  logAdminAction, describeUser,
   getStats, listUsers, getUserDetail, toggleUserStatus,
   listSignupRequests, reviewSignupRequest,
   previewHrImport, applyHrImport,

@@ -79,6 +79,17 @@ async function getImpact(req, res, next) {
     const progressCounts = { none: 0, some: 0, most: 0, all: 0 };
     mentee.forEach((f) => { if (f.goals_progress) progressCounts[f.goals_progress] += 1; });
     const ratingCounts = [1, 2, 3, 4, 5].map((n) => helpfulScores.filter((h) => Number(h) === n).length);
+    // Mentees and mentors are asked the same question about different things
+    // (being helped versus helping), so their answers are kept apart
+    const bySide = (side) => {
+      const scores = fbRows.filter((f) => f.side === side && f.helpful !== null).map((f) => Number(f.helpful));
+      return {
+        answers: fbRows.filter((f) => f.side === side).length,
+        rated: scores.length,
+        avg: scores.length ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10 : null,
+        counts: [1, 2, 3, 4, 5].map((n) => scores.filter((h) => h === n).length)
+      };
+    };
 
     /* ---------- Fairness: are requests spread across mentors? ---------- */
     const [perMentor] = await pool.query(
@@ -175,6 +186,7 @@ async function getImpact(req, res, next) {
         avg_helpful_mentees: mentee.filter((f) => f.helpful !== null).length
           ? Math.round((mentee.filter((f) => f.helpful !== null).reduce((a, f) => a + Number(f.helpful), 0) / mentee.filter((f) => f.helpful !== null).length) * 10) / 10 : null,
         rating_counts: ratingCounts,
+        helpful_by_side: { mentee: bySide('mentee'), mentor: bySide('mentor') },
         goals_progress: progressCounts,
         felt_unsafe: fbRows.filter((f) => !f.felt_safe).length
       },

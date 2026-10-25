@@ -192,7 +192,7 @@ test('script typed into any field never runs, on any page, for any role', async 
   // (a different query string each time, so the page really reloads and no dialog is left open)
   await visit(admin, '/admin.html?d=1#users', async (pg) => { await pg.click('[data-admin-tab=users]'); await wait(500); await pg.click(`[data-user-detail="${ids.mentor}"]`); await wait(800); });
   await visit(admin, '/admin.html?d=2#users', async (pg) => { await pg.click('[data-admin-tab=users]'); await wait(500); await pg.click(`[data-user-detail="${ids.mentee}"]`); await wait(800); });
-  for (const tab of ['overview', 'verification', 'reports', 'users', 'hr', 'events', 'opportunities', 'impact', 'logs']) {
+  for (const tab of ['overview', 'verification', 'reports', 'users', 'admins', 'hr', 'events', 'opportunities', 'impact', 'logs']) {
     await visit(admin, `/admin.html#${tab}`, async (pg) => { await pg.click(`[data-admin-tab=${tab}]`); await wait(400); });
   }
 });
@@ -213,7 +213,7 @@ test('the main pages have no serious accessibility problems (WCAG 2.1 AA, axe-co
   }
   // Admin screens with the most data on them, in light and dark mode
   const admin = await page('e2e.admin@example.org');
-  for (const [i, tab] of ['users', 'impact', 'logs'].entries()) {
+  for (const [i, tab] of ['users', 'admins', 'impact', 'logs'].entries()) {
     for (const theme of ['light', 'dark']) {
       await admin.goto(`${ROOT}/admin.html?a=${i}${theme}#${tab}`);
       await admin.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme);
@@ -248,7 +248,7 @@ test('pages fit a phone screen without sideways scrolling', async () => {
   const wide = [];
   for (const [email, urls] of [
     ['e2e.mentee@example.org', ['/mentee-dashboard.html', '/recommendations.html', '/opportunities.html', '/events.html', '/requests.html', '/notifications.html', '/profile.html', '/settings.html']],
-    ['e2e.admin@example.org', ['/admin.html?m=1#users', '/admin.html?m=2#verification', '/admin.html?m=3#reports', '/admin.html?m=4#events', '/admin.html?m=5#opportunities', '/admin.html?m=6#impact', '/admin.html?m=7#logs']]
+    ['e2e.admin@example.org', ['/admin.html?m=1#users', '/admin.html?m=2#verification', '/admin.html?m=3#reports', '/admin.html?m=4#events', '/admin.html?m=5#opportunities', '/admin.html?m=6#impact', '/admin.html?m=7#logs', '/admin.html?m=8#admins']]
   ]) {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true });
     const pg = await ctx.newPage();

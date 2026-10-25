@@ -13,6 +13,11 @@ router.get('/users', admin.listUsers);
 router.get('/users/:id', admin.getUserDetail);
 router.get('/impact', require('../controllers/impact.controller').getImpact);
 router.patch('/users/:id/toggle-status', admin.toggleUserStatus);
+const accounts = require('../controllers/accounts.controller');
+router.post('/users/:id/reset-two-factor', accounts.resetTwoFactor);
+router.get('/admins', accounts.listAdmins);
+router.post('/admins/requests', accounts.requestAdminChange);
+router.post('/admins/requests/:id/decision', accounts.decideAdminRequest);
 
 router.get('/signup-requests', admin.listSignupRequests);
 router.patch('/signup-requests/:id/review', admin.reviewSignupRequest);

@@ -5,6 +5,6 @@
  * then asked to read and accept it again before they carry on. A test checks
  * that the two dates match.
  */
-const PRIVACY_VERSION = '2026-10-23';
+const PRIVACY_VERSION = '2026-10-24';
 
 module.exports = { PRIVACY_VERSION };

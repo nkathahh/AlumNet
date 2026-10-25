@@ -68,7 +68,16 @@ Run everything from the `ml-service` folder with the virtual environment active.
    `results/TEST_RUN_DONE.json`.
 6. **Live response time:** with `app.py` running,
    `python evaluation/benchmark_latency.py --mentee-id <user_id>`
-7. **Figures and tables:** `python evaluation/plots.py --split test` (or `--split dev`).
+7. **Fairness of the free-places rule:** `python evaluation/fairness_sim.py`
+   Replays many sign-up orders with and without the rule that lists mentors with
+   more free places first (inside a 2-point score band). Reports the Gini of
+   mentees per mentor, mentors left with nobody, and what share of matches the
+   judges labelled relevant, so the cost of fairness is visible.
+8. **End-to-end response time:** with the ML service and backend running, from
+   `backend`: `npm run latency -- --email <mentee email> --password <password>`.
+   Times each member page through the real backend with the cache warm, one at a
+   time and several at once, and saves the result here.
+9. **Figures and tables:** `python evaluation/plots.py --split test` (or `--split dev`).
    This writes four figures, three tables and suggested captions to
    `figures/<split>_<run_id>/`, read straight from the saved results. Fill in the
    "Your explanation" column of `table_error_analysis.csv` yourself.

@@ -116,7 +116,8 @@ before(async () => {
 });
 
 after(async () => {
-  if (server) server.kill();
+  // Wait for the server to stop cleanly (the coverage report needs its clean exit)
+  if (server && server.exitCode === null) await new Promise((resolve) => { server.once('exit', resolve); server.kill('SIGTERM'); });
   if (db) await db.end();
   // Background jobs are also run directly from these tests through the app's own pool
   if (require.cache[require.resolve('../src/config/db')]) await require('../src/config/db').end();
@@ -126,6 +127,8 @@ const state = {};
 // Synthetic HR records from migration 003 (active) and 011 (former, personal email)
 const JOYCE = { staffNumber: 'KQ37954', email: 'joyce.wafula@kenya-airways.com' };
 const GEORGE = { staffNumber: 'KQ42857', email: 'george.simiyu@example.com' };
+// The personal email HR holds for Joyce once she retires (her account follows it)
+const JOYCE_PERSONAL = 'joyce.personal@example.org';
 
 /* ---------------- Sign-up: no information leaks ---------------- */
 
@@ -1451,12 +1454,19 @@ test('an HR import previews changes, then a retired mentee becomes a mentor', as
   assert.equal(preview.body.added.length, 1);
   assert.equal(preview.body.retiring.length, 1);
   assert.equal(preview.body.invalid.length, 1);
+  // Her work email stops working when she leaves, so her sign-in email follows HR
+  assert.deepEqual(preview.body.email_changes.map((e) => [e.from, e.to]), [[JOYCE.email, JOYCE_PERSONAL]]);
 
   const applied = await state.admin.call('POST', '/admin/hr/apply', { rows });
   assert.equal(applied.status, 200);
+  assert.match(applied.body.summary, /1 account email updated/);
+  await wait(200);
+  assert.ok(serverLog.includes(`To: ${JOYCE.email}\nSubject: Your AlumNet sign-in email has changed`));
+  assert.ok(serverLog.includes(`To: ${JOYCE_PERSONAL}\nSubject: Your AlumNet sign-in email has changed`));
+  assert.equal((await client().call('POST', '/auth/login', { email: JOYCE.email, password: 'Reset2Passw0rd' })).status, 401);
   // Her old session ends; on the next login she is a mentor
   assert.equal((await state.joyce.call('GET', '/auth/account')).status, 401);
-  const step = await client().call('POST', '/auth/login', { email: JOYCE.email, password: 'Reset2Passw0rd' });
+  const step = await client().call('POST', '/auth/login', { email: JOYCE_PERSONAL, password: 'Reset2Passw0rd' });
   const again = client();
   const done = await again.call('POST', '/auth/2fa/verify', { tempToken: step.body.tempToken, code: authenticator.generate(state.joyceSecret) });
   assert.equal(done.body.role, 'mentor');
@@ -1495,18 +1505,140 @@ test('with two admins, an HR import waits for the other admin, who cannot be the
   await db.execute('DELETE FROM admins WHERE user_id = :id', { id: second.id });
 });
 
+/* ---------------- Account recovery and admin management ---------------- */
+
+// A member (or admin) with two-factor switched on through the real setup steps
+async function withTwoFactor(member) {
+  const setup = await member.me.call('POST', '/auth/2fa/setup');
+  const on = await member.me.call('POST', '/auth/2fa/enable', { code: authenticator.generate(setup.body.secret) });
+  assert.equal(on.status, 200);
+  return setup.body.secret;
+}
+
+test('an admin resets two-factor after an identity check; the member must set it up again', async () => {
+  const m = await makeMember('Lost Phone', 'lost.phone@example.org', 'mentee');
+  await withTwoFactor(m);
+
+  const noMethod = await state.admin.call('POST', `/admin/users/${m.id}/reset-two-factor`, { note: 'Called the HR number' });
+  assert.equal(noMethod.status, 400);
+  const shortNote = await state.admin.call('POST', `/admin/users/${m.id}/reset-two-factor`, { method: 'hr_phone', note: 'ok' });
+  assert.equal(shortNote.status, 400);
+  const [[adminRow]] = await db.execute("SELECT user_id FROM users WHERE email = 'admin@example.org'");
+  const self = await state.admin.call('POST', `/admin/users/${adminRow.user_id}/reset-two-factor`, { method: 'in_person', note: 'Resetting my own two-factor' });
+  assert.equal(self.status, 403);
+  // Members cannot use it
+  assert.equal((await m.me.call('POST', `/admin/users/${m.id}/reset-two-factor`, { method: 'in_person', note: 'Resetting my own two-factor' })).status, 403);
+
+  const done = await state.admin.call('POST', `/admin/users/${m.id}/reset-two-factor`, { method: 'hr_phone', note: 'Called 0700 000 000 from HR, confirmed staff number' });
+  assert.equal(done.status, 200);
+  // Signed out everywhere, backup codes gone, told by email and in the app
+  assert.equal((await m.me.call('GET', '/auth/account')).status, 401);
+  const [[{ codes }]] = await db.execute('SELECT COUNT(*) AS codes FROM two_factor_backup_codes WHERE user_id = :id', { id: m.id });
+  assert.equal(Number(codes), 0);
+  await wait(200);
+  assert.ok(serverLog.includes('To: lost.phone@example.org\nSubject: Two-factor authentication was reset'));
+  const [[log]] = await db.execute("SELECT description FROM admin_activity_logs WHERE action_type = 'reset_two_factor' ORDER BY log_id DESC LIMIT 1");
+  assert.match(log.description, /Lost Phone .*phoned the number HR holds.*confirmed staff number/);
+
+  // A password alone now signs in, but nothing else works until two-factor is back on
+  const again = client();
+  const login = await again.call('POST', '/auth/login', { email: 'lost.phone@example.org', password: 'Passw0rd1' });
+  assert.equal(login.status, 200);
+  assert.equal(login.body.twoFactorRequired, undefined);
+  const blocked = await again.call('GET', '/profile/me');
+  assert.equal(blocked.status, 403);
+  assert.equal(blocked.body.code, 'two_factor_setup_required');
+  const account = await again.call('GET', '/auth/account');
+  assert.equal(account.body.twoFactorSetupRequired, true);
+  await withTwoFactor({ me: again });
+  assert.equal((await again.call('GET', '/profile/me')).status, 200);
+
+  // Nothing to reset when two-factor is already off
+  const m2 = await makeMember('No Two Factor', 'no.twofactor@example.org', 'mentee');
+  assert.equal((await state.admin.call('POST', `/admin/users/${m2.id}/reset-two-factor`, { method: 'in_person', note: 'Saw staff ID at the office' })).status, 409);
+});
+
+test('admins are added and removed with a second admin approving, and AlumNet always keeps one admin', async () => {
+  const [[adminRow]] = await db.execute("SELECT user_id FROM users WHERE email = 'admin@example.org'");
+  // With one admin, the only way to say "no" would be nobody, so the last admin cannot be removed
+  const last = await state.admin.call('POST', '/admin/admins/requests', { action: 'remove', userId: adminRow.user_id, note: 'Stepping down' });
+  assert.equal(last.status, 409);
+  assert.equal((await state.admin.call('POST', '/admin/admins/requests', { action: 'add', email: 'nobody.here@example.org' })).status, 404);
+
+  // One admin: adding a second applies at once, and the log says no second check was possible
+  const b = await makeMember('Bea Second', 'bea.second@example.org', 'mentee');
+  const added = await state.admin.call('POST', '/admin/admins/requests', { action: 'add', email: 'bea.second@example.org', note: 'Joined the alumni office' });
+  assert.equal(added.status, 200);
+  assert.equal((await b.me.call('GET', '/auth/account')).status, 401); // signed out, so the new role applies
+  const bea = client();
+  const beaLogin = await bea.call('POST', '/auth/login', { email: 'bea.second@example.org', password: 'Passw0rd1' });
+  assert.equal(beaLogin.body.role, 'admin');
+  assert.equal((await bea.call('GET', '/admin/admins')).body.code, 'two_factor_required');
+  await withTwoFactor({ me: bea });
+  const list = await bea.call('GET', '/admin/admins');
+  assert.equal(list.status, 200);
+  assert.equal(list.body.active_admins, 2);
+  const [[addLog]] = await db.execute("SELECT description FROM admin_activity_logs WHERE action_type = 'add_admin' ORDER BY log_id DESC LIMIT 1");
+  assert.match(addLog.description, /no second check was possible/);
+  assert.equal((await state.admin.call('POST', '/admin/admins/requests', { action: 'add', email: 'bea.second@example.org' })).status, 409);
+
+  // Two admins: adding a third waits; the requester cannot approve it, the other admin can
+  const c = await makeMember('Cal Third', 'cal.third@example.org', 'mentor');
+  const asked = await state.admin.call('POST', '/admin/admins/requests', { action: 'add', email: 'cal.third@example.org', note: 'Covering leave' });
+  assert.equal(asked.status, 202);
+  assert.equal((await state.admin.call('POST', '/admin/admins/requests', { action: 'add', email: 'cal.third@example.org' })).status, 409);
+  assert.equal((await state.admin.call('POST', `/admin/admins/requests/${asked.body.requestId}/decision`, { decision: 'approve' })).status, 403);
+  const [[notYet]] = await db.execute('SELECT COUNT(*) AS n FROM admins WHERE user_id = :id', { id: c.id });
+  assert.equal(Number(notYet.n), 0);
+  const approved = await bea.call('POST', `/admin/admins/requests/${asked.body.requestId}/decision`, { decision: 'approve' });
+  assert.equal(approved.status, 200);
+  const [[nowAdmin]] = await db.execute('SELECT added_by FROM admins WHERE user_id = :id', { id: c.id });
+  assert.equal(nowAdmin.added_by, adminRow.user_id);
+  assert.equal((await bea.call('POST', `/admin/admins/requests/${asked.body.requestId}/decision`, { decision: 'approve' })).status, 404);
+
+  // Removing also needs the other admin; the requester can cancel instead
+  const removeCal = await bea.call('POST', '/admin/admins/requests', { action: 'remove', userId: c.id, note: 'Leave cover ended' });
+  assert.equal(removeCal.status, 202);
+  const cancelled = await bea.call('POST', `/admin/admins/requests/${removeCal.body.requestId}/decision`, { decision: 'cancel' });
+  assert.equal(cancelled.status, 200);
+  assert.equal((await state.admin.call('POST', `/admin/admins/requests/${removeCal.body.requestId}/decision`, { decision: 'approve' })).status, 404);
+  const removeAgain = await bea.call('POST', '/admin/admins/requests', { action: 'remove', userId: c.id, note: 'Leave cover ended' });
+  assert.equal((await state.admin.call('POST', `/admin/admins/requests/${removeAgain.body.requestId}/decision`, { decision: 'approve' })).status, 200);
+  const [[gone]] = await db.execute('SELECT COUNT(*) AS n FROM admins WHERE user_id = :id', { id: c.id });
+  assert.equal(Number(gone.n), 0);
+  // Cal is a mentor again at the next sign-in
+  const cal = await client().call('POST', '/auth/login', { email: 'cal.third@example.org', password: 'Passw0rd1' });
+  assert.equal(cal.body.role, 'mentor');
+
+  // Put things back: Bea steps down, approved by the original admin
+  const stepDown = await bea.call('POST', '/admin/admins/requests', { action: 'remove', userId: b.id, note: 'Test finished' });
+  assert.equal((await state.admin.call('POST', `/admin/admins/requests/${stepDown.body.requestId}/decision`, { decision: 'approve' })).status, 200);
+  const [[{ admins }]] = await db.execute('SELECT COUNT(*) AS admins FROM admins');
+  assert.equal(Number(admins), 1);
+});
+
+test('mentees and mentors are counted separately in the feedback figures', async () => {
+  const r = await state.admin.call('GET', '/admin/impact?period=all');
+  assert.equal(r.status, 200);
+  const sides = r.body.outcomes.helpful_by_side;
+  assert.ok(sides.mentee && sides.mentor);
+  const [[{ mentee }]] = await db.execute("SELECT COUNT(*) AS mentee FROM mentorship_feedback WHERE side = 'mentee' AND helpful IS NOT NULL");
+  assert.equal(sides.mentee.rated, Number(mentee));
+  assert.equal(sides.mentee.counts.reduce((a, b) => a + b, 0), Number(mentee));
+});
+
 /* ---------------- Data rights ---------------- */
 
 test('a member can download their data', async () => {
   const r = await state.joyce.call('GET', '/auth/account/export');
   assert.equal(r.status, 200);
   assert.match(r.headers.get('content-disposition'), /attachment/);
-  assert.equal(r.body.account.email, JOYCE.email);
+  assert.equal(r.body.account.email, JOYCE_PERSONAL);
   assert.equal('password_hash' in r.body.account, false);
 });
 
 test('deleting an account removes personal data and ends the session', async () => {
-  const [[j]] = await db.execute('SELECT user_id FROM users WHERE email = :e', { e: JOYCE.email });
+  const [[j]] = await db.execute('SELECT user_id FROM users WHERE email = :e', { e: JOYCE_PERSONAL });
   await db.execute("INSERT INTO profile_embeddings (user_id, kind, text_hash, vector) VALUES (:id, 'whole', REPEAT('a', 64), '[0.1]')", { id: j.user_id });
   const wrong = await state.joyce.call('POST', '/auth/account/delete', { password: 'nope', code: authenticator.generate(state.joyceSecret) });
   assert.equal(wrong.status, 400);
@@ -1519,7 +1651,7 @@ test('deleting an account removes personal data and ends the session', async () 
   const [[{ vectors }]] = await db.execute('SELECT COUNT(*) AS vectors FROM profile_embeddings WHERE user_id = :id', { id: j.user_id });
   assert.equal(vectors, 0);
   assert.equal((await state.joyce.call('GET', '/auth/account')).status, 401);
-  const login = await client().call('POST', '/auth/login', { email: JOYCE.email, password: 'Reset2Passw0rd' });
+  const login = await client().call('POST', '/auth/login', { email: JOYCE_PERSONAL, password: 'Reset2Passw0rd' });
   assert.equal(login.status, 401);
 });
 
@@ -1624,7 +1756,9 @@ test('a backup restores into a fresh database with every row intact', async (t) 
     if (/Access denied|command denied/i.test(checked.out)) return t.skip('this database user cannot create the scratch database');
     assert.equal(checked.code, 0, checked.out);
     assert.match(checked.out, /Every table matches the backup/);
-    assert.match(checked.out, /023_privacy_version/);
+    // The backup carries the newest migration in the repository
+    const newest = fs.readdirSync(path.join(__dirname, '..', '..', 'database', 'migrations')).filter((f) => /^\d{3}_.+\.sql$/.test(f)).sort().at(-1);
+    assert.ok(checked.out.includes(`Latest migration in the backup: ${newest}`), checked.out);
 
     const wrongKey = await run('restore-check.js', [noEnv, file], { BACKUP_KEY: '0'.repeat(64) });
     assert.notEqual(wrongKey.code, 0);
