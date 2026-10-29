@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { avatarUrl } = require('../utils/images');
 const { validateEventInput } = require('./events.controller');
 const bcrypt = require('bcrypt');
 const { createNotification, notifyMany } = require('../utils/notify');
@@ -32,7 +33,7 @@ async function listUsers(req, res, next) {
     try {
         const [rows] = await pool.query(`
       SELECT u.user_id, u.name, u.email, u.status, u.created_at, u.department, u.staff_number,
-             u.last_login_at, u.totp_enabled, sd.employment_status,
+             u.last_login_at, u.totp_enabled, sd.employment_status, u.avatar_key,
         CASE
           WHEN ad.user_id IS NOT NULL THEN 'admin'
           WHEN sd.employment_status = 'former' THEN 'mentor'
@@ -48,7 +49,7 @@ async function listUsers(req, res, next) {
       WHERE u.status != 'deleted'
       ORDER BY u.created_at DESC, u.user_id DESC
     `);
-        res.json(rows);
+        res.json(rows.map(({ avatar_key: avatarKey, ...r }) => ({ ...r, avatar_url: avatarUrl(avatarKey, 96) })));
     } catch (err) { next(err); }
 }
 
@@ -63,6 +64,7 @@ async function getUserDetail(req, res, next) {
         const [[u]] = await pool.execute(
           `SELECT u.user_id, u.name, u.email, u.status, u.created_at, u.last_login_at, u.department, u.staff_number,
                   u.totp_enabled, u.totp_setup_required, u.google_id IS NOT NULL AS google_linked, u.city, u.country, u.onboarded_at,
+                  u.avatar_key, (SELECT image_id FROM images WHERE storage_key = u.avatar_key) AS avatar_image_id,
                   sd.full_name AS hr_name, sd.department AS hr_department, sd.employment_status, sd.alumni_eligible, sd.mobile_number AS hr_mobile,
                   ad.user_id IS NOT NULL AS is_admin, me.user_id IS NOT NULL AS is_mentee, mo.user_id IS NOT NULL AS is_mentor,
                   mo.accepting_mentees, mo.max_mentees, mo.meeting_mode, mo.years_of_experience,
@@ -152,7 +154,8 @@ async function getUserDetail(req, res, next) {
             created_at: u.created_at, last_login_at: u.last_login_at, onboarded: Boolean(u.onboarded_at),
             department: u.department, city: u.city, country: u.country, staff_number: u.staff_number,
             two_factor: Boolean(u.totp_enabled), google_linked: Boolean(Number(u.google_linked)),
-            two_factor_setup_required: Boolean(u.totp_setup_required), is_me: u.user_id === req.user.userId
+            two_factor_setup_required: Boolean(u.totp_setup_required), is_me: u.user_id === req.user.userId,
+            avatar_url: avatarUrl(u.avatar_key, 320), avatar_image_id: u.avatar_image_id || null
           },
           hr: u.employment_status ? {
             name: u.hr_name, department: u.hr_department, employment_status: u.employment_status, mobile: u.hr_mobile,
@@ -210,8 +213,10 @@ async function toggleUserStatus(req, res, next) {
 
 async function listEvents(req, res, next) {
     try {
-        const [rows] = await pool.query('SELECT e.*, (SELECT COUNT(*) FROM event_registrations r WHERE r.event_id = e.event_id) AS attendee_count FROM events e ORDER BY e.event_date DESC');
-        res.json(rows);
+        const [rows] = await pool.query(`SELECT e.*, (SELECT COUNT(*) FROM event_registrations r WHERE r.event_id = e.event_id) AS attendee_count,
+          (SELECT COUNT(*) FROM images i WHERE i.kind = 'event_photo' AND i.event_id = e.event_id AND i.status = 'live') AS photo_count
+          FROM events e ORDER BY e.event_date DESC`);
+        res.json(rows.map(({ banner_key: bannerKey, ...r }) => ({ ...r, banner_url: require('../utils/images').imageUrl(bannerKey, 'event_banner', 640), photo_count: Number(r.photo_count) })));
     } catch (err) { next(err); }
 }
 

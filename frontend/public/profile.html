@@ -10,19 +10,12 @@
 
 <body>
     <div class="app-shell">
-        <button id="hamburger-btn" class="hamburger-btn" aria-label="Open menu" aria-expanded="false">
+        <button id="hamburger-btn" class="hamburger-btn" aria-label="Menu" aria-expanded="false" aria-controls="app-sidebar">
             <span></span><span></span><span></span>
         </button>
         <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
-        <div class="topbar-actions">
-            <label class="theme-switch" title="Toggle dark mode">
-                <input type="checkbox" id="theme-toggle-checkbox" aria-label="Dark mode">
-                <span class="switch-track"><span class="switch-thumb"></span></span>
-            </label>
-            <button id="logout-btn" class="icon-btn" aria-label="Log out" title="Log out">⏻</button>
-        </div>
 
-        <aside class="app-sidebar">
+        <aside class="app-sidebar" id="app-sidebar">
             <div class="app-brand"><span class="mark">KQ</span> AlumNet</div>
             <nav id="sidebar-nav"></nav>
             <div class="app-sidebar-foot"></div>
@@ -44,6 +37,8 @@
                         </div>
                         <div class="pf-hero-actions">
                             <a id="pf-linkedin" class="btn btn-secondary md-btn-sm" target="_blank" rel="noopener noreferrer" style="display:none;">LinkedIn</a>
+                            <button type="button" class="btn btn-secondary md-btn-sm" id="pf-photo-btn">Add photo</button>
+                            <button type="button" class="btn-quiet st-small" id="pf-photo-remove" hidden>Remove photo</button>
                             <button type="button" class="btn btn-primary md-btn-sm" id="pf-edit-btn">Edit profile</button>
                         </div>
                     </div>

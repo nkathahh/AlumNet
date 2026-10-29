@@ -1,6 +1,7 @@
 const pool = require('../config/db');
 const { scanText } = require('../utils/scam');
 const { fileAutomaticReport } = require('./safety.controller');
+const { avatarUrl } = require('../utils/images');
 
 const LINKEDIN_RE = /^https:\/\/(www\.)?linkedin\.com\/in\/[A-Za-z0-9\-_%]+\/?$/;
 
@@ -13,7 +14,7 @@ async function getMyProfile(req, res, next) {
     const [[profile]] = await pool.execute(
       `SELECT p.skills, p.experience, p.career_interests, p.industry, p.headline, p.bio, p.linkedin_url,
               p.gender, p.gender_in_search,
-              u.name, u.email, u.department, u.city, u.country, u.created_at, u.onboarded_at, u.staff_number,
+              u.name, u.email, u.department, u.city, u.country, u.created_at, u.onboarded_at, u.staff_number, u.avatar_key,
               sd.employment_status,
               mt.years_of_experience, mt.accepting_mentees, mt.max_mentees, mt.meeting_mode, mt.availability_note,
               (SELECT COUNT(*) FROM mentorship_requests r WHERE r.mentor_id = u.user_id AND r.status = 'accepted') AS active_mentees
@@ -25,11 +26,12 @@ async function getMyProfile(req, res, next) {
       { userId }
     );
     if (!profile) return res.status(404).json({ error: 'Profile not found' });
-    const { staff_number: staffNumber, employment_status: employmentStatus, ...rest } = profile;
+    const { staff_number: staffNumber, employment_status: employmentStatus, avatar_key: avatarKey, ...rest } = profile;
     // "Verified" means the account is linked to an HR record
     res.json({
       ...rest,
       role,
+      avatar_url: avatarUrl(avatarKey, 320),
       gender_in_search: Boolean(rest.gender_in_search),
       accepting_mentees: rest.accepting_mentees === null || rest.accepting_mentees === undefined ? null : Boolean(rest.accepting_mentees),
       active_mentees: Number(rest.active_mentees || 0),
@@ -188,7 +190,7 @@ async function getPublicProfile(req, res, next) {
     const { id } = req.params;
     const { userId: viewerId, role: viewerRole } = req.user;
     const [[profile]] = await pool.execute(
-      `SELECT u.user_id, u.name, u.department, u.city, u.country,
+      `SELECT u.user_id, u.name, u.department, u.city, u.country, u.avatar_key,
               p.headline, p.bio, p.linkedin_url, p.skills, p.experience, p.career_interests, p.industry,
               mt.years_of_experience, mt.accepting_mentees, mt.max_mentees, mt.meeting_mode, mt.availability_note,
               IF(p.gender_in_search = 1, p.gender, NULL) AS gender,
@@ -224,10 +226,11 @@ async function getPublicProfile(req, res, next) {
       if (!link) return res.status(404).json({ error: 'Profile not found' });
     }
 
-    const { employment_status: status, ...rest } = profile;
+    const { employment_status: status, avatar_key: avatarKey, ...rest } = profile;
     const isMentor = rest.role === 'mentor';
     res.json({
       ...rest,
+      avatar_url: avatarUrl(avatarKey, 320),
       accepting_mentees: isMentor ? Boolean(rest.accepting_mentees) : undefined,
       active_mentees: isMentor ? Number(rest.active_mentees) : undefined,
       slots_left: isMentor ? Math.max(0, Number(rest.max_mentees || 0) - Number(rest.active_mentees)) : undefined,

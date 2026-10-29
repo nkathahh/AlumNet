@@ -10,19 +10,12 @@
 
 <body>
     <div class="app-shell">
-        <button id="hamburger-btn" class="hamburger-btn" aria-label="Open menu" aria-expanded="false">
+        <button id="hamburger-btn" class="hamburger-btn" aria-label="Menu" aria-expanded="false" aria-controls="app-sidebar">
             <span></span><span></span><span></span>
         </button>
         <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
-        <div class="topbar-actions">
-            <label class="theme-switch" title="Toggle dark mode">
-                <input type="checkbox" id="theme-toggle-checkbox" aria-label="Dark mode">
-                <span class="switch-track"><span class="switch-thumb"></span></span>
-            </label>
-            <button id="logout-btn" class="icon-btn" aria-label="Log out" title="Log out">⏻</button>
-        </div>
 
-        <aside class="app-sidebar">
+        <aside class="app-sidebar" id="app-sidebar">
             <div class="app-brand"><span class="mark">KQ</span> AlumNet</div>
             <nav id="sidebar-nav"></nav>
             <div class="app-sidebar-foot"></div>
@@ -39,67 +32,36 @@
             <div class="stat-row" id="stat-row" style="display:none;"></div>
 
             <!-- ================= Overview ================= -->
-            <div id="admin-tab-overview" class="md">
-                <header class="md-top">
-                    <p class="md-date" id="ov-date"></p>
-                    <h1 class="md-greeting">Platform overview</h1>
-                    <p class="md-sub" id="ov-sub">Loading...</p>
-                    <div class="md-actions">
-                        <a href="#" class="btn btn-secondary" data-goto-tab="events">Create an event</a>
-                        <a href="#" class="btn btn-secondary" data-goto-tab="users">Manage users</a>
-                    </div>
-                </header>
-
-                <section class="md-kpis" id="ov-kpis">
-                    <div class="md-kpi md-skel"></div>
-                    <div class="md-kpi md-skel"></div>
-                    <div class="md-kpi md-skel"></div>
-                    <div class="md-kpi md-skel"></div>
+            <div id="admin-tab-overview" class="home home-inset">
+                <section class="home-band" aria-labelledby="ov-title">
+                    <p class="home-date" id="ov-date"></p>
+                    <h1 class="home-title" id="ov-title">Overview</h1>
+                    <p class="home-lead" id="ov-sub">Loading...</p>
                 </section>
 
-                <div class="md-grid">
-                    <div class="md-col">
-                        <section class="md-panel">
-                            <div class="md-panel-head">
-                                <h2>Needs your review</h2>
-                                <a href="#" data-goto-tab="opportunities">Moderation</a>
-                            </div>
-                            <div id="ov-review">
-                                <div class="md-skel md-skel-row"></div>
-                                <div class="md-skel md-skel-row"></div>
-                            </div>
+                <div class="home-body">
+                    <div class="home-col">
+                        <section class="home-section" aria-labelledby="ov-queue-h">
+                            <h2 id="ov-queue-h">Your queue</h2>
+                            <div id="ov-review"><div class="home-skel"></div></div>
                         </section>
-
-                        <section class="md-panel">
-                            <div class="md-panel-head">
-                                <h2>Recent activity</h2>
-                                <a href="#" data-goto-tab="logs">Full log</a>
+                        <section class="home-section" aria-labelledby="ov-activity-h">
+                            <div class="home-section-head">
+                                <h2 id="ov-activity-h">Recent activity</h2>
+                                <a class="home-link" href="#logs" data-goto-tab="logs">Full activity log</a>
                             </div>
-                            <div id="ov-activity">
-                                <div class="md-skel md-skel-row"></div>
-                            </div>
+                            <div id="ov-activity"><div class="home-skel"></div></div>
                         </section>
                     </div>
 
-                    <aside class="md-col">
-                        <section class="md-panel">
-                            <div class="md-panel-head">
-                                <h2>Community</h2>
-                                <a href="#" data-goto-tab="users">Users</a>
-                            </div>
-                            <div id="ov-community">
-                                <div class="md-skel md-skel-row"></div>
-                            </div>
+                    <aside class="home-col home-side" aria-label="Community and shortcuts">
+                        <section class="home-section community" aria-labelledby="ov-community-h">
+                            <h2 id="ov-community-h">The community</h2>
+                            <div id="ov-community"><div class="home-skel"></div></div>
                         </section>
-
-                        <section class="md-panel">
-                            <div class="md-panel-head">
-                                <h2>Newest members</h2>
-                                <a href="#" data-goto-tab="users">View all</a>
-                            </div>
-                            <div id="ov-members">
-                                <div class="md-skel md-skel-row"></div>
-                            </div>
+                        <section class="home-section" aria-labelledby="ov-quick-h">
+                            <h2 id="ov-quick-h">Quick actions</h2>
+                            <div class="home-actions" id="ov-quick"></div>
                         </section>
                     </aside>
                 </div>
@@ -262,6 +224,7 @@
                             <textarea id="eventDescription" maxlength="5000"></textarea>
                         </div>
                         <div id="event-targeting"></div>
+                        <div id="event-banner-field"></div>
                         <p id="event-form-error"
                             style="color:var(--kq-red); font-size:0.85rem; display:none; margin-bottom:12px;"></p>
                         <div class="admin-form-actions">
@@ -318,6 +281,12 @@
                     </div>
                 </section>
 
+                <section class="md-panel img-review" id="img-review-panel" aria-labelledby="img-review-h" hidden>
+                    <div class="md-panel-head"><h2 id="img-review-h">Photos to check</h2><span class="md-muted st-small" id="img-review-count"></span></div>
+                    <p class="md-muted st-small">Banners, logos and event photos from mentors. Approve only if it suits a Kenya Airways alumni network and shows nobody who would mind.</p>
+                    <div id="img-review"></div>
+                </section>
+
                 <section class="mod-insights" id="mod-insights"></section>
 
                 <div class="mod-toolbar">
@@ -366,6 +335,28 @@
                     </div>
                 </header>
                 <div id="impact-body"></div>
+            </div>
+
+            <!-- ================= Branding ================= -->
+            <div id="admin-tab-branding" class="md" style="display:none;">
+                <header class="md-top">
+                    <h1 class="md-greeting">Branding</h1>
+                    <p class="md-sub">The organisation logo shown in the sidebar, on the sign-in pages and as the browser tab icon. Without one, the red KQ badge is used.</p>
+                </header>
+                <section class="md-panel">
+                    <div class="md-panel-head"><h2>Organisation logo</h2></div>
+                    <div class="brand-preview-row" id="brand-preview"></div>
+                    <ul class="brand-tips">
+                        <li>Use a PNG or JPG of the official logo, at least 200 pixels across, on a white or transparent background.</li>
+                        <li>A wide logo (twice as wide as it is tall or more) shows above the AlumNet name. A square one replaces the KQ badge.</li>
+                        <li>White space around the logo is trimmed automatically. The change shows for everyone straight away.</li>
+                    </ul>
+                    <p class="st-msg" id="brand-msg" role="status"></p>
+                    <div class="md-inline-actions">
+                        <button type="button" class="btn btn-primary" id="brand-upload">Upload logo</button>
+                        <button type="button" class="btn btn-secondary" id="brand-remove" hidden>Use the KQ badge instead</button>
+                    </div>
+                </section>
             </div>
 
             <!-- ================= Activity log ================= -->

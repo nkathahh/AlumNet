@@ -62,9 +62,13 @@ app.use('/api', require('./utils/rateLimit').writeLimit);
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 // Public, non-secret settings the frontend needs
-app.get('/api/config', (req, res) => {
-  res.json({ googleClientId: process.env.GOOGLE_CLIENT_ID || null });
+app.get('/api/config', async (req, res) => {
+  let brand = null;
+  try { brand = await require('./controllers/images.controller').brandInfo(); } catch { /* the logo is optional */ }
+  res.json({ googleClientId: process.env.GOOGLE_CLIENT_ID || null, brand });
 });
+// The organisation's logo is shown before signing in, so it is served to everyone
+app.get('/brand/:file', require('./controllers/images.controller').serveBrand);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/profile', profileRoutes);
@@ -77,6 +81,10 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/safety', require('./routes/safety.routes'));
 app.use('/api/mentors', require('./routes/mentors.routes'));
+app.use('/api/images', require('./routes/images.routes'));
+
+// Image files, for signed-in members only (each request checks who may see the image)
+app.get('/media/:file', require('./middleware/auth.middleware').requireAuth, require('./controllers/images.controller').serveMedia);
 
 // Unknown API routes return JSON, not an HTML page
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
@@ -88,7 +96,9 @@ app.use(express.static(FRONTEND_DIR, { extensions: ['html'] }));
 
 app.use((err, req, res, next) => {
   if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'The request was not valid. Reload the page and try again.' });
-  if (err.type === 'entity.too.large') return res.status(413).json({ error: 'That is too much data to send at once.' });
+  if (err.type === 'entity.too.large') {
+    return res.status(413).json({ error: req.path.startsWith('/api/images') ? 'That image is over 5 MB. Choose a smaller one.' : 'That is too much data to send at once.' });
+  }
   console.error(err);
   // Safety net behind the field checks: the database refused a value that is
   // too long or the wrong kind. The member is told to fix their input rather
@@ -119,6 +129,8 @@ async function cleanUpOldRecords() {
     // The activity log is evidence, so it is kept for two years and then removed
     await pool.query('DELETE FROM admin_activity_logs WHERE created_at < DATE_SUB(NOW(), INTERVAL 730 DAY)');
     await require('./utils/recheck').recheckLivePosts();
+    // Images whose event, post or report is gone, and screenshots from closed reports
+    await require('./utils/images').removeOrphanImages();
   } catch (err) {
     console.error('Clean-up skipped:', err.message);
   }

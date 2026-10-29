@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderRequests();
   setRequestsSubtitle();
   wireProfileForm();
+  wireProfilePhoto();
   renderEvents();
   renderOpportunities();
   wireRoleVisibility();
@@ -46,6 +47,8 @@ document.addEventListener('DOMContentLoaded', () => {
   wireAdminAdmins();
   checkAdminTwoFactor();
   wireOnboarding();
+  refreshBrand();
+  wireBranding();
 });
 
 // Same server as the page when served over http(s); localhost when a page is opened as a file
@@ -221,60 +224,97 @@ const PAGE_ROLES = {
   'admin.html': ['admin']
 };
 
+// Line icons for the sidebar (24px grid, drawn with the text colour)
+const NAV_ICONS = {
+  home: '<path d="M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+  inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+  briefcase: '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>',
+  bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+  sliders: '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
+  moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/>',
+  signout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
+  idcard: '<rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="8" cy="12" r="2.5"/><path d="M14 10h5M14 14h3"/>',
+  flag: '<path d="M4 22V4"/><path d="M4 4h13l-2 4 2 4H4"/>',
+  users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+  key: '<circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.7 12.3 9.3-9.3M17 6l3 3M15 8l2 2"/>',
+  file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/>',
+  check: '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
+  chart: '<path d="M3 3v18h18"/><path d="M7 15v3M12 10v8M17 6v12"/>',
+  list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+  image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>'
+};
+
+function navIcon(name) {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${NAV_ICONS[name] || ''}</svg>`;
+}
+
 const NAV_CONFIG = {
   mentee: [
     {
-      group: 'Network', links: [
-        { href: 'mentee-dashboard.html', label: 'Dashboard' },
-        { href: 'recommendations.html', label: 'Find a mentor' },
-        { href: 'requests.html', label: 'My requests' },
-        { href: 'profile.html', label: 'My profile' },
-        { href: 'settings.html', label: 'Account settings' }
+      group: 'Mentoring', links: [
+        { href: 'mentee-dashboard.html', label: 'Home', icon: 'home' },
+        { href: 'recommendations.html', label: 'Find a mentor', icon: 'search' },
+        { href: 'requests.html', label: 'My requests', icon: 'inbox' },
+        { href: 'profile.html', label: 'My profile', icon: 'user' }
       ]
     },
     {
       group: 'Community', links: [
-        { href: 'events.html', label: 'Alumni events' },
-        { href: 'opportunities.html', label: 'Career opportunities' },
-        { href: 'notifications.html', label: 'Notifications' }
+        { href: 'events.html', label: 'Alumni events', icon: 'calendar' },
+        { href: 'opportunities.html', label: 'Opportunities', icon: 'briefcase' },
+        { href: 'notifications.html', label: 'Notifications', icon: 'bell' }
       ]
     }
   ],
   mentor: [
     {
-      group: 'Mentorship', links: [
-        { href: 'mentor-dashboard.html', label: 'Dashboard' },
-        { href: 'requests.html', label: 'Mentee requests' },
-        { href: 'profile.html', label: 'My profile' },
-        { href: 'settings.html', label: 'Account settings' }
+      group: 'Mentoring', links: [
+        { href: 'mentor-dashboard.html', label: 'Home', icon: 'home' },
+        { href: 'requests.html', label: 'Mentee requests', icon: 'inbox' },
+        { href: 'profile.html', label: 'My profile', icon: 'user' }
       ]
     },
     {
       group: 'Community', links: [
-        { href: 'events.html', label: 'Alumni events' },
-        { href: 'opportunities.html', label: 'Career opportunities' },
-        { href: 'notifications.html', label: 'Notifications' }
+        { href: 'events.html', label: 'Alumni events', icon: 'calendar' },
+        { href: 'opportunities.html', label: 'Opportunities', icon: 'briefcase' },
+        { href: 'notifications.html', label: 'Notifications', icon: 'bell' }
       ]
     }
   ],
   admin: [
     {
-      group: 'Platform', links: [
-        { tab: 'overview', label: 'Overview' },
-        { tab: 'verification', label: 'Verification' },
-        { tab: 'reports', label: 'Reports' },
-        { tab: 'users', label: 'User management' },
-        { tab: 'admins', label: 'Admins' },
-        { tab: 'hr', label: 'HR records' },
-        { tab: 'events', label: 'Event management' },
-        { tab: 'opportunities', label: 'Content moderation' },
-        { tab: 'impact', label: 'Impact' },
-        { tab: 'logs', label: 'Activity log' }
+      group: '', links: [
+        { tab: 'overview', label: 'Overview', icon: 'home' }
       ]
     },
     {
-      group: 'Account', links: [
-        { href: 'settings.html', label: 'Account settings' }
+      group: 'People', links: [
+        { tab: 'verification', label: 'Identity checks', icon: 'idcard' },
+        { tab: 'reports', label: 'Reports', icon: 'flag' },
+        { tab: 'users', label: 'Members', icon: 'users' },
+        { tab: 'admins', label: 'Admins', icon: 'key' },
+        { tab: 'hr', label: 'HR records', icon: 'file' }
+      ]
+    },
+    {
+      group: 'Content', links: [
+        { tab: 'opportunities', label: 'Posts to review', icon: 'check' },
+        { tab: 'events', label: 'Events', icon: 'calendar' }
+      ]
+    },
+    {
+      group: 'Results', links: [
+        { tab: 'impact', label: 'Impact', icon: 'chart' },
+        { tab: 'logs', label: 'Activity log', icon: 'list' }
+      ]
+    },
+    {
+      group: 'Settings', links: [
+        { tab: 'branding', label: 'Branding', icon: 'image' }
       ]
     }
   ]
@@ -339,51 +379,186 @@ function renderSidebar() {
   const role = localStorage.getItem('alumnet_role');
   const groups = NAV_CONFIG[role] || [];
   const currentPage = location.pathname.split('/').pop();
+  const aside = nav.closest('.app-sidebar');
+  if (aside) aside.classList.toggle('is-admin', role === 'admin');
+  nav.setAttribute('aria-label', 'Main');
 
-  if (role === 'admin') {
-    const onAdminPage = currentPage === 'admin.html';
-    nav.innerHTML = groups.map((g) => `
-      <div class="nav-group">
-        <div class="nav-group-label">${g.group}</div>
-        ${g.links.map((l) => {
-          if (l.href) return `<a class="nav-link ${l.href === currentPage ? 'active' : ''}" href="${l.href}">${l.label}</a>`;
-          // Tabs switch in place on the admin page; from other pages they open admin.html at that tab
-          return onAdminPage
-            ? `<a class="nav-link" href="#${l.tab}" data-admin-tab="${l.tab}">${l.label}</a>`
-            : `<a class="nav-link" href="admin.html#${l.tab}">${l.label}</a>`;
-        }).join('')}
-      </div>`).join('');
-    return;
+  // The brand goes home, whichever page you are on
+  const brand = document.querySelector('.app-brand');
+  if (brand) {
+    brand.outerHTML = `<a class="app-brand" href="${HOME_PAGE[role] || 'index.html'}">
+      <span class="mark" aria-hidden="true">KQ</span>
+      <span><span class="app-brand-name">AlumNet</span><span class="app-brand-sub">${role === 'admin' ? 'Admin tools' : 'Kenya Airways alumni'}</span></span>
+    </a>`;
+    applyBrand(cachedBrand());
   }
 
+  const onAdminPage = currentPage === 'admin.html';
+  const linkHTML = (l) => {
+    const inner = `${navIcon(l.icon)}<span class="nav-label">${l.label}</span>`;
+    if (l.href) {
+      const here = l.href === currentPage;
+      return `<a class="nav-link ${here ? 'active' : ''}" href="${l.href}"${here ? ' aria-current="page"' : ''}>${inner}</a>`;
+    }
+    // Tabs switch in place on the admin page; from other pages they open admin.html at that tab
+    return onAdminPage
+      ? `<a class="nav-link" href="#${l.tab}" data-admin-tab="${l.tab}">${inner}</a>`
+      : `<a class="nav-link" href="admin.html#${l.tab}">${inner}</a>`;
+  };
   nav.innerHTML = groups.map((g) => `
     <div class="nav-group">
-      <div class="nav-group-label">${g.group}</div>
-      ${g.links.map((l) => `<a class="nav-link ${l.href === currentPage ? 'active' : ''}" href="${l.href}">${l.label}</a>`).join('')}
+      ${g.group ? `<p class="nav-group-label">${g.group}</p>` : ''}
+      ${g.links.map(linkHTML).join('')}
     </div>`).join('');
+
+  renderSidebarFoot(role, currentPage);
+}
+
+/* ---------- The organisation's logo ---------- */
+
+// Kept in this browser so pages show the logo at once; refreshed from the server on every page
+function cachedBrand() {
+  try { return JSON.parse(localStorage.getItem('alumnet_brand') || 'null'); } catch { return null; }
+}
+
+// Puts the logo in the sidebar, on the sign-in pages and in the browser tab (or the KQ badge when there is none)
+function applyBrand(brand) {
+  document.querySelectorAll('.app-brand, .auth-visual-brand').forEach((el) => {
+    const mark = el.querySelector('.mark');
+    el.classList.toggle('is-wide', Boolean(brand && brand.wide));
+    el.querySelectorAll('.brand-wide').forEach((w) => w.remove());
+    if (!mark) return;
+    if (brand && brand.wide) {
+      mark.hidden = true;
+      el.insertAdjacentHTML('afterbegin', `<span class="brand-wide"><img src="${escapeHTML(brand.wide_url)}" alt=""></span>`);
+    } else if (brand) {
+      mark.hidden = false;
+      mark.classList.add('mark-img');
+      mark.innerHTML = `<img src="${escapeHTML(brand.square_url)}" alt="">`;
+    } else {
+      mark.hidden = false;
+      mark.classList.remove('mark-img');
+      mark.textContent = 'KQ';
+    }
+  });
+  let icon = document.querySelector('link[rel="icon"]');
+  if (brand) {
+    if (!icon) { icon = document.createElement('link'); icon.rel = 'icon'; document.head.appendChild(icon); }
+    icon.type = 'image/webp';
+    icon.href = brand.icon_url;
+  } else if (icon) icon.remove();
+}
+
+async function refreshBrand() {
+  applyBrand(cachedBrand());
+  try {
+    const res = await fetch(`${API_BASE}/config`);
+    if (!res.ok) return;
+    const { brand } = await res.json();
+    try { localStorage.setItem('alumnet_brand', JSON.stringify(brand || null)); } catch { /* private window */ }
+    applyBrand(brand || null);
+  } catch { /* offline: keep what is shown */ }
+}
+
+// Admin: Branding tab
+async function renderBranding() {
+  const box = document.getElementById('brand-preview');
+  if (!box) return;
+  const brand = cachedBrand();
+  const preview = (theme) => `
+    <figure class="brand-sample ${theme}">
+      <div class="brand-sample-side">
+        ${brand && brand.wide
+          ? `<span class="brand-wide"><img src="${escapeHTML(brand.wide_url)}" alt=""></span>`
+          : `<span class="mark ${brand ? 'mark-img' : ''}">${brand ? `<img src="${escapeHTML(brand.square_url)}" alt="">` : 'KQ'}</span>`}
+        <span><span class="app-brand-name">AlumNet</span><span class="app-brand-sub">Kenya Airways alumni</span></span>
+      </div>
+      <figcaption>${theme === 'light' ? 'Member sidebar' : 'Admin sidebar and dark mode'}</figcaption>
+    </figure>`;
+  box.innerHTML = preview('light') + preview('dark');
+  document.getElementById('brand-remove').hidden = !brand;
+}
+
+function wireBranding() {
+  const up = document.getElementById('brand-upload');
+  if (!up) return;
+  const msg = document.getElementById('brand-msg');
+  up.onclick = async () => {
+    const file = await chooseImage();
+    if (!file) return;
+    up.disabled = true;
+    setMsg(msg, 'Uploading...', true);
+    const r = await uploadImage('/images/brand', file);
+    up.disabled = false;
+    setMsg(msg, r.ok ? r.data.message : r.data.error || 'Could not save the logo.', r.ok);
+    if (r.ok) {
+      try { localStorage.setItem('alumnet_brand', JSON.stringify(r.data.brand)); } catch { /* private window */ }
+      applyBrand(r.data.brand);
+      renderBranding();
+      renderAdminLogs();
+    }
+  };
+  document.getElementById('brand-remove').onclick = async () => {
+    if (!(await askConfirm('Use the KQ badge instead?', 'The logo is removed for everyone and the red KQ badge shows again.', { confirmText: 'Remove logo' }))) return;
+    const r = await apiSend('DELETE', '/images/brand');
+    setMsg(msg, r.ok ? r.data.message : r.data.error, r.ok);
+    try { localStorage.setItem('alumnet_brand', 'null'); } catch { /* private window */ }
+    applyBrand(null);
+    renderBranding();
+    renderAdminLogs();
+  };
+}
+
+const ROLE_WORD = { mentee: 'Mentee', mentor: 'Mentor', admin: 'Admin' };
+
+// Who is signed in, Account settings, Dark mode and Sign out, always in the same place
+function renderSidebarFoot(role, currentPage) {
+  const foot = document.querySelector('.app-sidebar-foot');
+  if (!foot) return;
+  const settingsHere = currentPage === 'settings.html';
+  const dark = (localStorage.getItem('alumnet_theme') || 'light') === 'dark';
+  foot.innerHTML = `
+    <a class="side-user" href="${role === 'admin' ? 'settings.html' : 'profile.html'}">
+      <span class="side-avatar" aria-hidden="true" id="side-avatar"></span>
+      <span><span class="side-user-name" id="side-user-name">Your account</span><span class="side-user-role" id="side-user-role">${ROLE_WORD[role] || ''}</span></span>
+    </a>
+    <a class="nav-link ${settingsHere ? 'active' : ''}" href="settings.html"${settingsHere ? ' aria-current="page"' : ''}>${navIcon('sliders')}<span class="nav-label">Account settings</span></a>
+    <button type="button" class="nav-link" id="theme-toggle-btn" aria-pressed="${dark}">${navIcon('moon')}<span class="nav-label">Dark mode</span><span class="side-state" id="theme-state">${dark ? 'On' : 'Off'}</span></button>
+    <button type="button" class="side-signout" id="logout-btn">${navIcon('signout')}Sign out</button>`;
+}
+
+function applyTheme(next) {
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('alumnet_theme', next); } catch { /* private window */ }
+  const checkbox = document.getElementById('theme-toggle-checkbox');
+  if (checkbox) checkbox.checked = next === 'dark';
+  const btn = document.getElementById('theme-toggle-btn');
+  if (btn) btn.setAttribute('aria-pressed', String(next === 'dark'));
+  const state = document.getElementById('theme-state');
+  if (state) state.textContent = next === 'dark' ? 'On' : 'Off';
 }
 
 function initTheme() {
-  const saved = localStorage.getItem('alumnet_theme') || 'light';
+  let saved = 'light';
+  try { saved = localStorage.getItem('alumnet_theme') || 'light'; } catch { /* private window */ }
   document.documentElement.setAttribute('data-theme', saved);
   const checkbox = document.getElementById('theme-toggle-checkbox');
   if (checkbox) checkbox.checked = saved === 'dark';
 }
 
 function wireThemeToggle() {
+  // Sign-in pages keep the small switch; app pages have the labelled button in the sidebar
   const checkbox = document.getElementById('theme-toggle-checkbox');
-  if (!checkbox) return;
-  checkbox.addEventListener('change', () => {
-    const next = checkbox.checked ? 'dark' : 'light';
-    document.documentElement.setAttribute('data-theme', next);
-    localStorage.setItem('alumnet_theme', next);
-  });
+  if (checkbox) checkbox.addEventListener('change', () => applyTheme(checkbox.checked ? 'dark' : 'light'));
+  const btn = document.getElementById('theme-toggle-btn');
+  if (btn) btn.addEventListener('click', () => applyTheme(btn.getAttribute('aria-pressed') === 'true' ? 'light' : 'dark'));
 }
 
 function wireLogout() {
   const btn = document.getElementById('logout-btn');
   if (!btn) return;
   btn.addEventListener('click', async () => {
+    btn.disabled = true;
     try { await fetch(`${API_BASE}/auth/logout`, { method: 'POST' }); } catch { /* offline: still clear locally */ }
     clearSession();
     window.location.href = 'login.html';
@@ -406,14 +581,21 @@ function wireRoleVisibility() {
 }
 
 async function updateSidebar() {
-  const el = document.querySelector('.app-sidebar-foot');
+  const nameEl = document.getElementById('side-user-name');
   const token = localStorage.getItem('alumnet_token');
-  if (!el || !token) return;
+  if (!nameEl || !token) return;
   try {
     const res = await fetch(`${API_BASE}/profile/me`, { headers: { Authorization: `Bearer ${token}` } });
     if (!res.ok) return;
     const data = await res.json();
-    el.innerHTML = `${escapeHTML(data.name)}<br>${escapeHTML(data.department || '')}`;
+    const p = data.profile || data;
+    const role = localStorage.getItem('alumnet_role');
+    if (p.name) nameEl.textContent = p.name;
+    const av = document.getElementById('side-avatar');
+    av.innerHTML = p.avatar_url ? `<img src="${escapeHTML(p.avatar_url)}" alt="">` : escapeHTML(mdInitials(p.name || ''));
+    av.classList.toggle('has-photo', Boolean(p.avatar_url));
+    const dept = p.department || '';
+    document.getElementById('side-user-role').textContent = [ROLE_WORD[role], dept].filter(Boolean).join(', ');
   } catch { }
 }
 
@@ -911,10 +1093,9 @@ function matchBreakdownHTML(b) {
 }
 
 function apiMentorCardHTML(m, alreadyRequested) {
-  const initials = m.name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
   return `
     <article class="mentor-card">
-      <div class="mentor-avatar">${initials}</div>
+      ${avatarHTML(m.name, m.avatar_url, 'mentor-avatar')}
       <div>
         <div class="mentor-name-row">
           <span class="mentor-name" style="cursor:pointer; text-decoration:underline;" data-action="view-profile" data-mentor-id="${m.mentor_id}">${escapeHTML(m.name)}</span>
@@ -1263,6 +1444,7 @@ function requestCardHTML(r) {
 
   return `
     <div class="request-card request-card-rich">
+      ${avatarHTML(r.other_name, r.other_avatar_url, 'people-av req-av')}
       <div class="req-main">
         <strong><a href="#" class="req-name" data-profile="${r.other_user_id}">${escapeHTML(r.other_name)}</a></strong>
         ${r.other_verified ? verifiedBadgeHTML(role === 'mentor' ? 'Verified current KQ staff' : 'Verified former KQ staff') : ''}<br>
@@ -1346,8 +1528,14 @@ function verifiedBadgeHTML(label) {
 function drawProfile(p) {
   document.getElementById('pf-name').textContent = p.name || '';
   const avatar = document.getElementById('pf-avatar');
-  avatar.textContent = mdInitials(p.name);
-  avatar.style.background = colorFromName(p.name || '');
+  avatar.innerHTML = p.avatar_url ? `<img src="${escapeHTML(p.avatar_url)}" alt="">` : escapeHTML(mdInitials(p.name));
+  avatar.classList.toggle('has-photo', Boolean(p.avatar_url));
+  avatar.style.background = p.avatar_url ? '' : colorFromName(p.name || '');
+  const photoBtn = document.getElementById('pf-photo-btn');
+  if (photoBtn) {
+    photoBtn.textContent = p.avatar_url ? 'Change photo' : 'Add photo';
+    document.getElementById('pf-photo-remove').hidden = !p.avatar_url;
+  }
 
   const role = document.getElementById('pf-role');
   role.textContent = p.role === 'mentor' ? 'Mentor' : p.role === 'mentee' ? 'Mentee' : p.role;
@@ -1391,6 +1579,35 @@ function drawProfile(p) {
   ].filter(([, v]) => v);
   document.getElementById('pf-details').innerHTML = details
     .map(([k, v]) => `<div><dt>${k}</dt><dd>${escapeHTML(v)}</dd></div>`).join('');
+}
+
+// Profile photo: add, change or remove, from the buttons beside the name
+function wireProfilePhoto() {
+  const btn = document.getElementById('pf-photo-btn');
+  if (!btn) return;
+  const refresh = async () => {
+    const res = await fetch(`${API_BASE}/profile/me`);
+    if (res.ok) drawProfile(await res.json());
+    updateSidebar();
+  };
+  btn.addEventListener('click', async () => {
+    const file = await chooseImage();
+    if (!file) return;
+    btn.disabled = true;
+    const label = btn.textContent;
+    btn.textContent = 'Uploading...';
+    const r = await uploadImage('/images/avatar', file);
+    btn.disabled = false;
+    btn.textContent = label;
+    toast(r.ok ? 'Your photo is saved. It shows wherever your name appears.' : r.data.error || 'Could not save the photo.');
+    if (r.ok) refresh();
+  });
+  document.getElementById('pf-photo-remove').addEventListener('click', async () => {
+    if (!(await askConfirm('Remove your photo?', 'Your initials show instead. The photo is deleted straight away.', { confirmText: 'Remove photo' }))) return;
+    const r = await apiSend('DELETE', '/images/avatar');
+    toast(r.ok ? r.data.message : r.data.error || 'Could not remove the photo.');
+    refresh();
+  });
 }
 
 async function wireProfileForm() {
@@ -1514,7 +1731,7 @@ async function wireProfileForm() {
 }
 
 function colorFromName(name) {
-  const palette = ['#045C43', '#C8102E', '#0A7A5A', '#A00C24', '#15201C'];
+  const palette = ['#20507A', '#B5121B', '#1D6B3A', '#7A4B00', '#1C2127'];
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
   return palette[Math.abs(hash) % palette.length];
@@ -1542,7 +1759,7 @@ async function openMentorProfile(mentorId) {
   backdrop.innerHTML = `
     <div class="modal-card pf-modal" role="dialog" aria-modal="true" aria-label="${escapeHTML(data.name)}">
       <div class="pf-modal-head">
-        <div class="pf-avatar pf-avatar-sm" style="background:${colorFromName(data.name || '')}">${mdInitials(data.name)}</div>
+        ${avatarHTML(data.name, data.avatar_url, 'pf-avatar pf-avatar-sm', data.avatar_url ? '' : `background:${colorFromName(data.name || '')}`)}
         <div>
           <h3>${escapeHTML(data.name)} ${data.verified ? verifiedBadgeHTML(data.verified_label || 'Verified') : ''}</h3>
           ${data.headline ? `<div class="pf-headline">${escapeHTML(data.headline)}</div>` : ''}
@@ -1781,6 +1998,7 @@ function eventCardHTML(e) {
 
   return `
     <div class="event-card" id="event-${e.event_id}">
+      ${e.banner_url ? `<img class="event-banner" src="${escapeHTML(e.banner_url)}" alt="" loading="lazy" decoding="async">` : ''}
       <div class="event-card-top">
         <span class="event-badge ${e.is_official ? 'official' : 'community'}">${e.is_official ? 'Official' : 'Community'}</span>
         ${e.is_mine ? '<span class="event-badge mine">Your event</span>' : ''}
@@ -1848,10 +2066,15 @@ function wireEventsPage() {
       tab.classList.add('active');
       eventFilter = tab.dataset.eventFilter;
       const proposals = eventFilter === 'proposals';
-      document.getElementById('event-grid').style.display = proposals ? 'none' : '';
+      const past = eventFilter === 'past';
+      document.getElementById('event-grid').style.display = proposals || past ? 'none' : '';
+      document.getElementById('event-filters').style.display = past ? 'none' : '';
       const mine = document.getElementById('my-proposals');
       if (mine) mine.style.display = proposals ? '' : 'none';
-      if (!proposals) drawEvents();
+      const pastBox = document.getElementById('past-events');
+      if (pastBox) pastBox.style.display = past ? '' : 'none';
+      if (past) renderPastEvents();
+      else if (!proposals) drawEvents();
     });
   });
 
@@ -1862,6 +2085,118 @@ function wireEventsPage() {
     document.getElementById('proposals-tab').style.display = '';
     renderMyProposals();
   }
+}
+
+/* ---------- Past events and their photos ---------- */
+
+async function renderPastEvents() {
+  const box = document.getElementById('past-events');
+  if (!box) return;
+  box.innerHTML = '<p class="md-muted" style="padding:20px 4px;">Loading...</p>';
+  const { ok, data } = await apiSend('GET', '/events/past');
+  if (!ok) { box.innerHTML = `<p style="color:var(--kq-red); padding:20px 4px;">${escapeHTML(data.error || 'Could not load past events.')}</p>`; return; }
+  if (!data.length) { box.innerHTML = '<p class="md-muted" style="padding:20px 4px;">No events have taken place in the last year yet.</p>'; return; }
+  box.innerHTML = `<div class="event-grid">${data.map((e) => `
+    <article class="event-card past-card">
+      ${e.cover_url ? `<img class="event-banner" src="${escapeHTML(e.cover_url)}" alt="" loading="lazy" decoding="async">` : '<div class="event-banner event-banner-empty" aria-hidden="true"></div>'}
+      <div class="date">${escapeHTML(new Date(e.event_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }))}</div>
+      <h3>${escapeHTML(e.title)}</h3>
+      <div class="event-meta">
+        <div>Hosted by ${escapeHTML(e.is_official ? 'KQ Alumni Office' : e.organiser_name)}</div>
+        <div>${e.photo_count ? `${e.photo_count} photo${e.photo_count === 1 ? '' : 's'}` : 'No photos yet'}${e.attended ? ', you were there' : ''}</div>
+      </div>
+      <button type="button" class="btn ${e.photo_count ? 'btn-secondary' : e.can_add_photos ? 'btn-primary' : 'btn-secondary'} btn-block" data-gallery="${e.event_id}" data-title="${escapeHTML(e.title)}">
+        ${e.photo_count ? 'See photos' : e.can_add_photos ? 'Add the first photo' : 'See photos'}
+      </button>
+    </article>`).join('')}</div>`;
+  box.querySelectorAll('[data-gallery]').forEach((btn) => { btn.onclick = () => openEventGallery(btn.dataset.gallery, btn.dataset.title); });
+}
+
+async function openEventGallery(eventId, title) {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.innerHTML = `<div class="modal-card gallery-card" role="dialog" aria-modal="true" aria-labelledby="gal-title"><h3 id="gal-title">${escapeHTML(title)}</h3><div id="gal-body"><p class="md-muted">Loading...</p></div></div>`;
+  document.body.appendChild(backdrop);
+  const close = () => { backdrop.remove(); document.removeEventListener('keydown', onKey); renderPastEvents(); };
+  const onKey = (e) => { if (e.key === 'Escape' && !document.querySelector('.photo-viewer')) close(); };
+  document.addEventListener('keydown', onKey);
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+
+  const draw = async () => {
+    const { ok, data } = await apiSend('GET', `/images/events/${eventId}/photos`);
+    const body = backdrop.querySelector('#gal-body');
+    if (!ok) { body.innerHTML = `<p style="color:var(--kq-red);">${escapeHTML(data.error || 'Could not load the photos.')}</p>`; return; }
+    const photos = data.photos;
+    body.innerHTML = `
+      ${photos.length ? `<ul class="gallery-grid">${photos.map((p, i) => `
+        <li>
+          <button type="button" class="gallery-thumb" data-view="${i}" aria-label="Open photo ${i + 1}${p.caption ? `: ${escapeHTML(p.caption)}` : ''}">
+            <img src="${escapeHTML(p.thumb_url)}" alt="" loading="lazy" decoding="async">
+            ${p.status === 'pending' ? '<span class="gallery-flag">Being checked</span>' : ''}
+          </button>
+          ${p.is_mine || localStorage.getItem('alumnet_role') === 'admin' ? `<button type="button" class="btn-quiet st-small" data-remove-photo="${p.image_id}">Remove</button>` : ''}
+        </li>`).join('')}</ul>` : '<p class="md-muted">No photos yet.</p>'}
+      ${data.can_add ? `
+        <form class="gallery-add" id="gal-add" novalidate>
+          <h4>Add photos</h4>
+          <div class="field">
+            <label for="gal-files">Photos (JPG, PNG or WebP, up to 5 MB each)</label>
+            <input type="file" id="gal-files" accept="${IMAGE_TYPES.join(',')}" multiple>
+          </div>
+          <div class="field">
+            <label for="gal-caption">Caption (optional)</label>
+            <input type="text" id="gal-caption" maxlength="150" placeholder="e.g. The panel answering questions">
+          </div>
+          <label class="check-row"><input type="checkbox" id="gal-consent"><span>Everyone clearly shown agreed to these photos being shared with AlumNet members.</span></label>
+          <p class="st-msg" id="gal-msg" role="status"></p>
+          <button type="submit" class="btn btn-primary">Add photos</button>
+          ${localStorage.getItem('alumnet_role') === 'admin' ? '' : '<p class="field-hint">The alumni office checks each photo before other members see it.</p>'}
+        </form>` : ''}
+      <div class="dlg-actions"><button type="button" class="btn btn-secondary" data-gal-close>Close</button></div>`;
+    body.querySelector('[data-gal-close]').onclick = close;
+    body.querySelectorAll('[data-view]').forEach((b) => { b.onclick = () => openPhotoViewer(photos, Number(b.dataset.view)); });
+    body.querySelectorAll('[data-remove-photo]').forEach((b) => {
+      b.onclick = async () => {
+        const admin = localStorage.getItem('alumnet_role') === 'admin';
+        const photo = photos.find((p) => String(p.image_id) === b.dataset.removePhoto);
+        let note = '';
+        if (admin && !photo.is_mine) {
+          note = await askDialog({ title: 'Remove this photo?', text: 'The person who added it is told why.', confirmText: 'Remove', danger: true, input: { label: 'Why', placeholder: 'e.g. Shows someone who did not agree', required: 'Give a reason.' } });
+          if (note === null) return;
+        } else if (!(await askConfirm('Remove this photo?', 'It is deleted straight away.', { confirmText: 'Remove', danger: true }))) return;
+        const r = await apiSend('DELETE', `/images/${b.dataset.removePhoto}`, note ? { note } : undefined);
+        toast(r.ok ? 'Photo removed.' : r.data.error || 'Could not remove it.');
+        draw();
+      };
+    });
+    const form = body.querySelector('#gal-add');
+    if (form) {
+      form.onsubmit = async (e) => {
+        e.preventDefault();
+        const msg = form.querySelector('#gal-msg');
+        const files = [...form.querySelector('#gal-files').files];
+        if (!files.length) { setMsg(msg, 'Choose at least one photo.'); return; }
+        if (!form.querySelector('#gal-consent').checked) { setMsg(msg, 'Tick the box to confirm the people shown agreed.'); return; }
+        const caption = form.querySelector('#gal-caption').value.trim();
+        const btn = form.querySelector('button[type="submit"]');
+        btn.disabled = true;
+        let added = 0;
+        const problems = [];
+        for (const [i, f] of files.entries()) {
+          setMsg(msg, `Uploading ${i + 1} of ${files.length}...`, true);
+          const r = await uploadImage(`/images/events/${eventId}/photos?consent=1${caption ? `&caption=${encodeURIComponent(caption)}` : ''}`, f);
+          if (r.ok) added++; else problems.push(`${f.name}: ${r.data.error}`);
+        }
+        btn.disabled = false;
+        if (added) toast(`${added} photo${added === 1 ? '' : 's'} added.${localStorage.getItem('alumnet_role') === 'admin' ? '' : ' Others see them once the alumni office has checked them.'}`);
+        await draw();
+        if (problems.length) setMsg(backdrop.querySelector('#gal-msg') || msg, problems.join(' '));
+      };
+    }
+  };
+  await draw();
+  const first = backdrop.querySelector('button, input');
+  if (first) first.focus();
 }
 
 function openProposeEventModal(existing = null, opts = {}) {
@@ -1904,6 +2239,8 @@ function openProposeEventModal(existing = null, opts = {}) {
         </div>
         <div class="field"><label for="peDescription">Description</label><textarea id="peDescription" maxlength="5000"></textarea></div>
         ${targetingFieldsHTML('pe')}
+        ${imageFieldHTML('peBanner', 'Banner image (optional)', `A wide photo or poster, at least 600 pixels across. JPG, PNG or WebP, up to 5 MB.${asAdmin ? '' : ' The alumni office checks it before others see it.'}`, existing && existing.banner_url, 'banner')}
+        ${existing && existing.banner_pending ? '<p class="field-hint" style="margin-top:-10px;">A new banner is waiting for the alumni office to check it.</p>' : ''}
         <p id="pe-error" style="color:var(--kq-red); font-size:0.85rem; display:none; margin-bottom:12px;"></p>
         <div style="display:flex; gap:10px;">
           <button type="submit" class="btn btn-primary">Submit for review</button>
@@ -1925,6 +2262,7 @@ function openProposeEventModal(existing = null, opts = {}) {
     backdrop.querySelector('#peLocation').placeholder = virtual ? 'https://...' : 'e.g. Pride Centre, Embakasi';
   });
   fillAudience(backdrop.querySelector('#peAudience'), existing && existing.audience_departments ? existing.audience_departments.split(', ') : []);
+  wireImageField(backdrop, 'peBanner');
   if (existing) {
     backdrop.querySelector('#peTopics').value = existing.topics || '';
     // The form is in Nairobi time, whatever time zone the browser is in
@@ -1967,11 +2305,20 @@ function openProposeEventModal(existing = null, opts = {}) {
         errorEl.style.display = 'block';
         return;
       }
+      // The banner goes up once the event exists
+      const banner = chosenImage(backdrop, 'peBanner');
+      let bannerNote = '';
+      if (banner) {
+        const eventId = existing ? existing.event_id : result.eventId;
+        const up = await uploadImage(`/images/events/${eventId}/banner`, banner);
+        bannerNote = up.ok ? up.data.message : `The event was saved, but the banner was not: ${up.data.error}`;
+      }
       close();
       renderMyProposals();
       if (typeof renderEvents === 'function' && document.getElementById('event-grid')) renderEvents();
       if (asAdmin) { renderAdminEvents(); renderAdminLogs(); }
       showPostWarnings(result);
+      if (bannerNote) toast(bannerNote);
     } catch {
       errorEl.textContent = 'Could not reach the server.';
       errorEl.style.display = 'block';
@@ -2033,8 +2380,10 @@ function drawMyProposals() {
     mount.innerHTML = `
       ${rows.map((p) => `
         <div class="request-card request-card-rich">
+          ${p.banner_url ? `<img class="post-thumb" src="${escapeHTML(p.banner_url)}" alt="">` : ''}
           <div class="req-main">
             <strong>${escapeHTML(p.title)}</strong><br>
+            ${p.banner_pending ? '<span class="md-muted st-small">New banner waiting to be checked</span><br>' : ''}
             <span style="font-size:0.82rem; color:var(--slate);">
               ${new Date(p.event_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
             </span>
@@ -2269,7 +2618,8 @@ function drawOpportunities(arg) {
 function opportunityCardHTML(o) {
   const closing = closingLabel(o.closing_date);
   return `
-    <div class="opportunity-card">
+    <div class="opportunity-card${o.logo_url ? ' has-logo' : ''}">
+      ${o.logo_url ? `<img class="opp-logo" src="${escapeHTML(o.logo_url)}" alt="" loading="lazy" decoding="async">` : ''}
       <div>
         <div class="opp-tags">
           <span class="tag">${escapeHTML(OPPORTUNITY_TYPES[o.opportunity_type] || 'Opportunity')}</span>
@@ -2298,6 +2648,7 @@ function openOpportunityModal(o) {
   backdrop.className = 'modal-backdrop';
   backdrop.innerHTML = `
     <div class="modal-card">
+      ${o.logo_url ? `<img class="opp-logo opp-logo-lg" src="${escapeHTML(o.logo_url)}" alt="${escapeHTML(o.company || '')} logo">` : ''}
       <h3>${escapeHTML(o.title)}</h3>
       <div class="modal-meta">${escapeHTML(o.company || '')}${o.location ? ' · ' + escapeHTML(o.location) : ''}</div>
       <div class="modal-section"><div class="label">Type</div><div class="value">${escapeHTML(OPPORTUNITY_TYPES[o.opportunity_type] || 'Opportunity')}${o.industry ? ' · ' + escapeHTML(o.industry) : ''}</div></div>
@@ -2392,6 +2743,8 @@ function openPostOpportunityModal(existing = null) {
         <div class="field"><label for="poDescription">Description</label><textarea id="poDescription" maxlength="5000" placeholder="What the role involves and who it suits"></textarea></div>
         <div class="field"><label for="poSkills">Skills it asks for (up to 8, separated by commas)</label><input type="text" id="poSkills" placeholder="e.g. Dangerous goods, Excel, team leadership">
           <p class="field-hint">Staff see which of these they already have, and well-matched staff get an alert.</p></div>
+        ${imageFieldHTML('poLogo', 'Company logo (optional)', 'A square or wide logo, at least 64 pixels across. It is never cropped. The alumni office checks it before others see it.', existing && existing.logo_url, 'logo')}
+        ${existing && existing.logo_pending ? '<p class="field-hint" style="margin-top:-10px;">A new logo is waiting for the alumni office to check it.</p>' : ''}
         <p id="po-error" style="color:var(--kq-red); font-size:0.85rem; display:none; margin-bottom:12px;"></p>
         <div style="display:flex; gap:10px;">
           <button type="submit" class="btn btn-primary">Submit for review</button>
@@ -2404,6 +2757,7 @@ function openPostOpportunityModal(existing = null) {
   const close = () => backdrop.remove();
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
   backdrop.querySelector('#po-cancel').addEventListener('click', close);
+  wireImageField(backdrop, 'poLogo');
   if (existing) {
     const set = (sel, v) => { const el = backdrop.querySelector(sel); if (el && v !== null && v !== undefined) el.value = v; };
     set('#poTitle', existing.title); set('#poCompany', existing.company); set('#poType', existing.opportunity_type);
@@ -2442,10 +2796,17 @@ function openPostOpportunityModal(existing = null) {
         errorEl.style.display = 'block';
         return;
       }
+      const logo = chosenImage(backdrop, 'poLogo');
+      let logoNote = '';
+      if (logo) {
+        const up = await uploadImage(`/images/opportunities/${existing ? existing.opportunity_id : result.opportunityId}/logo`, logo);
+        logoNote = up.ok ? up.data.message : `The post was saved, but the logo was not: ${up.data.error}`;
+      }
       close();
       renderMyPosts();
       renderOpportunities();
       showPostWarnings(result);
+      if (logoNote) toast(logoNote);
     } catch {
       errorEl.textContent = 'Could not reach the server.';
       errorEl.style.display = 'block';
@@ -2544,7 +2905,8 @@ function drawMyPosts() {
       ${rows.map((p) => `
         <div class="request-card request-card-rich">
           <div class="req-main">
-            <strong>${escapeHTML(p.title)}</strong><br>
+            <strong>${p.logo_url ? `<img class="opp-logo opp-logo-inline" src="${escapeHTML(p.logo_url)}" alt="">` : ''}${escapeHTML(p.title)}</strong><br>
+            ${p.logo_pending ? '<span class="md-muted st-small">New logo waiting to be checked</span><br>' : ''}
             <span style="font-size:0.82rem; color:var(--slate);">
               ${escapeHTML(p.company || '')}${p.closing_date ? ' · ' + closingLabel(p.closing_date).text : ''}
             </span>
@@ -2631,7 +2993,7 @@ function adminRowHTML(u) {
   const lastActive = u.last_login_at ? timeAgo(u.last_login_at) : 'Never';
   return `
     <tr>
-      <td><button type="button" class="link-btn adm-name" data-user-detail="${u.user_id}"><strong>${escapeHTML(u.name)}</strong></button><br><span class="md-muted st-small">${escapeHTML(u.email)}${u.staff_number ? ' · ' + escapeHTML(u.staff_number) : ''}</span></td>
+      <td><span class="adm-person">${avatarHTML(u.name, u.avatar_url, 'people-av adm-av')}<span><button type="button" class="link-btn adm-name" data-user-detail="${u.user_id}"><strong>${escapeHTML(u.name)}</strong></button><br><span class="md-muted st-small">${escapeHTML(u.email)}${u.staff_number ? ' · ' + escapeHTML(u.staff_number) : ''}</span></span></span></td>
       <td>${roleLabel}${u.employment_status ? `<br><span class="md-muted st-small">${u.employment_status === 'former' ? 'Former staff' : 'Current staff'}</span>` : ''}</td>
       <td>${escapeHTML(u.department || '')}</td>
       <td><span class="md-pill ${isSuspended ? 'rejected' : 'approved'}">${isSuspended ? 'Suspended' : 'Active'}</span></td>
@@ -2733,8 +3095,10 @@ async function openUserDetail(userId) {
 
   box.innerHTML = `
     <div class="ud-head">
-      <div>
+      ${avatarHTML(a.name, a.avatar_url, 'people-av ud-av')}
+      <div style="flex:1;min-width:0;">
         <h3 id="ud-title">${escapeHTML(a.name)}</h3>
+        ${a.avatar_image_id ? `<button type="button" class="btn-quiet st-small" id="ud-remove-photo">Remove profile photo</button>` : ''}
         <div class="md-muted st-small">${escapeHTML(a.email)}${a.staff_number ? ' · ' + escapeHTML(a.staff_number) : ''}</div>
       </div>
       <div class="ud-pills">
@@ -2805,6 +3169,8 @@ async function openUserDetail(userId) {
   box.querySelector('#ud-close').onclick = close;
   const resetBtn = box.querySelector('#ud-reset-2fa');
   if (resetBtn) resetBtn.onclick = () => { close(); openResetTwoFactorDialog(a, data.hr); };
+  const photoBtn = box.querySelector('#ud-remove-photo');
+  if (photoBtn) photoBtn.onclick = () => { close(); removeMemberPhoto(a.avatar_image_id, a.name, () => { renderAdminTable(); openUserDetail(a.user_id); }); };
   // The same suspend and reactivate flow as the table; this view closes so it never shows an old status
   wireAdminActions(box);
   const toggle = box.querySelector('[data-action="toggle-status"]');
@@ -3144,7 +3510,7 @@ async function checkAdminTwoFactor() {
 }
 
 
-const ADMIN_TABS = ['overview', 'verification', 'reports', 'users', 'admins', 'hr', 'events', 'opportunities', 'impact', 'logs'];
+const ADMIN_TABS = ['overview', 'verification', 'reports', 'users', 'admins', 'hr', 'events', 'opportunities', 'impact', 'logs', 'branding'];
 
 function showAdminTab(name) {
   ADMIN_TABS.forEach((t) => {
@@ -3153,6 +3519,7 @@ function showAdminTab(name) {
   });
   document.querySelectorAll('[data-admin-tab]').forEach((l) => {
     l.classList.toggle('active', l.dataset.adminTab === name);
+    if (l.dataset.adminTab === name) l.setAttribute('aria-current', 'page'); else l.removeAttribute('aria-current');
   });
   if (location.hash !== `#${name}`) history.replaceState(null, '', `#${name}`);
   window.scrollTo(0, 0);
@@ -3160,6 +3527,7 @@ function showAdminTab(name) {
   if (name === 'events' && typeof renderAdminEvents === 'function') renderAdminEvents();
   if (name === 'impact') renderImpact();
   if (name === 'admins') renderAdminAdmins();
+  if (name === 'branding') renderBranding();
 }
 
 function wireAdminTabs() {
@@ -3180,6 +3548,11 @@ function wireAdminTabs() {
   });
   const fromHash = location.hash.slice(1);
   showAdminTab(ADMIN_TABS.includes(fromHash) ? fromHash : 'overview');
+  // Back and forward buttons, and links to admin.html#tab, switch tabs too
+  window.addEventListener('hashchange', () => {
+    const tab = location.hash.slice(1);
+    if (ADMIN_TABS.includes(tab)) showAdminTab(tab);
+  });
 }
 
 async function renderAdminEvents() {
@@ -3195,13 +3568,14 @@ async function renderAdminEvents() {
   const upcoming = (e) => new Date(e.event_date) >= new Date();
   tbody.innerHTML = events.map((e) => `
     <tr>
-      <td>${escapeHTML(e.title)}</td>
+      <td><span class="admin-event-title">${e.banner_url ? `<img class="post-thumb post-thumb-sm" src="${escapeHTML(e.banner_url)}" alt="">` : ''}${escapeHTML(e.title)}</span></td>
       <td>${new Date(e.event_date).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}</td>
       <td>${Number(e.attendee_count) || 0}${e.capacity ? ' / ' + e.capacity : ''}</td>
       <td><span class="request-status ${e.status}">${e.status === 'approved' && !upcoming(e) ? 'Took place' : (STATUS_WORDS[e.status] || e.status)}</span></td>
       <td class="admin-event-actions">${e.status === 'approved' && upcoming(e) ? `
         <button class="btn btn-secondary md-btn-sm" data-edit-admin-event="${e.event_id}">Edit</button>
-        <button class="btn-quiet st-small" data-cancel-admin-event="${e.event_id}">Cancel</button>` : ''}</td>
+        <button class="btn-quiet st-small" data-cancel-admin-event="${e.event_id}">Cancel</button>` : ''}${e.status === 'approved' && !upcoming(e) ? `
+        <button class="btn btn-secondary md-btn-sm" data-admin-gallery="${e.event_id}">Photos${e.photo_count ? ` (${e.photo_count})` : ''}</button>` : ''}</td>
     </tr>`).join('');
 
   const find = (id) => events.find((x) => String(x.event_id) === id);
@@ -3210,6 +3584,9 @@ async function renderAdminEvents() {
   });
   tbody.querySelectorAll('[data-cancel-admin-event]').forEach((btn) => {
     btn.onclick = () => openCancelEventDialog(find(btn.dataset.cancelAdminEvent), { admin: true });
+  });
+  tbody.querySelectorAll('[data-admin-gallery]').forEach((btn) => {
+    btn.onclick = () => openEventGallery(btn.dataset.adminGallery, find(btn.dataset.adminGallery).title);
   });
 }
 
@@ -3221,6 +3598,13 @@ function wireAdminEventForm() {
     targeting.innerHTML = targetingFieldsHTML('ae');
     fillAudience(document.getElementById('aeAudience'));
   }
+  const bannerBox = document.getElementById('event-banner-field');
+  const drawBannerField = () => {
+    if (!bannerBox) return;
+    bannerBox.innerHTML = imageFieldHTML('aeBanner', 'Banner image (optional)', 'A wide photo or poster, at least 600 pixels across. JPG, PNG or WebP, up to 5 MB.', null, 'banner');
+    wireImageField(bannerBox, 'aeBanner');
+  };
+  drawBannerField();
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const token = localStorage.getItem('alumnet_token');
@@ -3245,6 +3629,13 @@ function wireAdminEventForm() {
     });
 
     if (res.ok) {
+      const made = await res.json().catch(() => ({}));
+      const banner = bannerBox ? chosenImage(bannerBox, 'aeBanner') : null;
+      if (banner && made.eventId) {
+        const up = await uploadImage(`/images/events/${made.eventId}/banner`, banner);
+        if (!up.ok) toast(`The event was created, but the banner was not: ${up.data.error}`);
+      }
+      drawBannerField();
       form.reset();
       document.getElementById('eventDescription').value = '';
       if (document.getElementById('aeAudience')) fillAudience(document.getElementById('aeAudience'));
@@ -3404,6 +3795,129 @@ function escapeHTML(str) {
   ));
 }
 
+/* ===================== Photos and images ===================== */
+
+// A person's photo, or their initials when they have none. The name is
+// always written next to it, so the picture itself needs no description.
+function avatarHTML(name, url, cls = '', extraStyle = '') {
+  return url
+    ? `<span class="${cls} has-photo"${extraStyle ? ` style="${extraStyle}"` : ''}><img src="${escapeHTML(url)}" alt="" loading="lazy" decoding="async"></span>`
+    : `<span class="${cls}" aria-hidden="true"${extraStyle ? ` style="${extraStyle}"` : ''}>${escapeHTML(mdInitials(name))}</span>`;
+}
+
+const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+
+// Checked in the browser first, so nobody waits for an upload that will be refused
+function imageFileProblem(file) {
+  if (!file) return 'Choose an image.';
+  if (!IMAGE_TYPES.includes(file.type)) return 'Choose a JPG, PNG or WebP image. A photo from an iPhone may need to be saved as JPG first.';
+  if (file.size > IMAGE_MAX_BYTES) return 'That image is over 5 MB. Choose a smaller one.';
+  return null;
+}
+
+// Sends the file itself; the server redraws it and keeps only the result
+async function uploadImage(path, file) {
+  const problem = imageFileProblem(file);
+  if (problem) return { ok: false, data: { error: problem } };
+  try {
+    const res = await fetch(`${API_BASE}${path}`, { method: 'POST', headers: { 'Content-Type': file.type }, body: file });
+    const data = await res.json().catch(() => ({}));
+    return { ok: res.ok, status: res.status, data };
+  } catch {
+    return { ok: false, data: { error: 'Could not reach the server. Check your connection and try again.' } };
+  }
+}
+
+// Opens the file chooser from a button press and resolves with the chosen file, or null
+function chooseImage() {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = IMAGE_TYPES.join(',');
+    input.style.display = 'none';
+    input.addEventListener('change', () => { resolve(input.files[0] || null); input.remove(); });
+    input.addEventListener('cancel', () => { resolve(null); input.remove(); });
+    document.body.appendChild(input);
+    input.click();
+  });
+}
+
+// A labelled file field for forms (event and opportunity dialogs), with a preview
+function imageFieldHTML(id, label, hint, currentUrl, shape = 'banner') {
+  return `
+    <div class="field img-field">
+      <span class="img-field-label" id="${id}-label">${label}</span>
+      <div class="img-field-row">
+        <span class="img-preview img-preview-${shape}" id="${id}-preview">${currentUrl ? `<img src="${escapeHTML(currentUrl)}" alt="">` : '<span>No image</span>'}</span>
+        <div>
+          <input type="file" id="${id}" accept="${IMAGE_TYPES.join(',')}" aria-labelledby="${id}-label" aria-describedby="${id}-hint" class="sr-only">
+          <label for="${id}" class="btn btn-secondary md-btn-sm">${currentUrl ? 'Change image' : 'Choose image'}</label>
+          <p class="field-hint" id="${id}-hint">${hint}</p>
+          <p class="field-hint img-field-msg" id="${id}-msg" role="status"></p>
+        </div>
+      </div>
+    </div>`;
+}
+
+function wireImageField(root, id) {
+  const input = root.querySelector(`#${id}`);
+  if (!input) return;
+  input.addEventListener('change', () => {
+    const file = input.files[0];
+    const msg = root.querySelector(`#${id}-msg`);
+    const problem = file ? imageFileProblem(file) : null;
+    msg.textContent = problem || (file ? `${file.name} will be uploaded when you save.` : '');
+    msg.classList.toggle('img-field-error', Boolean(problem));
+    if (problem) { input.value = ''; return; }
+    if (file) {
+      const url = URL.createObjectURL(file);
+      root.querySelector(`#${id}-preview`).innerHTML = `<img src="${url}" alt="">`;
+    }
+  });
+}
+
+// The chosen file, if any and valid
+function chosenImage(root, id) {
+  const input = root.querySelector(`#${id}`);
+  return input && input.files[0] && !imageFileProblem(input.files[0]) ? input.files[0] : null;
+}
+
+// A full-size view of a photo, closed with Esc, the button or a click outside
+function openPhotoViewer(photos, start = 0) {
+  let i = start;
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop photo-viewer';
+  const opener = document.activeElement;
+  const draw = () => {
+    const p = photos[i];
+    backdrop.innerHTML = `
+      <div class="photo-viewer-card" role="dialog" aria-modal="true" aria-label="Photo ${i + 1} of ${photos.length}">
+        <img src="${escapeHTML(p.url)}" alt="${escapeHTML(p.caption || `Photo ${i + 1} of ${photos.length}`)}">
+        <div class="photo-viewer-bar">
+          <p>${p.caption ? `<strong>${escapeHTML(p.caption)}</strong><br>` : ''}<span class="md-muted">Added by ${escapeHTML(p.uploaded_by_name || 'a member')}${p.status === 'pending' ? ', waiting for the alumni office to check it' : ''}</span></p>
+          <div class="photo-viewer-actions">
+            ${photos.length > 1 ? `<button type="button" class="btn btn-secondary md-btn-sm" data-pv-move="-1">Previous</button><button type="button" class="btn btn-secondary md-btn-sm" data-pv-move="1">Next</button>` : ''}
+            <button type="button" class="btn btn-primary md-btn-sm" data-pv-close>Close</button>
+          </div>
+        </div>
+      </div>`;
+    backdrop.querySelectorAll('[data-pv-move]').forEach((b) => { b.onclick = () => { i = (i + Number(b.dataset.pvMove) + photos.length) % photos.length; draw(); backdrop.querySelector(`[data-pv-move="${b.dataset.pvMove}"]`).focus(); }; });
+    backdrop.querySelector('[data-pv-close]').onclick = close;
+  };
+  const close = () => { backdrop.remove(); document.removeEventListener('keydown', onKey); if (opener && opener.focus) opener.focus(); };
+  const onKey = (e) => {
+    if (e.key === 'Escape') close();
+    if (e.key === 'ArrowRight' && photos.length > 1) { i = (i + 1) % photos.length; draw(); }
+    if (e.key === 'ArrowLeft' && photos.length > 1) { i = (i - 1 + photos.length) % photos.length; draw(); }
+  };
+  document.addEventListener('keydown', onKey);
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+  draw();
+  document.body.appendChild(backdrop);
+  backdrop.querySelector('[data-pv-close]').focus();
+}
+
 function timeAgo(dateStr) {
   const seconds = Math.floor((Date.now() - new Date(dateStr)) / 1000);
   if (seconds < 60) return 'Just now';
@@ -3522,6 +4036,9 @@ function wireSidebarToggle() {
 
   backdrop.addEventListener('click', closeSidebar);
   sidebar.querySelectorAll('a').forEach((link) => link.addEventListener('click', closeSidebar));
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && sidebar.classList.contains('open')) { closeSidebar(); btn.focus(); }
+  });
 }
 
 /* ===================== Mentor dashboard ===================== */
@@ -3577,183 +4094,6 @@ function mdDate(value) {
   return isNaN(d) ? null : d;
 }
 
-async function renderMentorDashboard() {
-  const root = document.getElementById('mentor-dashboard');
-  if (!root) return;
-
-  // Only mentors belong here; send anyone else to their own home page
-  const role = localStorage.getItem('alumnet_role');
-  if (role && role !== 'mentor') {
-    window.location.href = (typeof HOME_PAGE !== 'undefined' && HOME_PAGE[role]) || 'login.html';
-    return;
-  }
-
-  const token = localStorage.getItem('alumnet_token');
-  const auth = { headers: { Authorization: `Bearer ${token}` } };
-  const get = async (path) => {
-    try {
-      const res = await fetch(`${API_BASE}${path}`, auth);
-      return res.ok ? await res.json() : null;
-    } catch {
-      return null;
-    }
-  };
-
-  const [profileRaw, reqRaw, eventsRaw, propRaw, postRaw] = await Promise.all([
-    get('/profile/me'),
-    get('/mentorship-requests'),
-    get('/events'),
-    get('/events/my-proposals'),
-    get('/opportunities/mine')
-  ]);
-
-  const profile = (profileRaw && (profileRaw.profile || profileRaw)) || {};
-  const requests = mdList(reqRaw);
-  const events = mdList(eventsRaw);
-  const proposals = mdList(propRaw);
-  const posts = mdList(postRaw);
-
-  const nameOf = (r) => r.other_name || r.mentee_name || r.name || 'A mentee';
-  const deptOf = (r) => r.other_department || r.mentee_department || r.department || '';
-
-  const pending = requests.filter((r) => r.status === 'pending');
-  const active = requests.filter((r) => r.status === 'accepted');
-  const ended = requests.filter((r) => r.status === 'ended');
-  const registered = events.filter((e) => e.is_registered || e.registered || e.user_registered);
-
-  // ---------- Header ----------
-  const hour = new Date().getHours();
-  const part = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
-  const fullName = profile.name || localStorage.getItem('alumnet_name') || '';
-  const first = fullName.split(' ')[0];
-  document.getElementById('md-date').textContent = new Date().toLocaleDateString('en-GB', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
-  });
-  document.getElementById('md-greeting').textContent = first ? `${part}, ${first}` : part;
-  document.getElementById('md-sub').textContent =
-    pending.length ? `You have ${pending.length} mentee request${pending.length === 1 ? '' : 's'} waiting for your response.`
-      : active.length ? `You are mentoring ${active.length} staff member${active.length === 1 ? '' : 's'}. No new requests right now.`
-        : 'Your dashboard will fill up as mentees connect with you.';
-
-  // ---------- Availability ----------
-  const maxM = Number(profile.max_mentees || 0);
-  const full = maxM && active.length >= maxM;
-  const paused = profile.accepting_mentees === false;
-  if (paused || full) {
-    document.getElementById('md-nudge').insertAdjacentHTML('beforeend', `
-      <div class="md-banner">
-        <div class="md-banner-icon">${mdIcon(MD_ICONS.users)}</div>
-        <div class="md-banner-body">
-          <strong>${paused ? 'You are not taking new mentees' : `You are mentoring ${active.length} of ${maxM}, your limit`}</strong>
-          <p>${paused ? 'Mentees cannot send you new requests. Your current mentorships carry on.' : 'You no longer appear as available. Raise your limit if you have time for more.'}</p>
-        </div>
-        <a href="profile.html#edit" class="btn btn-secondary">Change availability</a>
-      </div>`);
-  }
-
-  // ---------- Matching nudge ----------
-  if (missingMatchingFields(profile).length) {
-    document.getElementById('md-nudge').insertAdjacentHTML('beforeend', `
-      <div class="md-banner">
-        <div class="md-banner-icon">${mdIcon(MD_ICONS.spark)}</div>
-        <div class="md-banner-body">
-          <strong>Mentees can't find you yet</strong>
-          <p>Matches and search are based on your skills, experience and career interests. Until you add them, you do not appear in mentees' recommendations or search results.</p>
-        </div>
-        <a href="profile.html#edit" class="btn btn-primary">Complete profile</a>
-      </div>`);
-  }
-
-  // ---------- Stat cards ----------
-  const kpi = (icon, num, label, sub, cls = '') => `
-    <div class="md-kpi ${cls}">
-      <div class="md-kpi-icon">${mdIcon(MD_ICONS[icon])}</div>
-      <div class="md-kpi-num">${num}</div>
-      <div class="md-kpi-label">${label}</div>
-      ${sub ? `<div class="md-kpi-sub">${sub}</div>` : ''}
-    </div>`;
-  document.getElementById('md-kpis').innerHTML =
-    kpi('inbox', pending.length, 'Awaiting your response', pending.length ? 'Action needed' : 'All caught up', pending.length ? 'alert' : '') +
-    kpi('users', active.length, `Active mentee${active.length === 1 ? '' : 's'}`, '') +
-    kpi('award', active.length + ended.length, 'Mentored in total', ended.length ? `${ended.length} completed` : '') +
-    kpi('calendar', registered.length, 'Events you are attending', '');
-
-  // ---------- Pending requests ----------
-  document.getElementById('md-pending').innerHTML = pending.length
-    ? pending.slice(0, 4).map((r) => {
-      const msg = r.message || r.request_message || r.note || '';
-      const when = r.created_at || r.requested_at;
-      return `
-          <div class="md-item">
-            <div class="md-avatar">${mdInitials(nameOf(r))}</div>
-            <div class="md-item-body">
-              <div class="md-item-title">${escapeHTML(nameOf(r))}${deptOf(r) ? `<span class="md-muted"> · ${escapeHTML(deptOf(r))}</span>` : ''}</div>
-              ${msg ? `<div class="md-item-text">${escapeHTML(msg.length > 110 ? msg.slice(0, 110) + '...' : msg)}</div>` : ''}
-              ${when ? `<div class="md-item-meta">Requested ${timeAgo(when)}</div>` : ''}
-            </div>
-            <a href="requests.html" class="btn btn-primary md-btn-sm">Review</a>
-          </div>`;
-    }).join('') + (pending.length > 4 ? `<a href="requests.html" class="md-link md-more">See ${pending.length - 4} more</a>` : '')
-    : mdEmpty('check', "You're all caught up", 'New requests from mentees will appear here.');
-
-  // ---------- Active mentees ----------
-  document.getElementById('md-mentees').innerHTML = active.length
-    ? active.map((r) => {
-      const since = mdDate(r.responded_at || r.updated_at || r.created_at);
-      return `
-          <div class="md-item">
-            <div class="md-avatar md-avatar-soft">${mdInitials(nameOf(r))}</div>
-            <div class="md-item-body">
-              <div class="md-item-title">${escapeHTML(nameOf(r))}</div>
-              <div class="md-item-meta">${escapeHTML(deptOf(r))}${since ? `${deptOf(r) ? ' · ' : ''}Mentoring since ${since.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}</div>
-            </div>
-            <span class="md-pill approved">Active</span>
-          </div>`;
-    }).join('')
-    : mdEmpty('users', 'No active mentees yet', 'When you accept a request, the mentee appears here.');
-
-  // ---------- Profile strength ----------
-  document.getElementById('md-profile').innerHTML = profileStrengthHTML(profile, { showCta: true });
-
-  // ---------- Upcoming events ----------
-  const byDate = (a, b) => (mdDate(a.event_date || a.date) || 0) - (mdDate(b.event_date || b.date) || 0);
-  const showEvents = (registered.length ? registered : events).slice().sort(byDate).slice(0, 3);
-  document.getElementById('md-events').innerHTML = showEvents.length
-    ? (!registered.length ? '<div class="md-hint">Happening soon</div>' : '') + showEvents.map((e) => {
-      const d = mdDate(e.event_date || e.date);
-      const mode = e.mode === 'virtual' ? 'Virtual' : (e.location || 'In person');
-      return `
-          <a class="md-event" href="events.html">
-            <div class="md-date-block">
-              <span class="m">${d ? d.toLocaleDateString('en-GB', { month: 'short' }) : '--'}</span>
-              <span class="d">${d ? d.getDate() : '--'}</span>
-            </div>
-            <div class="md-item-body">
-              <div class="md-item-title">${escapeHTML(e.title || 'Event')}</div>
-              <div class="md-item-meta">${d ? d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) + ' · ' : ''}${escapeHTML(mode)}</div>
-            </div>
-          </a>`;
-    }).join('')
-    : mdEmpty('calendar', 'No upcoming events', 'Propose a talk or meetup for the community.', 'events.html', 'Propose an event');
-
-  // ---------- Contributions ----------
-  const contribs = [
-    ...proposals.map((p) => ({ title: p.title, status: p.status, kind: 'Event', when: p.created_at || p.event_date })),
-    ...posts.map((p) => ({ title: p.title, status: p.approval_status, kind: 'Opportunity', when: p.created_at }))
-  ].sort((a, b) => (mdDate(b.when) || 0) - (mdDate(a.when) || 0)).slice(0, 5);
-  const statusLabel = { approved: 'Live', pending: 'In review', rejected: 'Not approved' };
-  document.getElementById('md-contrib').innerHTML = contribs.length
-    ? contribs.map((c) => `
-        <div class="md-item md-item-tight">
-          <div class="md-item-body">
-            <div class="md-item-title">${escapeHTML(c.title || 'Untitled')}</div>
-            <div class="md-item-meta">${c.kind}</div>
-          </div>
-          <span class="md-pill ${c.status || 'pending'}">${statusLabel[c.status] || 'In review'}</span>
-        </div>`).join('')
-    : mdEmpty('spark', 'Nothing shared yet', 'Share an event or job opportunity with current staff.', 'opportunities.html', 'Post an opportunity');
-}
-
 /* ===================== Mentee dashboard ===================== */
 const ME_RECS_PATH = '/recommendations'; 
 
@@ -3800,15 +4140,78 @@ function mdEventsHTML(events, registered) {
   }).join('');
 }
 
+/* ===================== Admin overview ===================== */
+MD_ICONS.shield = '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>';
+MD_ICONS.activity = '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>';
+
+function mdHumanise(action) {
+  return String(action || '').replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
+}
+
+/* ===================== Home screens (shared helpers) ===================== */
+
+function homeGreeting(name) {
+  const hour = new Date().getHours();
+  const part = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const first = String(name || '').split(' ')[0];
+  return first ? `${part}, ${first}` : part;
+}
+
+function homeToday() {
+  return new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+}
+
+function homeEmpty(title, text, href, linkText) {
+  return `<div class="empty-note"><strong>${title}</strong>${text}${href ? `<br><a class="home-link" href="${href}">${linkText}</a>` : ''}</div>`;
+}
+
+function homeEventsHTML(events, emptyText) {
+  const now = Date.now();
+  const byDate = (a, b) => (mdDate(a.event_date || a.date) || 0) - (mdDate(b.event_date || b.date) || 0);
+  const upcoming = events.filter((e) => (mdDate(e.event_date || e.date) || 0) >= now - 6 * 3600000).sort(byDate);
+  const registered = upcoming.filter((e) => e.is_registered || e.registered || e.user_registered);
+  const list = (registered.length ? registered : upcoming).slice(0, 2);
+  if (!list.length) return homeEmpty('Nothing coming up', emptyText, 'events.html', 'See all events');
+  return list.map((e) => {
+    const d = mdDate(e.event_date || e.date);
+    const where = e.mode === 'virtual' ? 'Online' : (e.location || 'In person');
+    const when = d ? `${d.toLocaleDateString('en-GB', { weekday: 'long' })}, ${d.toLocaleTimeString('en-GB', { hour: 'numeric', minute: '2-digit', hour12: true }).replace(' ', '\u00a0')}` : '';
+    const mine = e.is_registered || e.registered || e.user_registered;
+    return `
+      <a class="home-event" href="events.html">
+        <span class="home-datebox" aria-hidden="true"><span class="m">${d ? d.toLocaleDateString('en-GB', { month: 'short' }) : ''}</span><span class="d">${d ? d.getDate() : ''}</span></span>
+        <span>
+          <span class="home-item-title">${escapeHTML(e.title || 'Event')}</span>
+          <span class="home-item-meta">${d ? escapeHTML(d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })) + ', ' : ''}${escapeHTML([when.split(', ')[1], where].filter(Boolean).join(', '))}</span>
+          ${mine ? '<span class="home-item-flag">You are registered</span>' : ''}
+        </span>
+      </a>`;
+  }).join('');
+}
+
+const MENTORING_GUIDE = `
+  <ol class="guide-steps">
+    <li><strong>Complete your profile.</strong> Mentors are suggested from your skills, experience and career interests, so add all three.</li>
+    <li><strong>Ask a mentor.</strong> Open Find a mentor, read a profile and send a short note saying what you would like help with.</li>
+    <li><strong>Wait for a reply.</strong> The mentor has 14 days to accept or decline. You are told either way, and you can ask up to three people at once.</li>
+    <li><strong>Meet and agree goals.</strong> Once they accept you both see each other's email. Use the workspace on My requests to note goals and log meetings.</li>
+  </ol>
+  <p class="md-muted">Something wrong? Every profile and request has a Report button, and an admin reviews it.</p>`;
+
+/* ===================== Mentee home ===================== */
+
 async function renderMenteeDashboard() {
   const root = document.getElementById('mentee-dashboard');
   if (!root) return;
 
   const role = localStorage.getItem('alumnet_role');
   if (role && role !== 'mentee') {
-    window.location.href = (typeof HOME_PAGE !== 'undefined' && HOME_PAGE[role]) || 'login.html';
+    window.location.href = HOME_PAGE[role] || 'login.html';
     return;
   }
+
+  const guide = document.getElementById('me-guide-btn');
+  if (guide) guide.onclick = () => openDialog({ title: 'How mentoring works on AlumNet', bodyHTML: MENTORING_GUIDE, confirmText: 'Got it', onConfirm: () => null });
 
   const [profileRaw, reqRaw, recRaw, eventsRaw, oppRaw] = await Promise.all([
     mdGet('/profile/me'),
@@ -3824,142 +4227,291 @@ async function renderMenteeDashboard() {
   const events = mdList(eventsRaw);
   const opps = mdList(oppRaw);
 
-  const mentorName = (r) => r.other_name || r.mentor_name || r.name || 'Your mentor';
-  const mentorDept = (r) => r.other_department || r.mentor_department || r.department || '';
   const active = requests.filter((r) => r.status === 'accepted');
   const pending = requests.filter((r) => r.status === 'pending');
-  const registered = events.filter((e) => e.is_registered || e.registered || e.user_registered);
-  const profileReady = missingMatchingFields(profile).length === 0;
+  const ended = requests.filter((r) => r.status === 'ended');
+  const missing = missingMatchingFields(profile);
+  const checks = profileChecklist(profile);
+  const pct = Math.round((checks.filter(([, v]) => mdFilled(v)).length / checks.length) * 100);
+  const met = [...active, ...ended].some((r) => Number(r.meetings) > 0);
 
-  // ---------- Header ----------
-  const hour = new Date().getHours();
-  const part = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
-  const first = (profile.name || localStorage.getItem('alumnet_name') || '').split(' ')[0];
-  document.getElementById('me-date').textContent = new Date().toLocaleDateString('en-GB', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
-  });
-  document.getElementById('me-greeting').textContent = first ? `${part}, ${first}` : part;
-  document.getElementById('me-sub').textContent =
-    active.length ? `You are being mentored by ${mentorName(active[0])}.`
-    : pending.length ? `You have ${pending.length} request${pending.length === 1 ? '' : 's'} waiting for a mentor to respond.`
-    : 'Start by finding a mentor who matches your career goals.';
+  document.getElementById('me-date').textContent = homeToday();
+  document.getElementById('me-greeting').textContent = homeGreeting(profile.name);
 
-  // ---------- Nudge ----------
-  if (!profileReady) {
-    document.getElementById('me-nudge').innerHTML = `
-      <div class="md-banner">
-        <div class="md-banner-icon">${mdIcon(MD_ICONS.spark)}</div>
-        <div class="md-banner-body">
-          <strong>Get better mentor matches</strong>
-          <p>Matches are based on your skills, experience and career interests. Add all three for the best recommendations.</p>
+  // ---------- Journey ----------
+  const steps = [
+    { title: 'Complete your profile', note: 'Skills, experience and interests', done: missing.length === 0, now: `You are here, ${pct}% done` },
+    { title: 'Ask a mentor', note: 'Send a short introduction', done: active.length + pending.length + ended.length > 0, now: 'You are here' },
+    { title: 'Mentor accepts', note: "You get each other's email", done: active.length + ended.length > 0, now: pending.length ? `Waiting for ${pending.length === 1 ? 'a reply' : `${pending.length} replies`}` : 'You are here' },
+    { title: 'First meeting', note: 'Agree goals and log it', done: met, now: 'You are here' }
+  ];
+  const current = steps.findIndex((s) => !s.done);
+  document.getElementById('me-stepword').textContent = current === -1
+    ? 'Your mentorship is under way'
+    : `Your mentorship journey, step ${current + 1} of 4`;
+  const tick = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+  document.getElementById('me-journey').innerHTML = steps.map((s, i) => {
+    const state = s.done ? 'done' : i === current ? 'now' : 'todo';
+    const label = state === 'done' ? 'done' : state === 'now' ? 'current step' : 'not started';
+    return `
+      <li class="${state}"${state === 'now' ? ' aria-current="step"' : ''}>
+        <div class="journey-mark"><span class="journey-dot">${state === 'done' ? tick : ''}</span><span class="journey-line"></span></div>
+        <p class="journey-step">${s.title}<span class="sr-only">, ${label}</span></p>
+        <p class="journey-note">${state === 'now' ? s.now : state === 'done' ? 'Done' : s.note}</p>
+      </li>`;
+  }).join('');
+
+  // ---------- Next step: always one clear action ----------
+  const fieldWord = { skills: 'skills', experience: 'experience', career_interests: 'career interests' };
+  let next;
+  if (missing.length) {
+    const words = missing.map((k) => fieldWord[k]);
+    const list = words.length === 1 ? words[0] : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`;
+    next = { h: `Your next step: add your ${list}`, p: `Mentors are matched on your skills, experience and career interests. ${missing.length === 1 ? 'This is the one still missing.' : 'These are still missing.'}`, href: 'profile.html#edit', btn: `Add ${words[0]}` };
+  } else if (!active.length && !pending.length) {
+    next = { h: 'Your next step: ask a mentor', p: 'Pick someone below, read their profile and send a short note saying what you would like help with.', href: 'recommendations.html', btn: 'Find a mentor' };
+  } else if (!active.length) {
+    next = { h: 'Waiting for a reply', p: `Mentors have 14 days to answer, and you are told either way. You can ask up to three people at once.`, href: 'requests.html', btn: 'See my requests', calm: true };
+  } else if (!met) {
+    next = { h: `Plan your first meeting with ${escapeHTML(String(active[0].other_name || 'your mentor').split(' ')[0])}`, p: 'Agree two or three goals together, then log the meeting in your shared workspace.', href: 'requests.html#accepted', btn: 'Open workspace' };
+  } else {
+    const r = active[0] || ended[0];
+    next = { h: 'Keep going', p: r && r.goals_total ? `${r.goals_done} of ${r.goals_total} goals done with ${escapeHTML(r.other_name)}.` : 'Add goals in your workspace so you can see your progress.', href: 'requests.html#accepted', btn: 'Open workspace', calm: true };
+  }
+  document.getElementById('me-next').innerHTML = `
+    <div class="next-step ${next.calm ? 'calm' : ''}">
+      <div><h2>${next.h}</h2><p>${next.p}</p></div>
+      <a href="${next.href}" class="btn ${next.calm ? 'btn-secondary' : 'btn-primary'}">${next.btn}</a>
+    </div>`;
+
+  // ---------- Mentors who fit ----------
+  const top = recs.slice(0, 3);
+  document.getElementById('me-matches').innerHTML = top.length
+    ? `<ul class="people">${top.map((m) => `
+        <li>
+          ${avatarHTML(m.name, m.avatar_url, 'people-av')}
+          <div class="people-body">
+            <p class="people-name">${escapeHTML(m.name || 'Mentor')}</p>
+            <p class="people-text">${escapeHTML([m.headline, m.department, m.years_of_experience ? `${m.years_of_experience} years` : ''].filter(Boolean).join(', '))}</p>
+          </div>
+          ${m.fit ? fitPillHTML(m.fit) : ''}
+          <a href="recommendations.html" class="btn btn-secondary md-btn-sm">View profile<span class="sr-only"> of ${escapeHTML(m.name || 'this mentor')}</span></a>
+        </li>`).join('')}</ul>`
+    : missing.length
+      ? homeEmpty('Matches appear once your profile is ready', ' Add your skills, experience and career interests and we will suggest mentors who fit.', null)
+      : homeEmpty('No suggestions right now', ' The matching service may be starting up, or every close match is full. You can still search all mentors.', 'recommendations.html', 'Search all mentors');
+
+  // ---------- Current mentorships ----------
+  const rows = [...active, ...pending].slice(0, 4);
+  const wrap = document.getElementById('me-mentorship-wrap');
+  wrap.hidden = !rows.length;
+  document.getElementById('me-mentorship').innerHTML = rows.length ? `<ul class="people">${rows.map((r) => `
+      <li>
+        ${avatarHTML(r.other_name, r.other_avatar_url, 'people-av')}
+        <div class="people-body">
+          <p class="people-name">${escapeHTML(r.other_name || 'Mentor')}</p>
+          <p class="people-text">${r.status === 'accepted'
+            ? `Your mentor${r.meetings ? `, ${r.meetings} meeting${r.meetings === 1 ? '' : 's'} logged` : ''}${r.goals_total ? `, ${r.goals_done} of ${r.goals_total} goals done` : ''}.`
+            : `Asked ${escapeHTML(timeAgo(r.requested_at || r.created_at))}. Waiting for a reply.`}</p>
         </div>
+        <span class="request-status ${r.status === 'accepted' ? 'accepted' : 'pending'}">${r.status === 'accepted' ? 'Mentoring you' : 'Waiting'}</span>
+      </li>`).join('')}</ul>` : '';
+
+  // ---------- Side ----------
+  document.getElementById('me-events').innerHTML = homeEventsHTML(events, ' New alumni events will appear here.');
+  const latest = opps.slice().sort((a, b) => (mdDate(b.created_at) || 0) - (mdDate(a.created_at) || 0)).slice(0, 1);
+  document.getElementById('me-opps').innerHTML = latest.length
+    ? latest.map((o) => {
+        const closes = o.closing_date ? closingLabel(o.closing_date) : { text: '' };
+        const type = OPPORTUNITY_TYPES[o.opportunity_type] || '';
+        return `
+          <a class="home-opp" href="opportunities.html">
+            <span>
+              <span class="home-item-title">${escapeHTML(o.title || 'Opportunity')}</span>
+              <span class="home-item-meta">${escapeHTML([o.company, o.location, type].filter(Boolean).join(', '))}</span>
+              ${closes.text ? `<span class="home-item-flag ${closes.soon ? 'warn' : ''}">${escapeHTML(closes.text)}</span>` : ''}
+            </span>
+          </a>`;
+      }).join('') + '<a class="home-link" href="opportunities.html">All opportunities</a>'
+    : homeEmpty('No open roles yet', ' Roles shared by former staff will appear here.', null);
+}
+
+/* ===================== Mentor home ===================== */
+
+async function renderMentorDashboard() {
+  const root = document.getElementById('mentor-dashboard');
+  if (!root) return;
+
+  const role = localStorage.getItem('alumnet_role');
+  if (role && role !== 'mentor') {
+    window.location.href = HOME_PAGE[role] || 'login.html';
+    return;
+  }
+
+  const [profileRaw, reqRaw, eventsRaw, propRaw, postRaw] = await Promise.all([
+    mdGet('/profile/me'),
+    mdGet('/mentorship-requests'),
+    mdGet('/events'),
+    mdGet('/events/my-proposals'),
+    mdGet('/opportunities/mine')
+  ]);
+
+  const profile = (profileRaw && (profileRaw.profile || profileRaw)) || {};
+  const requests = mdList(reqRaw);
+  const events = mdList(eventsRaw);
+  const proposals = mdList(propRaw);
+  const posts = mdList(postRaw);
+  const pending = requests.filter((r) => r.status === 'pending');
+  const active = requests.filter((r) => r.status === 'accepted');
+
+  document.getElementById('md-date').textContent = homeToday();
+  document.getElementById('md-greeting').textContent = homeGreeting(profile.name);
+  document.getElementById('md-sub').textContent = pending.length
+    ? `${pending.length} ${pending.length === 1 ? 'person has' : 'people have'} asked you to mentor them.`
+    : active.length ? `You are mentoring ${active.length} ${active.length === 1 ? 'person' : 'people'}. No new requests.`
+      : 'When someone asks you to mentor them, it shows here first.';
+
+  // ---------- Mentoring places ----------
+  const maxM = Math.max(Number(profile.max_mentees || 0), active.length);
+  const paused = profile.accepting_mentees === false || Number(profile.accepting_mentees) === 0;
+  const free = Math.max(0, maxM - active.length);
+  const seatHTML = [
+    ...active.map((r) => `<div class="seat">${avatarHTML(r.other_name, r.other_avatar_url, 'seat-av')}<span class="seat-name">${escapeHTML(String(r.other_name || '').split(' ')[0])}</span></div>`),
+    ...Array.from({ length: Math.min(free, 6) }, () => `<div class="seat open"><span class="seat-av" aria-hidden="true">Free</span><span class="seat-name">${paused ? 'Paused' : 'Open'}</span></div>`)
+  ].join('');
+  document.getElementById('md-seats').innerHTML = `
+    <div class="seats-head">
+      <h2 id="md-seats-h">Your mentoring places</h2>
+      <span class="seats-free ${paused || !free ? 'full' : ''}">${paused ? 'Not taking new mentees' : maxM ? `${free} of ${maxM} free` : 'Not set'}</span>
+    </div>
+    <div class="seats-row" role="img" aria-label="${active.length} of ${maxM} places taken${paused ? ', not taking new mentees' : ''}">${seatHTML}</div>
+    <p style="margin-top:12px;"><a class="home-link" href="profile.html#edit">Change places</a></p>`;
+
+  // ---------- Profile nudge ----------
+  if (missingMatchingFields(profile).length) {
+    document.getElementById('md-nudge').innerHTML = `
+      <div class="next-step">
+        <div><h2>Mentees cannot find you yet</h2><p>Suggestions and search use your skills, experience and career interests. Add all three so the right people see you.</p></div>
         <a href="profile.html#edit" class="btn btn-primary">Complete profile</a>
       </div>`;
   }
 
-  // ---------- Stat cards ----------
-  const kpi = (icon, num, label, sub, cls = '') => `
-    <div class="md-kpi ${cls}">
-      <div class="md-kpi-icon">${mdIcon(MD_ICONS[icon])}</div>
-      <div class="md-kpi-num">${num}</div>
-      <div class="md-kpi-label">${label}</div>
-      ${sub ? `<div class="md-kpi-sub">${sub}</div>` : ''}
-    </div>`;
-  document.getElementById('me-kpis').innerHTML =
-    kpi('users', active.length, `Active mentor${active.length === 1 ? '' : 's'}`, active.length ? '' : 'Not matched yet') +
-    kpi('inbox', pending.length, 'Requests awaiting reply', '') +
-    kpi('calendar', registered.length, 'Events you are attending', '') +
-    kpi('briefcase', opps.length, 'Open opportunities', '');
-
-  // ---------- Mentorship ----------
-  const mentorshipItems = [
-    ...active.map((r) => {
-      const since = mdDate(r.responded_at || r.updated_at || r.created_at);
-      return `
-        <div class="md-item">
-          <div class="md-avatar">${mdInitials(mentorName(r))}</div>
-          <div class="md-item-body">
-            <div class="md-item-title">${escapeHTML(mentorName(r))}${mentorDept(r) ? `<span class="md-muted"> · ${escapeHTML(mentorDept(r))}</span>` : ''}</div>
-            <div class="md-item-meta">${since ? `Mentoring you since ${since.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : 'Your mentor'}</div>
-          </div>
-          <span class="md-pill approved">Active</span>
-        </div>`;
-    }),
-    ...pending.map((r) => {
-      const when = r.created_at || r.requested_at;
-      return `
-        <div class="md-item">
-          <div class="md-avatar md-avatar-soft">${mdInitials(mentorName(r))}</div>
-          <div class="md-item-body">
-            <div class="md-item-title">${escapeHTML(mentorName(r))}${mentorDept(r) ? `<span class="md-muted"> · ${escapeHTML(mentorDept(r))}</span>` : ''}</div>
-            <div class="md-item-meta">${when ? `Requested ${timeAgo(when)}` : 'Request sent'}</div>
-          </div>
-          <span class="md-pill pending">Awaiting reply</span>
-        </div>`;
-    })
-  ].slice(0, 4);
-  document.getElementById('me-mentorship').innerHTML = mentorshipItems.length
-    ? mentorshipItems.join('')
-    : mdEmpty('users', 'No mentor yet', 'Send a request to one of your recommended mentors to get started.', 'recommendations.html', 'Find a mentor');
-
-  // ---------- Top matches ----------
-  const top = recs.slice(0, 3);
-  document.getElementById('me-matches').innerHTML = top.length
-    ? top.map((m) => `
-        <div class="md-item">
-          <div class="md-avatar md-avatar-soft">${mdInitials(m.name)}</div>
-          <div class="md-item-body">
-            <div class="md-item-title">${escapeHTML(m.name || 'Mentor')}</div>
-            <div class="md-item-meta">${escapeHTML(m.department || '')}${m.years_of_experience ? ` · ${m.years_of_experience} yrs experience` : ''}</div>
-          </div>
-          ${m.fit ? fitPillHTML(m.fit) : ''}
-          <a href="recommendations.html" class="btn btn-secondary md-btn-sm">View</a>
-        </div>`).join('')
-    : profileReady
-      ? mdEmpty('search', 'See who matches you', 'Your recommended mentors are ranked by how well they fit your goals.', 'recommendations.html', 'View recommendations')
-      : mdEmpty('search', 'Complete your profile to see matches', 'Add your skills, experience and career interests so we can recommend mentors.', 'profile.html#edit', 'Complete profile');
-
-  // ---------- Right column ----------
-  document.getElementById('me-profile').innerHTML = mdProfileHTML(profile);
-  document.getElementById('me-events').innerHTML = mdEventsHTML(events, registered);
-
-  const latest = opps.slice().sort((a, b) => (mdDate(b.created_at) || 0) - (mdDate(a.created_at) || 0)).slice(0, 3);
-  document.getElementById('me-opps').innerHTML = latest.length
-    ? latest.map((o) => {
-        const type = o.opportunity_type ? o.opportunity_type.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase()) : '';
-        const closes = o.closing_date && typeof closingLabel === 'function' ? closingLabel(o.closing_date) : '';
+  // ---------- Requests waiting for an answer ----------
+  const daysLeft = (r) => {
+    const asked = mdDate(r.requested_at || r.created_at);
+    return asked ? Math.max(0, 14 - Math.floor((Date.now() - asked) / 86400000)) : null;
+  };
+  document.getElementById('md-pending').innerHTML = pending.length
+    ? pending.slice(0, 3).map((r) => {
+        const first = escapeHTML(String(r.other_name || 'them').split(' ')[0]);
+        const left = daysLeft(r);
+        const warn = (r.message_warnings || []).length;
         return `
-          <a class="md-event" href="opportunities.html">
-            <div class="md-kpi-icon" style="width:40px;height:40px;">${mdIcon(MD_ICONS.briefcase)}</div>
-            <div class="md-item-body">
-              <div class="md-item-title">${escapeHTML(o.title || 'Opportunity')}</div>
-              <div class="md-item-meta">${escapeHTML([o.company, type].filter(Boolean).join(' · '))}${closes ? ` · ${escapeHTML(closes)}` : ''}</div>
+          <article class="ask" data-request="${r.request_id}">
+            <div class="ask-head">
+              ${avatarHTML(r.other_name, r.other_avatar_url, 'people-av')}
+              <div class="people-body">
+                <p class="people-name">${escapeHTML(r.other_name || 'A mentee')}</p>
+                <p class="people-text">${escapeHTML([r.other_headline, r.other_department].filter(Boolean).join(', '))}${r.other_verified ? '. Verified current staff.' : ''}</p>
+              </div>
+              <span class="ask-when">Asked ${escapeHTML(timeAgo(r.requested_at || r.created_at))}${left !== null ? `, ${left} day${left === 1 ? '' : 's'} left to reply` : ''}</span>
             </div>
+            ${r.message ? `<blockquote>${escapeHTML(r.message)}</blockquote>` : '<p class="home-muted" style="margin:12px 0 16px;">No message was added.</p>'}
+            ${warn ? `<p class="queue-warn" style="margin:-6px 0 14px;">Take care: ${escapeHTML(r.message_warnings.join(', '))}.</p>` : ''}
+            <div class="ask-actions">
+              <button type="button" class="btn btn-primary" data-ask="accepted" data-id="${r.request_id}" data-name="${first}">Accept ${first}</button>
+              <button type="button" class="btn btn-secondary" data-ask="declined" data-id="${r.request_id}" data-name="${first}">Decline politely</button>
+              <a class="home-link" href="requests.html">See full request</a>
+            </div>
+            <p class="st-msg" role="status"></p>
+          </article>`;
+      }).join('') + (pending.length > 3 ? `<p style="margin-top:12px;"><a class="home-link" href="requests.html">${pending.length - 3} more waiting</a></p>` : '')
+    : homeEmpty('Nobody is waiting', ' New requests from mentees appear here, and you get an email too.', null);
+
+  document.querySelectorAll('[data-ask]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const accept = btn.dataset.ask === 'accepted';
+      const ok = await askConfirm(
+        accept ? `Accept ${btn.dataset.name} as your mentee?` : `Decline ${btn.dataset.name}'s request?`,
+        accept ? 'You will both see each other\'s email and get a shared workspace.' : `${btn.dataset.name} is told kindly that you cannot take them on now, and is pointed to other mentors.`,
+        { confirmText: accept ? 'Accept' : 'Decline' }
+      );
+      if (!ok) return;
+      const card = btn.closest('.ask');
+      card.querySelectorAll('button').forEach((b) => (b.disabled = true));
+      const r = await apiSend('PATCH', `/mentorship-requests/${btn.dataset.id}`, { decision: btn.dataset.ask });
+      if (!r.ok) {
+        card.querySelectorAll('button').forEach((b) => (b.disabled = false));
+        setMsg(card.querySelector('.st-msg'), r.data.error || 'That did not work. Try again.');
+        return;
+      }
+      toast(accept ? 'Accepted. You can now see each other\'s email.' : 'Declined. They have been told.');
+      renderMentorDashboard();
+    });
+  });
+
+  // ---------- Mentees and goal progress ----------
+  document.getElementById('md-mentees').innerHTML = active.length
+    ? `<ul class="people">${active.map((r) => {
+        const total = Number(r.goals_total || 0);
+        const done = Number(r.goals_done || 0);
+        return `
+          <li>
+            ${avatarHTML(r.other_name, r.other_avatar_url, 'people-av')}
+            <div class="people-body">
+              <p class="people-name">${escapeHTML(r.other_name || 'Mentee')}</p>
+              <p class="people-text">${r.meetings ? `${r.meetings} meeting${r.meetings === 1 ? '' : 's'} logged.` : 'No meeting logged yet.'} ${total ? `${done} of ${total} goals done.` : 'Agree your first goals together.'}</p>
+            </div>
+            ${total
+              ? `<div class="goalbar" role="img" aria-label="${done} of ${total} goals done"><div style="width:${Math.round((done / total) * 100)}%"></div></div>`
+              : '<a class="btn btn-secondary md-btn-sm" href="requests.html#accepted">Add goals</a>'}
+          </li>`;
+      }).join('')}</ul>`
+    : homeEmpty('No mentees yet', ' When you accept a request, the person appears here with your shared goals.', null);
+
+  // ---------- Share and posts ----------
+  document.getElementById('md-share').innerHTML = `
+    <a href="events.html" class="btn btn-secondary">${navIcon('calendar')}Propose an event</a>
+    <a href="opportunities.html" class="btn btn-secondary">${navIcon('briefcase')}Post an opportunity</a>`;
+  const contribs = [
+    ...proposals.map((p) => ({ title: p.title, status: p.status, kind: 'Event', when: p.created_at || p.event_date, href: 'events.html' })),
+    ...posts.map((p) => ({ title: p.title, status: p.approval_status, kind: 'Opportunity', when: p.created_at, href: 'opportunities.html' }))
+  ].sort((a, b) => (mdDate(b.when) || 0) - (mdDate(a.when) || 0)).slice(0, 3);
+  const statusWord = { approved: ['Live', 'accepted'], pending: ['Being checked', 'pending'], rejected: ['Not approved', 'declined'] };
+  document.getElementById('md-contrib').innerHTML = contribs.length
+    ? contribs.map((c) => {
+        const [word, cls] = statusWord[c.status] || statusWord.pending;
+        return `
+          <a class="home-opp" href="${c.href}">
+            <span style="flex:1;min-width:0;">
+              <span class="home-item-title">${escapeHTML(c.title || 'Untitled')}</span>
+              <span class="home-item-meta">${c.kind}</span>
+            </span>
+            <span class="request-status ${cls}" style="align-self:flex-start;">${word}</span>
           </a>`;
       }).join('')
-    : mdEmpty('briefcase', 'No open opportunities', 'Roles shared by retired staff will appear here.');
+    : homeEmpty('Nothing posted yet', ' Events and job openings you share appear here with their status.', null);
+
+  document.getElementById('md-events').innerHTML = homeEventsHTML(events, ' Propose a talk or meetup for current staff.');
 }
 
 /* ===================== Admin overview ===================== */
-MD_ICONS.shield = '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>';
-MD_ICONS.activity = '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>';
-
-function mdHumanise(action) {
-  return String(action || '').replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
-}
 
 async function renderAdminOverview() {
   const root = document.getElementById('admin-tab-overview');
   if (!root) return;
 
-  const [statsRaw, usersRaw, eventsRaw, oppsRaw, logsRaw, signupsRaw, reportsRaw] = await Promise.all([
+  const [statsRaw, usersRaw, eventsRaw, oppsRaw, logsRaw, signupsRaw, reportsRaw, adminsRaw, hrRaw, imagesRaw] = await Promise.all([
     mdGet('/admin/stats'),
     mdGet('/admin/users'),
     mdGet('/admin/events/pending'),
     mdGet('/admin/opportunities/pending'),
     mdGet('/admin/activity-logs'),
     mdGet('/admin/signup-requests'),
-    mdGet('/admin/reports')
+    mdGet('/admin/reports'),
+    mdGet('/admin/admins'),
+    mdGet('/admin/hr/requests'),
+    mdGet('/images/pending')
   ]);
 
   const stats = statsRaw || {};
@@ -3969,140 +4521,91 @@ async function renderAdminOverview() {
   const logs = mdList(logsRaw);
   const signups = mdList(signupsRaw);
   const reports = mdList(reportsRaw);
-  const toReview = pendingEvents.length + pendingOpps.length + signups.length + reports.length;
+  const adminAsks = ((adminsRaw && adminsRaw.requests) || []).filter((r) => !r.mine);
+  const hrAsks = mdList(hrRaw).filter((r) => !r.mine);
 
-  // ---------- Header ----------
-  document.getElementById('ov-date').textContent = new Date().toLocaleDateString('en-GB', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
-  });
-  document.getElementById('ov-sub').textContent = toReview
-    ? `${toReview} item${toReview === 1 ? '' : 's'} need${toReview === 1 ? 's' : ''} your review.`
-    : 'Nothing needs your review right now.';
+  const oldest = (rows, key = 'created_at') => {
+    const t = rows.map((r) => mdDate(r[key] || r.created_at || r.first_at)).filter(Boolean).sort((a, b) => a - b)[0];
+    return t ? timeAgo(t) : '';
+  };
+  const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-  // ---------- Stat cards ----------
-  const kpi = (icon, num, label, sub, cls = '') => `
-    <div class="md-kpi ${cls}">
-      <div class="md-kpi-icon">${mdIcon(MD_ICONS[icon])}</div>
-      <div class="md-kpi-num">${num ?? 0}</div>
-      <div class="md-kpi-label">${label}</div>
-      ${sub ? `<div class="md-kpi-sub">${sub}</div>` : ''}
-    </div>`;
-  const flagged = stats.flaggedAccounts || 0;
-  document.getElementById('ov-kpis').innerHTML =
-    kpi('users', stats.totalAlumni ?? users.length, 'Total alumni', '') +
-    kpi('award', stats.activeMentorships, 'Active mentorships', `${stats.pendingRequests || 0} requests pending`) +
-    kpi('inbox', toReview, 'Awaiting review', toReview ? 'Action needed' : 'All clear', toReview ? 'alert' : '') +
-    kpi('shield', flagged, 'Flagged accounts', '', flagged ? 'alert' : '');
-
-  // ---------- Needs review ----------
-  const reviewRows = [
-    ...reports.map((g) => ({
-      kind: 'report', id: `${g.target_type}-${g.target_id}`, title: g.target.title, label: 'Reported',
-      meta: `${g.reporters ? g.reporters + ' reporter' + (g.reporters === 1 ? '' : 's') : 'Automatic check'} · ${g.reports[0].reason_label}`
-    })),
-    ...signups.map((r) => ({
-      kind: 'signup', id: r.request_id, title: r.full_name, label: 'Identity check',
-      meta: `${r.staff_number} · ${{ low: 'low risk', medium: 'check first', high: 'high risk' }[r.risk_level] || ''}`
-    })),
-    ...pendingEvents.map((e) => ({
-      kind: 'event', id: e.event_id, title: e.title, label: 'Event',
-      meta: `Proposed by ${e.proposed_by_name || 'a mentor'}${e.event_date ? ' · ' + new Date(e.event_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : ''}`
-    })),
-    ...pendingOpps.map((o) => ({
-      kind: 'opportunity', id: o.opportunity_id, title: o.title, label: 'Opportunity',
-      meta: `Posted by ${o.posted_by_name || 'a mentor'}${o.company ? ' · ' + o.company : ''}`
-    }))
-  ];
-  document.getElementById('ov-review').innerHTML = reviewRows.length
-    ? reviewRows.slice(0, 6).map((r) => `
-        <div class="md-item">
-          <div class="md-avatar md-avatar-soft">${mdIcon(MD_ICONS[{ event: 'calendar', signup: 'shield', report: 'activity' }[r.kind] || 'briefcase'])}</div>
-          <div class="md-item-body">
-            <div class="md-item-title">${escapeHTML(r.title || 'Untitled')}</div>
-            <div class="md-item-meta">${r.label} · ${escapeHTML(r.meta)}</div>
-          </div>
-          <div class="md-inline-actions">
-            ${r.kind === 'signup' || r.kind === 'report'
-              ? `<a href="#${r.kind === 'signup' ? 'verification' : 'reports'}" class="btn btn-secondary md-btn-sm" data-goto-tab="${r.kind === 'signup' ? 'verification' : 'reports'}">Review</a>`
-              : `<button class="btn btn-primary md-btn-sm" data-ov-review="${r.id}" data-kind="${r.kind}" data-decision="approved">Approve</button>
-            <button class="btn btn-secondary md-btn-sm" data-ov-review="${r.id}" data-kind="${r.kind}" data-decision="rejected">Reject</button>`}
-          </div>
-        </div>`).join('')
-    : mdEmpty('check', 'All clear', 'Identity checks, event proposals and opportunity posts appear here for approval.');
-
-  document.querySelectorAll('[data-ov-review]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      if (btn.dataset.decision === 'rejected') {
-        const title = btn.closest('.md-item').querySelector('.md-item-title').textContent;
-        openDecisionDialog(btn.dataset.kind, btn.dataset.ovReview, title, 'rejected', refreshModeration);
-        return;
-      }
-      btn.closest('.md-item').querySelectorAll('button').forEach((b) => (b.disabled = true));
-      const path = btn.dataset.kind === 'event'
-        ? `/admin/events/${btn.dataset.ovReview}/review`
-        : `/admin/opportunities/${btn.dataset.ovReview}/review`;
-      try {
-        await fetch(`${API_BASE}${path}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('alumnet_token')}` },
-          body: JSON.stringify({ decision: btn.dataset.decision })
-        });
-      } catch { /* the refresh below shows the real state */ }
-      renderAdminOverview();
-      renderAdminPendingEvents();
-      renderAdminEvents();
-      renderAdminOpportunities();
-      renderAdminLogs();
+  const queue = [];
+  if (signups.length) {
+    const high = signups.filter((s) => s.risk_level === 'high').length;
+    queue.push({
+      n: signups.length, title: 'Identity checks', tab: 'verification', btn: 'Review checks',
+      text: `Oldest waiting ${oldest(signups)}.${high ? ` <span class="queue-warn">${plural(high, 'shows', 'show')} a high-risk warning.</span>` : ''}`
     });
-  });
+  }
+  if (pendingEvents.length + pendingOpps.length) {
+    const parts = [pendingOpps.length ? plural(pendingOpps.length, 'opportunity', 'opportunities') : '', pendingEvents.length ? plural(pendingEvents.length, 'event') : ''].filter(Boolean);
+    queue.push({ n: pendingEvents.length + pendingOpps.length, title: 'Posts to review', tab: 'opportunities', btn: 'Review posts', text: `${parts.join(' and ')}. Oldest waiting ${oldest([...pendingEvents, ...pendingOpps])}.` });
+  }
+  const photos = mdList(imagesRaw);
+  if (photos.length) {
+    const kinds = { event_photo: ['event photo', 'event photos'], event_banner: ['banner', 'banners'], logo: ['logo', 'logos'] };
+    const parts = Object.entries(kinds).map(([k, [one, many]]) => {
+      const n = photos.filter((p) => p.kind === k).length;
+      return n ? `${n} ${n === 1 ? one : many}` : '';
+    }).filter(Boolean);
+    queue.push({ n: photos.length, title: 'Photos to check', tab: 'opportunities', btn: 'Check photos', text: `${parts.join(' and ')}. Oldest waiting ${oldest(photos)}.` });
+  }
+  if (reports.length) {
+    const first = reports[0];
+    queue.push({ n: reports.length, title: reports.length === 1 ? 'Report from a member' : 'Reports from members', tab: 'reports', btn: reports.length === 1 ? 'Open report' : 'Open reports', text: `${escapeHTML(first.reports && first.reports[0] ? first.reports[0].reason_label : 'Reported')}${first.target && first.target.title ? `: ${escapeHTML(first.target.title)}` : ''}.` });
+  }
+  if (adminAsks.length) {
+    const a = adminAsks[0];
+    queue.push({ n: adminAsks.length, title: adminAsks.length === 1 ? 'Admin change to approve' : 'Admin changes to approve', tab: 'admins', btn: 'Decide', text: `${a.action === 'add' ? 'Make' : 'Remove'} ${escapeHTML(a.target_name)} ${a.action === 'add' ? 'an admin' : 'as an admin'}, asked by ${escapeHTML(a.requested_by_name)}.` });
+  }
+  if (hrAsks.length) {
+    queue.push({ n: hrAsks.length, title: 'HR update to approve', tab: 'hr', btn: 'Decide', text: `${escapeHTML(hrAsks[0].summary || 'A staff list upload')}, uploaded by ${escapeHTML(hrAsks[0].requested_by_name || 'another admin')}.` });
+  }
+  const total = queue.reduce((t, q) => t + q.n, 0);
+
+  document.getElementById('ov-date').textContent = homeToday();
+  document.getElementById('ov-title').textContent = total ? `${total} ${total === 1 ? 'thing needs' : 'things need'} you today` : 'Nothing needs you today';
+  document.getElementById('ov-sub').textContent = total ? 'Oldest first, so nobody waits too long.' : 'New identity checks, posts and reports will appear here.';
+
+  document.getElementById('ov-review').innerHTML = queue.length
+    ? `<ul class="queue">${queue.map((q) => `
+        <li>
+          <span class="queue-count" aria-hidden="true">${q.n}</span>
+          <div class="queue-body">
+            <p class="queue-title">${q.title}<span class="sr-only">: ${q.n} waiting</span></p>
+            <p class="queue-text">${q.text}</p>
+          </div>
+          <a href="#${q.tab}" class="btn btn-primary md-btn-sm" data-goto-tab="${q.tab}">${q.btn}</a>
+        </li>`).join('')}</ul>`
+    : homeEmpty('All clear', ' You have reviewed everything. Well done.', null);
 
   // ---------- Recent activity ----------
   document.getElementById('ov-activity').innerHTML = logs.length
-    ? logs.slice(0, 6).map((l) => `
-        <div class="md-item md-item-tight">
-          <div class="md-empty-icon" style="width:32px;height:32px;">${mdIcon(MD_ICONS.activity)}</div>
-          <div class="md-item-body">
-            <div class="md-item-title">${escapeHTML(l.description || mdHumanise(l.action_type))}</div>
-            <div class="md-item-meta">${escapeHTML(l.admin_name || 'Admin')} · ${l.created_at ? timeAgo(l.created_at) : ''}</div>
-          </div>
-        </div>`).join('')
-    : mdEmpty('activity', 'No activity yet', 'Admin actions such as approvals and suspensions are recorded here.');
+    ? `<ul class="activity">${logs.slice(0, 5).map((l) => `
+        <li>
+          <p>${escapeHTML(l.description || mdHumanise(l.action_type))}</p>
+          <p class="who">${escapeHTML(l.admin_name || 'Automatic')}, ${l.created_at ? escapeHTML(timeAgo(l.created_at)) : ''}</p>
+        </li>`).join('')}</ul>`
+    : homeEmpty('No activity yet', ' Approvals, suspensions and imports are recorded here.', null);
 
   // ---------- Community ----------
   const mentors = users.filter((u) => u.role === 'mentor').length;
   const mentees = users.filter((u) => u.role === 'mentee').length;
-  const total = mentors + mentees || 1;
-  const monthAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
-  const newThisMonth = users.filter((u) => u.role !== 'admin' && new Date(u.created_at) >= monthAgo).length;
   document.getElementById('ov-community').innerHTML = `
-    <div class="md-progress-row">
-      <span class="md-progress-num">${mentors + mentees}</span>
-      <span class="md-muted">members · ${newThisMonth} joined in the last 30 days</span>
-    </div>
-    <div class="md-split">
-      <span class="a" style="width:${(mentors / total) * 100}%"></span>
-      <span class="b" style="width:${(mentees / total) * 100}%"></span>
-    </div>
-    <div class="md-legend">
-      <div><i class="a"></i>Mentors (retired staff)<b>${mentors}</b></div>
-      <div><i class="b"></i>Mentees (current staff)<b>${mentees}</b></div>
-    </div>`;
+    <dl>
+      <div><dt>Members</dt><dd>${mentors + mentees}</dd></div>
+      <div><dt>Active mentorships</dt><dd>${Number(stats.activeMentorships || 0)}</dd></div>
+      <div><dt>Mentors (former staff)</dt><dd>${mentors}</dd></div>
+      <div><dt>Mentees (current staff)</dt><dd>${mentees}</dd></div>
+    </dl>
+    <a class="home-link" href="#impact" data-goto-tab="impact">See the impact report</a>`;
 
-  // ---------- Newest members ----------
-  const newest = users.filter((u) => u.role !== 'admin')
-    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5);
-  document.getElementById('ov-members').innerHTML = newest.length
-    ? newest.map((u) => `
-        <div class="md-item md-item-tight">
-          <div class="md-avatar md-avatar-soft">${mdInitials(u.name)}</div>
-          <div class="md-item-body">
-            <div class="md-item-title">${escapeHTML(u.name)}</div>
-            <div class="md-item-meta">Joined ${timeAgo(u.created_at)}</div>
-          </div>
-          <span class="md-pill ${u.role === 'mentor' ? 'approved' : 'neutral'}">${u.role === 'mentor' ? 'Mentor' : 'Mentee'}</span>
-        </div>`).join('')
-    : mdEmpty('users', 'No members yet', 'New sign-ups appear here.');
+  document.getElementById('ov-quick').innerHTML = `
+    <a href="#events" class="btn btn-secondary" data-goto-tab="events">${navIcon('calendar')}Create an official event</a>
+    <a href="#hr" class="btn btn-secondary" data-goto-tab="hr">${navIcon('file')}Import an HR update</a>`;
 }
+
 /* ===================== Account settings ===================== */
 
 function authHeaders(json = true) {
@@ -4125,7 +4628,7 @@ async function apiSend(method, path, body) {
 function setMsg(el, text, good) {
   if (!el) return;
   el.textContent = text;
-  el.style.color = good ? 'var(--kq-green)' : 'var(--kq-red)';
+  el.style.color = good ? 'var(--ok)' : 'var(--kq-red)';
   el.style.display = text ? 'block' : 'none';
 }
 
@@ -4637,15 +5140,29 @@ function openReportDialog(targetType, targetId, label) {
       <div class="field" style="margin-top:8px;">
         <label for="report-details">What happened? (optional)</label>
         <textarea id="report-details" maxlength="500" rows="3" placeholder="For example: asked me to pay KSh 1,000 for a CV review"></textarea>
+      </div>
+      <div class="field">
+        <label for="report-shots">Screenshots (optional, up to 3)</label>
+        <input type="file" id="report-shots" accept="${IMAGE_TYPES.join(',')}" multiple aria-describedby="report-shots-hint">
+        <p class="field-hint" id="report-shots-hint">Only the alumni office sees them, and they are deleted when the report is closed.</p>
       </div>`,
     onConfirm: async (dlg) => {
       const picked = dlg.querySelector('input[name="report-reason"]:checked');
       if (!picked) return 'Choose a reason.';
+      const shots = [...dlg.querySelector('#report-shots').files];
+      if (shots.length > 3) return 'Choose up to 3 screenshots.';
+      const badShot = shots.map(imageFileProblem).find(Boolean);
+      if (badShot) return badShot;
       const { ok, data } = await apiSend('POST', '/safety/reports', {
         targetType, targetId: Number(targetId), reason: picked.value, details: dlg.querySelector('#report-details').value
       });
       if (!ok) return data.error || 'Could not send the report.';
-      toast(data.message || 'Report sent.');
+      let failed = 0;
+      for (const f of shots) {
+        const up = await uploadImage(`/images/reports/${data.reportId}/screenshots`, f);
+        if (!up.ok) failed++;
+      }
+      toast(`${data.message || 'Report sent.'}${failed ? ` ${failed} screenshot${failed === 1 ? ' was' : 's were'} not attached.` : ''}`);
       return null;
     }
   });
@@ -4780,7 +5297,8 @@ async function renderAdminReports() {
     return `
       <article class="vr-card">
         <div class="vr-head">
-          <div>
+          ${g.target_type === 'user' ? avatarHTML(t.title, t.avatar_url, 'people-av report-av') : ''}
+          <div style="flex:1;min-width:0;">
             <h3>${escapeHTML(t.title)} <span class="md-muted st-small">${kindLabel[g.target_type]}</span></h3>
             <div class="md-muted st-small">${escapeHTML(t.subtitle)}${t.status && t.status !== 'active' && t.status !== 'approved' ? ' · currently ' + escapeHTML(t.status) : ''}</div>
           </div>
@@ -4796,8 +5314,10 @@ async function renderAdminReports() {
         <ul class="report-list">
           ${g.reports.map((r) => `
             <li><strong>${escapeHTML(r.reason_label)}</strong> <span class="md-muted st-small">from ${escapeHTML(r.reporter_name)}, ${timeAgo(r.created_at)}</span>
-            ${r.details ? `<div class="report-quote">${escapeHTML(r.details)}</div>` : ''}</li>`).join('')}
+            ${r.details ? `<div class="report-quote">${escapeHTML(r.details)}</div>` : ''}
+            ${r.screenshots && r.screenshots.length ? `<div class="report-shots">${r.screenshots.map((u, i) => `<button type="button" class="gallery-thumb" data-shot="${escapeHTML(u)}" aria-label="Open screenshot ${i + 1} from ${escapeHTML(r.reporter_name)}"><img src="${escapeHTML(u)}" alt="" loading="lazy"></button>`).join('')}</div>` : ''}</li>`).join('')}
         </ul>
+        ${g.target_type === 'user' && t.avatar_image_id ? `<p class="st-small"><button type="button" class="btn-quiet st-small" data-remove-avatar="${t.avatar_image_id}" data-name="${escapeHTML(t.title)}">Remove their profile photo</button></p>` : ''}
         <div class="field" style="margin-bottom:10px;">
           <label for="rp-note-${key}">What did you find? (required to act)</label>
           <input type="text" id="rp-note-${key}" maxlength="255" placeholder="e.g. Asked two mentees for money, confirmed by phone">
@@ -4811,6 +5331,10 @@ async function renderAdminReports() {
       </article>`;
   }).join('');
 
+  list.querySelectorAll('[data-shot]').forEach((b) => {
+    b.onclick = () => openPhotoViewer([{ url: b.dataset.shot, caption: 'Screenshot attached to a report', uploaded_by_name: 'the person reporting' }]);
+  });
+  list.querySelectorAll('[data-remove-avatar]').forEach((b) => { b.onclick = () => removeMemberPhoto(b.dataset.removeAvatar, b.dataset.name, renderAdminReports); });
   list.querySelectorAll('[data-rp]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const key = btn.dataset.rp;
@@ -4832,6 +5356,19 @@ async function renderAdminReports() {
       renderAdminOpportunities();
     });
   });
+}
+
+// An admin removes an unsuitable profile photo; the member is told why
+async function removeMemberPhoto(imageId, name, after) {
+  const note = await askDialog({
+    title: `Remove ${name}'s profile photo?`, text: 'Their initials show instead, and they are told why.', confirmText: 'Remove photo', danger: true,
+    input: { label: 'Why (they see this)', placeholder: 'e.g. Please use a photo of yourself', required: 'Give a reason.' }
+  });
+  if (note === null) return;
+  const r = await apiSend('DELETE', `/images/${imageId}`, { note });
+  toast(r.ok ? 'Photo removed. They have been told.' : r.data.error || 'Could not remove it.');
+  renderAdminLogs();
+  if (after) after();
 }
 
 function updateNavBadge(tab, count) {
@@ -4951,6 +5488,62 @@ function moderationCardHTML(i) {
 
 let moderationData = null;
 
+let pendingPostCount = 0;
+let pendingImageCount = 0;
+
+// Images from mentors waiting for an admin, shown above the posts queue
+async function renderPendingImages() {
+  const panel = document.getElementById('img-review-panel');
+  if (!panel) return;
+  const { ok, data } = await apiSend('GET', '/images/pending');
+  if (!ok) return;
+  pendingImageCount = data.length;
+  updateNavBadge('opportunities', pendingPostCount + pendingImageCount);
+  panel.hidden = !data.length;
+  document.getElementById('img-review-count').textContent = data.length ? `${data.length} waiting` : '';
+  const box = document.getElementById('img-review');
+  box.innerHTML = `<ul class="img-review-list">${data.map((i) => `
+    <li class="img-review-item" data-img="${i.image_id}">
+      <button type="button" class="img-review-thumb img-review-${i.kind}" data-img-view="${i.image_id}" aria-label="View the ${escapeHTML(i.label)} full size">
+        <img src="${escapeHTML(i.url)}" alt="" loading="lazy">
+      </button>
+      <div class="img-review-body">
+        <p><strong>${escapeHTML(i.label.charAt(0).toUpperCase() + i.label.slice(1))}</strong>${i.for_title ? ` for ${escapeHTML(i.for_title)}` : ''}</p>
+        <p class="md-muted st-small">From ${escapeHTML(i.uploaded_by_name)}, ${escapeHTML(timeAgo(i.created_at))}${i.for_status && i.for_status !== 'approved' ? `. The ${i.kind === 'logo' ? 'post' : 'event'} itself is not live yet.` : ''}</p>
+        ${i.caption ? `<p class="report-quote">${escapeHTML(i.caption)}</p>` : ''}
+        <p class="st-msg" id="img-msg-${i.image_id}"></p>
+        <div class="md-inline-actions">
+          <button type="button" class="btn btn-primary md-btn-sm" data-img-decide="approve" data-id="${i.image_id}">Approve</button>
+          <button type="button" class="btn btn-secondary md-btn-sm" data-img-decide="reject" data-id="${i.image_id}">Reject</button>
+        </div>
+      </div>
+    </li>`).join('')}</ul>`;
+  box.querySelectorAll('[data-img-view]').forEach((b) => {
+    const i = data.find((x) => String(x.image_id) === b.dataset.imgView);
+    b.onclick = () => openPhotoViewer([{ url: i.url, caption: i.caption || i.for_title, uploaded_by_name: i.uploaded_by_name, status: 'pending' }]);
+  });
+  box.querySelectorAll('[data-img-decide]').forEach((b) => {
+    b.onclick = async () => {
+      let note = '';
+      if (b.dataset.imgDecide === 'reject') {
+        note = await askDialog({ title: 'Reject this image?', text: 'It is deleted, and the person who added it is told why.', confirmText: 'Reject', danger: true, input: { label: 'Why (they see this)', placeholder: 'e.g. Too blurry, or shows people who may not have agreed', required: 'Give a reason.' } });
+        if (note === null) return;
+      }
+      b.closest('li').querySelectorAll('button').forEach((x) => (x.disabled = true));
+      const r = await apiSend('POST', `/images/pending/${b.dataset.id}/decision`, { decision: b.dataset.imgDecide, note });
+      if (!r.ok) {
+        setMsg(document.getElementById(`img-msg-${b.dataset.id}`), r.data.error);
+        b.closest('li').querySelectorAll('button').forEach((x) => (x.disabled = false));
+        return;
+      }
+      toast(r.data.message);
+      renderPendingImages();
+      renderAdminOverview();
+      renderAdminLogs();
+    };
+  });
+}
+
 async function renderModeration() {
   const mount = document.getElementById('mod-queue');
   if (!mount) return;
@@ -4959,6 +5552,7 @@ async function renderModeration() {
   ]);
   if (!data) { mount.innerHTML = '<p class="md-muted">Could not load the moderation queue.</p>'; return; }
   moderationData = data;
+  renderPendingImages();
 
   // Fast lane switch
   const toggle = document.getElementById('fast-lane-toggle');
@@ -5061,7 +5655,8 @@ function drawModerationQueue() {
     reported: i.open_reports > 0,
     stale: i.waiting_hours >= 48
   }[filter]));
-  updateNavBadge('opportunities', moderationData.items.length);
+  pendingPostCount = moderationData.items.length;
+  updateNavBadge('opportunities', pendingPostCount + pendingImageCount);
 
   const clean = moderationData.items.filter((i) => i.clean && i.moderation_lane === 'queue');
   const bulk = document.getElementById('approve-clean-btn');
@@ -5148,7 +5743,7 @@ function directoryCardHTML(m) {
   return `
     <article class="fm-card">
       <div class="fm-card-top">
-        <div class="pf-avatar pf-avatar-sm" style="background:${colorFromName(m.name || '')}">${mdInitials(m.name)}</div>
+        ${avatarHTML(m.name, m.avatar_url, 'pf-avatar pf-avatar-sm', m.avatar_url ? '' : `background:${colorFromName(m.name || '')}`)}
         <div style="min-width:0;">
           <button type="button" class="fm-name" data-dir-profile="${m.mentor_id}">${escapeHTML(m.name)}</button>
           ${m.verified ? verifiedBadgeHTML('Verified') : ''}

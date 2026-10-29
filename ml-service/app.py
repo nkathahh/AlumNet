@@ -22,7 +22,11 @@ if (os.getenv("SPACE_ID") or os.getenv("ML_REQUIRE_KEY") == "1") and not os.gete
 # Loaded once at startup, not per request, this is what keeps recommendation
 # calls under NFR-01's 3-second target instead of reloading the model each time.
 MODEL_NAME = 'BAAI/bge-small-en-v1.5'
-MODEL = SentenceTransformer(MODEL_NAME)
+# The exact model release that was evaluated, so a newer upload of the model can
+# never change results silently. Set MODEL_REVISION to the commit hash from the
+# model's "Files and versions" page on Hugging Face; /health reports it.
+MODEL_REVISION = os.getenv("MODEL_REVISION") or None
+MODEL = SentenceTransformer(MODEL_NAME, revision=MODEL_REVISION)
 
 # BGE models find passages better when a search query starts with this instruction
 QUERY_PREFIX = 'Represent this sentence for searching relevant passages: '
@@ -253,7 +257,7 @@ def member_texts(cur, user_ids):
 
 @app.get("/health")
 def health():
-    return jsonify(status="ok")
+    return jsonify(status="ok", model=MODEL_NAME, revision=MODEL_REVISION or "not pinned")
 
 
 @app.post("/search")

@@ -56,9 +56,9 @@ async function createReport(req, res, next) {
        AND target_id = :targetId AND status = 'open'`,
       { userId, targetType, targetId }
     );
-    if (already) return res.json({ message: 'You have already reported this. The alumni office is looking into it.' });
+    if (already) return res.json({ reportId: already.report_id, message: 'You have already reported this. The alumni office is looking into it.' });
 
-    await pool.execute(
+    const [inserted] = await pool.execute(
       `INSERT INTO reports (reporter_id, target_type, target_id, reason, details)
        VALUES (:userId, :targetType, :targetId, :reason, :details)`,
       { userId, targetType, targetId, reason, details: details || null }
@@ -88,7 +88,7 @@ async function createReport(req, res, next) {
       }
     }
 
-    res.status(201).json({ message: 'Thank you. The alumni office will review this. The person is not told who reported them.' });
+    res.status(201).json({ reportId: inserted.insertId, message: 'Thank you. The alumni office will review this. The person is not told who reported them.' });
   } catch (err) { next(err); }
 }
 
@@ -194,13 +194,18 @@ async function isBlockedEitherWay(a, b) {
 async function describeTarget(type, id) {
   if (type === 'user') {
     const [[u]] = await pool.execute(
-      `SELECT u.name, u.department, u.status, sd.employment_status,
+      `SELECT u.name, u.department, u.status, sd.employment_status, u.avatar_key,
+              (SELECT image_id FROM images WHERE storage_key = u.avatar_key) AS avatar_image_id,
               CASE WHEN EXISTS (SELECT 1 FROM mentors m WHERE m.user_id = u.user_id) THEN 'mentor' ELSE 'mentee' END AS role
        FROM users u LEFT JOIN staff_directory sd ON sd.staff_number = u.staff_number WHERE u.user_id = :id`,
       { id }
     );
     if (!u) return null;
-    return { title: u.name, subtitle: `${u.role === 'mentor' ? 'Mentor' : 'Mentee'}${u.department ? ', ' + u.department : ''}`, ownerId: Number(id), status: u.status };
+    return {
+      title: u.name, subtitle: `${u.role === 'mentor' ? 'Mentor' : 'Mentee'}${u.department ? ', ' + u.department : ''}`, ownerId: Number(id), status: u.status,
+      // Their profile photo, so an unsuitable one can be seen and removed from the report
+      avatar_url: require('../utils/images').avatarUrl(u.avatar_key, 320), avatar_image_id: u.avatar_image_id || null
+    };
   }
   if (type === 'opportunity') {
     const [[o]] = await pool.execute(
@@ -237,7 +242,18 @@ async function listReports(req, res, next) {
     for (const r of rows) {
       const key = `${r.target_type}:${r.target_id}`;
       if (!groups.has(key)) groups.set(key, { target_type: r.target_type, target_id: r.target_id, reports: [], first_at: r.created_at });
-      groups.get(key).reports.push({ id: r.report_id, reason: r.reason, reason_label: REASONS[r.reason], details: r.details, reporter_name: r.reporter_name, source: r.source, created_at: r.created_at });
+      groups.get(key).reports.push({ id: r.report_id, reason: r.reason, reason_label: REASONS[r.reason], details: r.details, reporter_name: r.reporter_name, source: r.source, created_at: r.created_at, screenshots: [] });
+    }
+    // Screenshots members attached, shown only here
+    if (rows.length) {
+      const { imageUrl } = require('../utils/images');
+      const [shots] = await pool.query(
+        "SELECT report_id, storage_key FROM images WHERE kind = 'report_evidence' AND report_id IN (?) ORDER BY created_at",
+        [rows.map((r) => r.report_id)]
+      );
+      for (const g of groups.values()) {
+        for (const rep of g.reports) rep.screenshots = shots.filter((s) => s.report_id === rep.id).map((s) => imageUrl(s.storage_key, 'report_evidence'));
+      }
     }
     const result = [];
     for (const g of groups.values()) {
@@ -330,6 +346,10 @@ async function resolveReports(req, res, next) {
        WHERE target_type = :targetType AND target_id = :targetId AND status = 'open'`,
       { status: action === 'dismiss' ? 'dismissed' : 'actioned', adminId: req.user.userId, note: note || null, targetType, targetId }
     );
+    // Screenshots are kept only while a report is open
+    const { deleteImage } = require('../utils/images');
+    const [shots] = await pool.query("SELECT storage_key FROM images WHERE kind = 'report_evidence' AND report_id IN (?)", [reports.map((r) => r.report_id)]);
+    for (const s of shots) await deleteImage(s.storage_key);
     await admin.logAdminAction(req.user.userId, `report_${action}`, 'reports', targetId, `${summary}${note ? '. Note: ' + note : ''}`, target.title);
 
     // Reporters hear back, without details of what happened to the other person

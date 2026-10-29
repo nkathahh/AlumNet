@@ -809,6 +809,8 @@ async function exportMyData(req, res, next) {
     const [meetings] = await pool.execute('SELECT met_on, mode, minutes, note, created_at FROM mentorship_meetings WHERE logged_by = :userId', { userId });
     const [feedback] = await pool.execute('SELECT side, met, helpful, goals_progress, felt_safe, comment, created_at FROM mentorship_feedback WHERE user_id = :userId', { userId });
     const [privacy] = await pool.execute('SELECT version, accepted_at FROM privacy_acceptances WHERE user_id = :userId ORDER BY accepted_at', { userId });
+    const { imageUrl, KINDS } = require('../utils/images');
+    const [photos] = await pool.execute('SELECT storage_key, kind, status, caption, created_at FROM images WHERE uploaded_by = :userId ORDER BY created_at', { userId });
     const [notifications] = await pool.execute(
       'SELECT type, message, is_read, created_at FROM notifications WHERE user_id = :userId ORDER BY created_at DESC',
       { userId }
@@ -829,6 +831,11 @@ async function exportMyData(req, res, next) {
       people_you_blocked: blocked,
       alerts_sent_to_you: alerts,
       privacy_notices_you_accepted: privacy,
+      // Each link opens the image while you are signed in to AlumNet
+      images_you_uploaded: photos.map((p) => ({
+        what: KINDS[p.kind].label, status: p.status === 'live' ? 'shown' : 'waiting for review', caption: p.caption, uploaded_at: p.created_at,
+        link: `${process.env.APP_URL || ''}${imageUrl(p.storage_key, p.kind, 9999)}`
+      })),
       // Matching also keeps a list of numbers worked out from your profile text (an embedding).
       // It is not readable as text, is replaced when your profile changes and deleted with your account.
       derived_data: 'Profile embedding used for matching (not included: numbers only, rebuilt from your profile)',
@@ -896,6 +903,15 @@ async function deleteMyAccount(req, res, next) {
       throw err;
     } finally {
       conn.release();
+    }
+    // Every image they uploaded goes too: their photo, event photos, banners, logos and screenshots
+    const { deleteImage } = require('../utils/images');
+    const [mine] = await pool.execute('SELECT storage_key FROM images WHERE uploaded_by = :userId', { userId });
+    await pool.execute('UPDATE users SET avatar_key = NULL WHERE user_id = :userId', { userId });
+    for (const img of mine) {
+      await pool.execute('UPDATE events SET banner_key = NULL WHERE banner_key = :k', { k: img.storage_key });
+      await pool.execute('UPDATE career_opportunities SET logo_key = NULL WHERE logo_key = :k', { k: img.storage_key });
+      await deleteImage(img.storage_key);
     }
     for (const e of ended) {
       await createNotification(e.otherId, 'mentorship_ended', 'A member you were connected with has deleted their account, so the mentorship has closed.', 'requests.html');

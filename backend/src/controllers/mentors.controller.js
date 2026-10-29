@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const { mlPost } = require('../utils/ml');
+const { avatarUrl } = require('../utils/images');
 
 const PAGE_SIZE = 12;
 // Search keeps results that are clearly related to the query: at least this
@@ -25,7 +26,7 @@ const BASE_FROM = `
                        OR (b.blocker_id = u.user_id AND b.blocked_id = :viewerId))`;
 
 const CARD_COLUMNS = `
-  u.user_id AS mentor_id, u.name, u.department, u.city, u.country, u.created_at,
+  u.user_id AS mentor_id, u.name, u.department, u.city, u.country, u.created_at, u.avatar_key,
   p.headline, p.skills, p.experience, p.bio,
   IF(p.gender_in_search = 1, p.gender, NULL) AS gender,
   mt.years_of_experience, mt.accepting_mentees, mt.max_mentees, mt.meeting_mode, mt.availability_note,
@@ -39,6 +40,7 @@ function shapeCard(r) {
   return {
     mentor_id: r.mentor_id,
     name: r.name,
+    avatar_url: avatarUrl(r.avatar_key, 96),
     headline: r.headline,
     department: r.department,
     city: r.city,

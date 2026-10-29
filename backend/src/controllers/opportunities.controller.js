@@ -5,6 +5,7 @@ const { splitList } = require('../utils/fit');
 const { annotateOpportunities } = require('../utils/recommend');
 const { reviewEdit } = require('../utils/liveEdit');
 const { checkText } = require('../utils/fields');
+const { imageUrl } = require('../utils/images');
 const logAdminAction = (...args) => require('./admin.controller').logAdminAction(...args);
 
 // Up to 8 skills, so the checklist stays readable
@@ -48,7 +49,7 @@ async function listOpportunities(req, res, next) {
   try {
     const [rows] = await pool.execute(
       `SELECT co.opportunity_id, co.title, co.description, co.required_skills, co.industry, co.company,
-              co.opportunity_type, co.location, co.apply_link, DATE_FORMAT(co.closing_date, '%Y-%m-%d') AS closing_date, co.created_at, co.edited_at,
+              co.opportunity_type, co.location, co.apply_link, DATE_FORMAT(co.closing_date, '%Y-%m-%d') AS closing_date, co.created_at, co.edited_at, co.logo_key,
               co.posted_by, (co.posted_by = :userId) AS is_mine,
               u.name AS posted_by_name, u.department AS posted_by_department
        FROM career_opportunities co
@@ -59,7 +60,7 @@ async function listOpportunities(req, res, next) {
        ORDER BY co.created_at DESC`,
       { userId: req.user.userId }
     );
-    const list = rows.map((r) => ({ ...r, is_mine: Number(r.is_mine) === 1 }));
+    const list = rows.map(({ logo_key: logoKey, ...r }) => ({ ...r, logo_url: imageUrl(logoKey, 'logo', 96), is_mine: Number(r.is_mine) === 1 }));
     // Current staff see how well each one fits them, and why
     if (req.user.role === 'mentee') return res.json(await annotateOpportunities(req.user.userId, list));
     res.json(list);
@@ -193,12 +194,13 @@ async function listMyPosts(req, res, next) {
     const { userId } = req.user;
     const [rows] = await pool.execute(
       `SELECT opportunity_id, title, company, approval_status, DATE_FORMAT(closing_date, '%Y-%m-%d') AS closing_date, rejection_reason, review_note, edited_at, closed_at,
-              opportunity_type, industry, location, apply_link, description, required_skills
+              opportunity_type, industry, location, apply_link, description, required_skills, logo_key,
+              EXISTS(SELECT 1 FROM images i WHERE i.kind = 'logo' AND i.opportunity_id = career_opportunities.opportunity_id AND i.status = 'pending') AS logo_pending
        FROM career_opportunities WHERE posted_by = :userId
        ORDER BY created_at DESC`,
       { userId }
     );
-    res.json(rows);
+    res.json(rows.map(({ logo_key: logoKey, ...r }) => ({ ...r, logo_url: imageUrl(logoKey, 'logo', 96), logo_pending: Number(r.logo_pending) === 1 })));
   } catch (err) {
     next(err);
   }

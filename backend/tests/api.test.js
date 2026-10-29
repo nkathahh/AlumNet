@@ -28,6 +28,10 @@ try {
 } catch { /* no .env (as in CI): the DB_* variables come from the environment */ }
 
 const PORT = process.env.TEST_PORT || 4999;
+// Images go to a scratch folder that is removed afterwards, never to backend/uploads
+const MEDIA_DIR = require('node:fs').mkdtempSync(path.join(require('node:os').tmpdir(), 'alumnet-test-media-'));
+process.env.MEDIA_DRIVER = 'local';
+process.env.MEDIA_DIR = MEDIA_DIR;
 // Read once: later, loading the app's own modules also reads backend/.env,
 // which may hold a different secret
 const JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
@@ -121,6 +125,7 @@ after(async () => {
   if (db) await db.end();
   // Background jobs are also run directly from these tests through the app's own pool
   if (require.cache[require.resolve('../src/config/db')]) await require('../src/config/db').end();
+  require('node:fs').rmSync(MEDIA_DIR, { recursive: true, force: true });
 });
 
 const state = {};
@@ -1658,6 +1663,261 @@ test('deleting an account removes personal data and ends the session', async () 
 /* ---------------- General protections ---------------- */
 
 /* ---------------- Input sizes and the privacy notice version ---------------- */
+
+/* ---------------- Photos and images ---------------- */
+
+const sharp = require('sharp');
+// A photo with a hidden marker in its metadata, as a phone would add a location
+async function photo(width = 800, height = 600, type = 'jpeg') {
+  let img = sharp({ create: { width, height, channels: 3, background: { r: 181, g: 18, b: 27 } } });
+  img = type === 'png' ? img.png() : img.jpeg();
+  if (type === 'jpeg') img = img.withExif({ IFD0: { Copyright: 'HIDDEN-GPS-MARKER-42' } });
+  return img.toBuffer();
+}
+async function upload(member, route, buffer, type = 'image/jpeg') {
+  const res = await fetch(`${ROOT}/api${route}`, {
+    method: 'POST',
+    headers: { 'Content-Type': type, 'X-Requested-With': 'AlumNet', Cookie: Object.entries(member.jar).map(([k, v]) => `${k}=${v}`).join('; ') },
+    body: buffer
+  });
+  return { status: res.status, body: await res.json().catch(() => null) };
+}
+async function media(member, url) {
+  const res = await fetch(ROOT + url, { headers: member ? { Cookie: Object.entries(member.jar).map(([k, v]) => `${k}=${v}`).join('; ') } : {} });
+  return { status: res.status, type: res.headers.get('content-type'), cache: res.headers.get('cache-control'), body: Buffer.from(await res.arrayBuffer()) };
+}
+const filesFor = (url) => {
+  const key = /\/media\/([a-f0-9]{32})-/.exec(url)[1];
+  const dir = path.join(MEDIA_DIR, key.slice(0, 2));
+  return require('node:fs').existsSync(dir) ? require('node:fs').readdirSync(dir).filter((f) => f.startsWith(key)) : [];
+};
+
+test('a profile photo is redrawn as WebP without hidden details, and shown only to signed-in members', async () => {
+  const amina = await makeMember('Amina Photo', 'amina.photo@example.org', 'mentor');
+  state.amina = amina;
+  const r = await upload(amina.me, '/images/avatar', await photo(900, 700));
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  const me = await amina.me.call('GET', '/profile/me');
+  assert.equal(me.body.avatar_url, r.body.avatar_url);
+
+  const got = await media(amina.me, r.body.avatar_url);
+  assert.equal(got.status, 200);
+  assert.equal(got.type, 'image/webp');
+  assert.equal(got.body.subarray(8, 12).toString(), 'WEBP');
+  assert.equal(got.body.includes(Buffer.from('HIDDEN-GPS-MARKER-42')), false);
+  const size = await sharp(got.body).metadata();
+  assert.deepEqual([size.width, size.height], [320, 320]);
+  assert.match(got.cache, /private/);
+  // Not for the public
+  assert.equal((await media(null, r.body.avatar_url)).status, 401);
+
+  // Other members see it on the mentor card
+  const viewer = await makeMember('Photo Viewer', 'photo.viewer@example.org', 'mentee');
+  state.photoViewer = viewer;
+  const cards = await viewer.me.call('GET', '/mentors?available=0&sort=newest');
+  const card = cards.body.items.find((m) => m.mentor_id === amina.id);
+  assert.match(card.avatar_url, /^\/media\/[a-f0-9]{32}-96\.webp$/);
+  assert.equal((await media(viewer.me, card.avatar_url)).status, 200);
+
+  // A new photo replaces the old one, whose files are deleted
+  const old = r.body.avatar_url;
+  const again = await upload(amina.me, '/images/avatar', await photo(400, 400, 'png'), 'image/png');
+  assert.equal(again.status, 201);
+  assert.equal((await media(amina.me, old)).status, 404);
+  assert.deepEqual(filesFor(old), []);
+  assert.equal(filesFor(again.body.avatar_url).length, 2);
+});
+
+test('uploads that are not real images, too big or too small are refused with a clear message', async () => {
+  const m = state.photoViewer.me;
+  const fake = await upload(m, '/images/avatar', Buffer.from('<script>alert(1)</script> not really a png'), 'image/png');
+  assert.equal(fake.status, 415);
+  assert.match(fake.body.error, /JPG, PNG or WebP/);
+  const wrongType = await upload(m, '/images/avatar', await photo(), 'image/svg+xml');
+  assert.equal(wrongType.status, 415);
+  const huge = await upload(m, '/images/avatar', Buffer.alloc(6 * 1024 * 1024, 1));
+  assert.equal(huge.status, 413);
+  assert.match(huge.body.error, /5 MB/);
+  const tiny = await upload(m, '/images/avatar', await photo(40, 40));
+  assert.equal(tiny.status, 400);
+  assert.match(tiny.body.error, /too small/);
+  // Nothing was saved by any of these
+  const [[{ n }]] = await db.execute("SELECT COUNT(*) AS n FROM images WHERE uploaded_by = :id", { id: state.photoViewer.id });
+  assert.equal(Number(n), 0);
+  // Addresses that are not AlumNet's own image names never reach the disk
+  assert.equal((await media(m, '/media/..%2F..%2F.env')).status, 404);
+});
+
+test('an event banner from a mentor waits for an admin before others can see it', async () => {
+  const host = state.amina;
+  const guest = state.photoViewer;
+  const id = await liveCommunityEvent(host, { title: 'Banner test day', eventDate: inDays(25), mode: 'in_person', location: 'Pride Centre, Embakasi', description: 'A day out.' });
+  const other = await makeMember('Other Mentor', 'other.mentor.img@example.org', 'mentor');
+  assert.equal((await upload(other.me, `/images/events/${id}/banner`, await photo(1600, 900))).status, 404);
+
+  const r = await upload(host.me, `/images/events/${id}/banner`, await photo(1600, 900));
+  assert.equal(r.status, 201);
+  assert.equal(r.body.status, 'pending');
+  assert.equal((await guest.me.call('GET', '/events')).body.find((e) => e.event_id === id).banner_url, null);
+
+  const pending = await state.admin.call('GET', '/images/pending');
+  const item = pending.body.find((p) => p.kind === 'event_banner' && p.for_title === 'Banner test day');
+  assert.ok(item);
+  assert.equal((await media(guest.me, item.url)).status, 404);
+  assert.equal((await media(host.me, item.url)).status, 200);
+  assert.equal((await guest.me.call('POST', `/images/pending/${item.image_id}/decision`, { decision: 'approve' })).status, 403);
+
+  const ok = await state.admin.call('POST', `/images/pending/${item.image_id}/decision`, { decision: 'approve' });
+  assert.equal(ok.status, 200);
+  const banner = (await guest.me.call('GET', '/events')).body.find((e) => e.event_id === id).banner_url;
+  assert.match(banner, /-1280\.webp$/);
+  const shown = await media(guest.me, banner);
+  assert.equal(shown.status, 200);
+  const size = await sharp(shown.body).metadata();
+  assert.deepEqual([size.width, size.height], [1280, 480]);
+  assert.ok((await host.me.call('GET', '/notifications')).body.some((n) => n.type === 'image_approved'));
+});
+
+test('photos from a past event need consent, come from people who were there and are checked first', async () => {
+  const host = state.amina;
+  const guest = state.photoViewer;
+  const [made] = await db.execute(
+    `INSERT INTO events (title, description, event_date, mode, location, created_by, status) VALUES ('Past gathering', 'Done', DATE_SUB(NOW(), INTERVAL 3 DAY), 'in_person', 'Embakasi', :h, 'approved')`,
+    { h: host.id }
+  );
+  const id = made.insertId;
+  state.pastEventId = id;
+  await db.execute('INSERT INTO event_registrations (event_id, user_id) VALUES (:e, :u)', { e: id, u: guest.id });
+  const stranger = await makeMember('Not There', 'not.there@example.org', 'mentee');
+
+  assert.equal((await upload(guest.me, `/images/events/${id}/photos`, await photo())).status, 400);
+  assert.equal((await upload(stranger.me, `/images/events/${id}/photos?consent=1`, await photo())).status, 403);
+  const added = await upload(guest.me, `/images/events/${id}/photos?consent=1&caption=${encodeURIComponent('Group photo at the start')}`, await photo());
+  assert.equal(added.status, 201);
+  assert.equal(added.body.status, 'pending');
+  const second = await upload(guest.me, `/images/events/${id}/photos?consent=1`, await photo());
+
+  // Others cannot see it yet; the person who added it can
+  assert.equal((await stranger.me.call('GET', `/images/events/${id}/photos`)).body.photos.length, 0);
+  const own = await guest.me.call('GET', `/images/events/${id}/photos`);
+  assert.equal(own.body.photos.length, 2);
+  assert.equal(own.body.photos[0].caption, 'Group photo at the start');
+
+  assert.equal((await state.admin.call('POST', `/images/pending/${added.body.image_id}/decision`, { decision: 'reject' })).status, 400);
+  assert.equal((await state.admin.call('POST', `/images/pending/${second.body.image_id}/decision`, { decision: 'reject', note: 'Blurry' })).status, 200);
+  assert.equal((await state.admin.call('POST', `/images/pending/${added.body.image_id}/decision`, { decision: 'approve' })).status, 200);
+  const seen = await stranger.me.call('GET', `/images/events/${id}/photos`);
+  assert.equal(seen.body.photos.length, 1);
+  assert.equal(seen.body.can_add, false);
+  assert.equal((await media(stranger.me, seen.body.photos[0].url)).status, 200);
+  assert.ok((await guest.me.call('GET', '/notifications')).body.some((n) => n.type === 'image_rejected' && /Blurry/.test(n.message)));
+  const past = await guest.me.call('GET', '/events/past');
+  const listed = past.body.find((e) => e.event_id === id);
+  assert.equal(listed.photo_count, 1);
+  assert.equal(listed.can_add_photos, true);
+  // Photos cannot be added to an event that has not happened
+  const future = await liveCommunityEvent(host, { title: 'Not yet', eventDate: inDays(9), mode: 'in_person', location: 'Embakasi' });
+  assert.equal((await upload(host.me, `/images/events/${future}/photos?consent=1`, await photo())).status, 409);
+});
+
+test('a company logo waits for review and then shows on the opportunity', async () => {
+  const poster = state.amina;
+  const id = await publish(poster, opp('Logo test role', 'Excel'));
+  const r = await upload(poster.me, `/images/opportunities/${id}/logo`, await photo(300, 120, 'png'), 'image/png');
+  assert.equal(r.status, 201);
+  assert.equal(r.body.status, 'pending');
+  const mine = (await poster.me.call('GET', '/opportunities/mine')).body.find((o) => o.opportunity_id === id);
+  assert.equal(mine.logo_pending, true);
+  const item = (await state.admin.call('GET', '/images/pending')).body.find((p) => p.kind === 'logo');
+  await state.admin.call('POST', `/images/pending/${item.image_id}/decision`, { decision: 'approve' });
+  const listed = (await state.photoViewer.me.call('GET', '/opportunities')).body.find((o) => o.opportunity_id === id);
+  const logo = await media(state.photoViewer.me, listed.logo_url);
+  const size = await sharp(logo.body).metadata();
+  // Logos are never cropped: they are fitted into a square
+  assert.deepEqual([size.width, size.height], [96, 96]);
+});
+
+test('report screenshots are seen only by admins and deleted when the report is closed', async () => {
+  const reporter = state.photoViewer;
+  const sent = await reporter.me.call('POST', '/safety/reports', { targetType: 'user', targetId: state.amina.id, reason: 'harassment', details: 'Rude messages' });
+  assert.equal(sent.status, 201);
+  const reportId = sent.body.reportId;
+  assert.equal((await upload(state.amina.me, `/images/reports/${reportId}/screenshots`, await photo())).status, 404);
+  for (let i = 0; i < 3; i++) assert.equal((await upload(reporter.me, `/images/reports/${reportId}/screenshots`, await photo(1200, 2400))).status, 201);
+  assert.equal((await upload(reporter.me, `/images/reports/${reportId}/screenshots`, await photo())).status, 409);
+
+  const reports = await state.admin.call('GET', '/admin/reports');
+  const group = reports.body.find((g) => g.target_type === 'user' && g.target_id === state.amina.id);
+  const shot = group.reports.find((x) => x.id === reportId).screenshots[0];
+  assert.equal(group.target.avatar_url !== undefined, true);
+  assert.equal((await media(state.admin, shot)).status, 200);
+  assert.match((await media(state.admin, shot)).cache, /no-store/);
+  assert.equal((await media(state.amina.me, shot)).status, 404);
+
+  assert.equal((await state.admin.call('POST', '/admin/reports/resolve', { targetType: 'user', targetId: state.amina.id, action: 'dismiss' })).status, 200);
+  assert.equal((await media(state.admin, shot)).status, 404);
+  const [[{ n }]] = await db.execute("SELECT COUNT(*) AS n FROM images WHERE kind = 'report_evidence' AND report_id = :id", { id: reportId });
+  assert.equal(Number(n), 0);
+});
+
+test('an admin can remove an unsuitable profile photo, and the member is told why', async () => {
+  const detail = await state.admin.call('GET', `/admin/users/${state.amina.id}`);
+  const imageId = detail.body.account.avatar_image_id;
+  assert.ok(imageId);
+  assert.equal((await state.photoViewer.me.call('DELETE', `/images/${imageId}`)).status, 404);
+  assert.equal((await state.admin.call('DELETE', `/images/${imageId}`)).status, 400);
+  assert.equal((await state.admin.call('DELETE', `/images/${imageId}`, { note: 'Please use a photo of yourself' })).status, 200);
+  assert.equal((await state.amina.me.call('GET', '/profile/me')).body.avatar_url, null);
+  assert.ok((await state.amina.me.call('GET', '/notifications')).body.some((n) => n.type === 'image_removed' && /photo of yourself/.test(n.message)));
+  const logs = await state.admin.call('GET', `/admin/users/${state.amina.id}`);
+  assert.ok(logs.body.history.some((h) => h.action_type === 'image_removed'));
+});
+
+test('images whose event is gone are cleaned up, and a deleted account takes its images with it', async () => {
+  const { removeOrphanImages } = require('../src/utils/images');
+  const before = (await db.execute("SELECT storage_key FROM images WHERE event_id = :id", { id: state.pastEventId }))[0];
+  assert.ok(before.length);
+  await db.execute('DELETE FROM event_registrations WHERE event_id = :id', { id: state.pastEventId });
+  await db.execute('DELETE FROM events WHERE event_id = :id', { id: state.pastEventId });
+  assert.ok((await removeOrphanImages()) >= before.length);
+  assert.deepEqual(filesFor(`/media/${before[0].storage_key}-480.webp`), []);
+
+  const leaver = await makeMember('Photo Leaver', 'photo.leaver@example.org', 'mentee');
+  const r = await upload(leaver.me, '/images/avatar', await photo());
+  const exported = await leaver.me.call('GET', '/auth/account/export');
+  assert.equal(exported.body.images_you_uploaded.length, 1);
+  assert.equal(exported.body.images_you_uploaded[0].what, 'profile photo');
+  assert.equal((await leaver.me.call('POST', '/auth/account/delete', { password: 'Passw0rd1' })).status, 200);
+  assert.deepEqual(filesFor(r.body.avatar_url), []);
+  const [[{ n }]] = await db.execute('SELECT COUNT(*) AS n FROM images WHERE uploaded_by = :id', { id: leaver.id });
+  assert.equal(Number(n), 0);
+});
+
+test('an admin sets the organisation logo; it shows before signing in, and only admins can change it', async () => {
+  const before = await client().call('GET', '/config');
+  assert.equal(before.body.brand, null);
+  const wordmark = await sharp({ create: { width: 1200, height: 300, channels: 3, background: '#ffffff' } })
+    .composite([{ input: { create: { width: 900, height: 120, channels: 3, background: '#B5121B' } }, top: 90, left: 150 }]).png().toBuffer();
+  assert.equal((await upload(state.photoViewer.me, '/images/brand', wordmark, 'image/png')).status, 403);
+  const r = await upload(state.admin, '/images/brand', wordmark, 'image/png');
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal(r.body.brand.wide, true);
+  const cfg = await client().call('GET', '/config');
+  assert.equal(cfg.body.brand.wide_url, r.body.brand.wide_url);
+  // Served to people who are not signed in (the sign-in page shows it)
+  const wide = await media(null, cfg.body.brand.wide_url);
+  assert.equal(wide.status, 200);
+  assert.match(wide.cache, /public/);
+  // The white margins were trimmed away: 900 x 120 red bar scaled to fit 640 x 200
+  const size = await sharp(wide.body).metadata();
+  assert.deepEqual([size.width, size.height], [640, 85]);
+  // Other images are never reachable through the public address
+  const avatarKey = /\/media\/([a-f0-9]{32})-/.exec((await state.photoViewer.me.call('GET', '/profile/me')).body.avatar_url || '/media/' + 'a'.repeat(32) + '-96.webp')[1];
+  assert.equal((await media(null, `/brand/${avatarKey}-64.webp`)).status, 404);
+  assert.equal((await state.admin.call('DELETE', '/images/brand')).status, 200);
+  assert.equal((await client().call('GET', '/config')).body.brand, null);
+  assert.equal((await media(null, cfg.body.brand.wide_url)).status, 404);
+});
 
 test('text longer than the database allows gets a clear message, never a server error', async () => {
   const poster = await makeMember('Long Text Mentor', 'long.text@example.org', 'mentor');

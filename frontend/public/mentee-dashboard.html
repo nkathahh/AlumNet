@@ -10,97 +10,63 @@
 
 <body>
     <div class="app-shell">
-        <button id="hamburger-btn" class="hamburger-btn" aria-label="Open menu" aria-expanded="false">
+        <button id="hamburger-btn" class="hamburger-btn" aria-label="Menu" aria-expanded="false" aria-controls="app-sidebar">
             <span></span><span></span><span></span>
         </button>
         <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
-        <div class="topbar-actions">
-            <label class="theme-switch" title="Toggle dark mode">
-                <input type="checkbox" id="theme-toggle-checkbox" aria-label="Dark mode">
-                <span class="switch-track"><span class="switch-thumb"></span></span>
-            </label>
-            <button id="logout-btn" class="icon-btn" aria-label="Log out" title="Log out">⏻</button>
-        </div>
-        <aside class="app-sidebar">
+        <aside class="app-sidebar" id="app-sidebar">
             <div class="app-brand"><span class="mark">KQ</span> AlumNet</div>
             <nav id="sidebar-nav"></nav>
             <div class="app-sidebar-foot"></div>
         </aside>
-        <main class="app-main">
+        <main class="app-main app-main-home">
 
-            <div class="md" id="mentee-dashboard">
-                <header class="md-top">
-                    <p class="md-date" id="me-date"></p>
-                    <h1 class="md-greeting" id="me-greeting">Welcome back</h1>
-                    <p class="md-sub" id="me-sub">Loading your overview...</p>
-                    <div class="md-actions">
-                        <a href="recommendations.html" class="btn btn-primary">Find a mentor</a>
-                        <a href="events.html" class="btn btn-secondary">Browse events</a>
+            <div class="home" id="mentee-dashboard">
+                <section class="home-band" aria-labelledby="me-greeting">
+                    <div class="home-band-top">
+                        <div>
+                            <p class="home-date" id="me-date"></p>
+                            <h1 class="home-title" id="me-greeting">Welcome back</h1>
+                        </div>
+                        <p class="home-muted" id="me-stepword"></p>
                     </div>
-                </header>
-
-                <div id="me-nudge"></div>
-
-                <section class="md-kpis" id="me-kpis">
-                    <div class="md-kpi md-skel"></div>
-                    <div class="md-kpi md-skel"></div>
-                    <div class="md-kpi md-skel"></div>
-                    <div class="md-kpi md-skel"></div>
+                    <ol class="journey" id="me-journey" aria-label="Your mentorship journey"></ol>
                 </section>
 
-                <div class="md-grid">
-                    <div class="md-col">
-                        <section class="md-panel">
-                            <div class="md-panel-head">
-                                <h2>Your mentorship</h2>
-                                <a href="requests.html">My requests</a>
+                <div class="home-body">
+                    <div class="home-col">
+                        <section id="me-next" aria-live="polite"><div class="home-skel"></div></section>
+
+                        <section class="home-section" aria-labelledby="me-matches-h">
+                            <div class="home-section-head">
+                                <h2 id="me-matches-h">Mentors who fit you</h2>
+                                <a class="home-link" href="recommendations.html">See all mentors</a>
                             </div>
-                            <div id="me-mentorship">
-                                <div class="md-skel md-skel-row"></div>
-                            </div>
+                            <div id="me-matches"><div class="home-skel"></div></div>
                         </section>
 
-                        <section class="md-panel">
-                            <div class="md-panel-head">
-                                <h2>Top matches for you</h2>
-                                <a href="recommendations.html">See all</a>
+                        <section class="home-section" aria-labelledby="me-mentorship-h" id="me-mentorship-wrap" hidden>
+                            <div class="home-section-head">
+                                <h2 id="me-mentorship-h">Your mentorship</h2>
+                                <a class="home-link" href="requests.html">My requests</a>
                             </div>
-                            <div id="me-matches">
-                                <div class="md-skel md-skel-row"></div>
-                                <div class="md-skel md-skel-row"></div>
-                            </div>
+                            <div id="me-mentorship"></div>
                         </section>
                     </div>
 
-                    <aside class="md-col">
-                        <section class="md-panel">
-                            <div class="md-panel-head">
-                                <h2>Profile strength</h2>
-                                <a href="profile.html">View profile</a>
-                            </div>
-                            <div id="me-profile">
-                                <div class="md-skel md-skel-row"></div>
-                            </div>
+                    <aside class="home-col home-side" aria-label="Also for you">
+                        <section class="home-section" aria-labelledby="me-events-h">
+                            <h2 id="me-events-h">Coming up</h2>
+                            <div id="me-events"><div class="home-skel"></div></div>
                         </section>
-
-                        <section class="md-panel">
-                            <div class="md-panel-head">
-                                <h2>Upcoming events</h2>
-                                <a href="events.html">All events</a>
-                            </div>
-                            <div id="me-events">
-                                <div class="md-skel md-skel-row"></div>
-                            </div>
+                        <section class="home-section" aria-labelledby="me-opps-h">
+                            <h2 id="me-opps-h">New opportunity</h2>
+                            <div id="me-opps"><div class="home-skel"></div></div>
                         </section>
-
-                        <section class="md-panel">
-                            <div class="md-panel-head">
-                                <h2>Latest opportunities</h2>
-                                <a href="opportunities.html">View all</a>
-                            </div>
-                            <div id="me-opps">
-                                <div class="md-skel md-skel-row"></div>
-                            </div>
+                        <section class="home-section home-guide" aria-labelledby="me-guide-h">
+                            <h2 id="me-guide-h">New to AlumNet?</h2>
+                            <p>A two-minute guide to finding a mentor and what happens next.</p>
+                            <button type="button" class="link-btn home-link" id="me-guide-btn">Read the guide</button>
                         </section>
                     </aside>
                 </div>

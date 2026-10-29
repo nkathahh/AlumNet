@@ -215,6 +215,26 @@ test database on every push.
 3. Point the Render `DB_NAME` (and host settings) at that database and restart. Anything
    written after the backup was made is lost, which is why backups should be frequent.
 
+## Photos and images
+
+Profile photos, event banners, event photos, logos and report screenshots are redrawn as
+WebP when they are uploaded and saved through `backend/src/utils/storage.js`.
+
+- **On your laptop** nothing is needed: files go to `backend/uploads` (ignored by git).
+- **On Render** the free plan's disk is wiped on every deploy, so use a bucket instead.
+  Cloudflare R2 is free up to 10 GB:
+  1. In the Cloudflare dashboard open **R2**, create a bucket called `alumnet-images` and
+     leave public access **off** (AlumNet serves every image and checks who may see it).
+  2. Under **Manage R2 API tokens** create a token with **Object Read & Write** on that
+     bucket. Copy the access key ID, secret and the S3 endpoint
+     (`https://<account-id>.r2.cloudflarestorage.com`).
+  3. Add to Render: `MEDIA_DRIVER=s3`, `S3_BUCKET=alumnet-images`, `S3_ENDPOINT`,
+     `S3_REGION=auto`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`.
+- Images are not in the database backups. R2 keeps them separately; if you need copies,
+  turn on bucket versioning or copy the bucket with `rclone` now and then.
+- At larger scale, put Cloudflare's CDN in front of `/media/*`: the images are already sent
+  with long cache times and new addresses whenever one changes.
+
 ## Security settings to check after deploying
 
 - `ML_API_KEY` must be set on Hugging Face. On a Space the service refuses to start without it

@@ -37,6 +37,13 @@ Strathmore University.
   high-risk result warns the mentor and files a report from "Automatic check". High-risk posters
   are told only that their post needs a closer review, so scammers cannot learn the rules. Mentees can have at most
   five requests waiting and cannot re-ask a mentor who declined within 30 days.
+- **Photos and images:** profile photos, event banners, photos from past events (from the
+  organiser and people who registered, with a consent tick), company logos and screenshots
+  attached to reports. Every upload is checked and redrawn as WebP at fixed sizes, which proves
+  it is a real image and removes hidden details such as a photo's location; the original is
+  never kept. Images from mentors wait for an admin, report screenshots are seen only by admins
+  and deleted when the report closes, and every image is served only to signed-in members.
+  Files go to a local folder or to an S3-compatible bucket such as Cloudflare R2.
 - **Smart moderation:** each post is sorted into a lane. *Hold* (high risk, a blocked website,
   email or link, a burst of posts or one link shared by several accounts) is never published
   automatically. *Queue* needs an admin. *Fast lane* publishes straight away, but only when the
@@ -284,8 +291,11 @@ All demo data is synthetic and does not describe real Kenya Airways staff. Set
 | Record of alerts sent (to limit them to 3 a week) | 90 days |
 | Rate limit counters | 1 day after they expire |
 | Admin activity log | 2 years |
+| Screenshots attached to a report | until the report is closed |
+| Replaced or removed images | deleted straight away |
+| Original uploaded image files | never kept (each upload is redrawn as WebP) |
 | Mentor profile vectors | until the profile changes or the account is deleted |
-| Account, profile and posts | until the member deletes their account |
+| Account, profile, photos and posts | until the member deletes their account |
 
 ## Evaluation
 

@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { avatarUrl } = require('../utils/images');
 const { createNotification, getUserName } = require('../utils/notify');
 const { isBlockedEitherWay, fileAutomaticReport, parseFlags } = require('./safety.controller');
 const { scanText } = require('../utils/scam');
@@ -159,7 +160,7 @@ async function listMyRequests(req, res, next) {
                     (SELECT COUNT(*) FROM mentorship_goals g WHERE g.request_id = r.request_id AND g.done_at IS NOT NULL) AS goals_done,
                     (SELECT COUNT(*) FROM mentorship_meetings mt WHERE mt.request_id = r.request_id) AS meetings,
                     EXISTS(SELECT 1 FROM mentorship_feedback f WHERE f.request_id = r.request_id AND f.user_id = :userId) AS feedback_given,
-                    u.user_id AS other_user_id, u.name AS other_name, u.department AS other_department,
+                    u.user_id AS other_user_id, u.name AS other_name, u.department AS other_department, u.avatar_key AS other_avatar_key,
                     u.email AS other_email, p.headline AS other_headline, sd.employment_status AS other_hr_status
    FROM mentorship_requests r
    JOIN users u ON u.user_id = r.${otherColumn}
@@ -171,8 +172,9 @@ async function listMyRequests(req, res, next) {
         );
 
         // Contact details are shared only once the mentor has accepted
-        res.json(rows.map(({ other_email: email, other_hr_status: hr, risk_flags: flags, ...r }) => ({
+        res.json(rows.map(({ other_email: email, other_hr_status: hr, risk_flags: flags, other_avatar_key: avatarKey, ...r }) => ({
             ...r,
+            other_avatar_url: avatarUrl(avatarKey, 96),
             // Only the person receiving the message sees the caution
             message_warnings: role === 'mentor' ? parseFlags(flags).filter((f) => f.level !== 'low').map((f) => f.label) : [],
             other_verified: Boolean(hr),

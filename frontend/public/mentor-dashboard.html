@@ -10,97 +10,62 @@
 
 <body>
     <div class="app-shell">
-        <button id="hamburger-btn" class="hamburger-btn" aria-label="Open menu" aria-expanded="false">
+        <button id="hamburger-btn" class="hamburger-btn" aria-label="Menu" aria-expanded="false" aria-controls="app-sidebar">
             <span></span><span></span><span></span>
         </button>
         <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
-        <div class="topbar-actions">
-            <label class="theme-switch" title="Toggle dark mode">
-                <input type="checkbox" id="theme-toggle-checkbox" aria-label="Dark mode">
-                <span class="switch-track"><span class="switch-thumb"></span></span>
-            </label>
-            <button id="logout-btn" class="icon-btn" aria-label="Log out" title="Log out">⏻</button>
-        </div>
-        <aside class="app-sidebar">
+        <aside class="app-sidebar" id="app-sidebar">
             <div class="app-brand"><span class="mark">KQ</span> AlumNet</div>
             <nav id="sidebar-nav"></nav>
             <div class="app-sidebar-foot"></div>
         </aside>
-        <main class="app-main">
+        <main class="app-main app-main-home">
 
-            <div class="md" id="mentor-dashboard">
-                <header class="md-top">
-                    <p class="md-date" id="md-date"></p>
-                    <h1 class="md-greeting" id="md-greeting">Welcome back</h1>
-                    <p class="md-sub" id="md-sub">Loading your overview...</p>
-                    <div class="md-actions">
-                        <a href="events.html" class="btn btn-secondary">Propose an event</a>
-                        <a href="opportunities.html" class="btn btn-secondary">Post an opportunity</a>
+            <div class="home" id="mentor-dashboard">
+                <section class="home-band" aria-labelledby="md-greeting">
+                    <div class="home-band-top">
+                        <div>
+                            <p class="home-date" id="md-date"></p>
+                            <h1 class="home-title" id="md-greeting">Welcome back</h1>
+                            <p class="home-lead" id="md-sub">Loading your overview...</p>
+                        </div>
+                        <div class="seats" id="md-seats" aria-labelledby="md-seats-h"></div>
                     </div>
-                </header>
-
-                <div id="md-nudge"></div>
-
-                <section class="md-kpis" id="md-kpis">
-                    <div class="md-kpi md-skel"></div>
-                    <div class="md-kpi md-skel"></div>
-                    <div class="md-kpi md-skel"></div>
-                    <div class="md-kpi md-skel"></div>
                 </section>
 
-                <div class="md-grid">
-                    <div class="md-col">
-                        <section class="md-panel">
-                            <div class="md-panel-head">
-                                <h2>Requests awaiting you</h2>
-                                <a href="requests.html">View all</a>
+                <div class="home-body">
+                    <div class="home-col">
+                        <div id="md-nudge"></div>
+                        <section class="home-section" aria-labelledby="md-pending-h">
+                            <div class="home-section-head">
+                                <h2 id="md-pending-h">Waiting for your answer</h2>
+                                <a class="home-link" href="requests.html">All requests</a>
                             </div>
-                            <div id="md-pending">
-                                <div class="md-skel md-skel-row"></div>
-                                <div class="md-skel md-skel-row"></div>
-                            </div>
+                            <div id="md-pending"><div class="home-skel"></div></div>
                         </section>
 
-                        <section class="md-panel">
-                            <div class="md-panel-head">
-                                <h2>Your mentees</h2>
-                                <a href="requests.html">Manage</a>
+                        <section class="home-section" aria-labelledby="md-mentees-h">
+                            <div class="home-section-head">
+                                <h2 id="md-mentees-h">Your mentees</h2>
+                                <a class="home-link" href="requests.html#accepted">Open workspaces</a>
                             </div>
-                            <div id="md-mentees">
-                                <div class="md-skel md-skel-row"></div>
-                            </div>
+                            <div id="md-mentees"><div class="home-skel"></div></div>
                         </section>
                     </div>
 
-                    <aside class="md-col">
-                        <section class="md-panel">
-                            <div class="md-panel-head">
-                                <h2>Profile strength</h2>
-                                <a href="profile.html">View profile</a>
-                            </div>
-                            <div id="md-profile">
-                                <div class="md-skel md-skel-row"></div>
-                            </div>
+                    <aside class="home-col home-side" aria-label="Also for you">
+                        <section class="home-section" aria-labelledby="md-share-h">
+                            <h2 id="md-share-h">Share with the community</h2>
+                            <p class="home-muted" style="margin-bottom:12px;">Posts are checked before they go live.</p>
+                            <div class="home-actions" id="md-share"></div>
                         </section>
-
-                        <section class="md-panel">
-                            <div class="md-panel-head">
-                                <h2>Upcoming events</h2>
-                                <a href="events.html">All events</a>
-                            </div>
-                            <div id="md-events">
-                                <div class="md-skel md-skel-row"></div>
-                            </div>
+                        <section class="home-section" aria-labelledby="md-contrib-h">
+                            <h2 id="md-contrib-h">Your posts</h2>
+                            <div id="md-contrib"><div class="home-skel"></div></div>
                         </section>
-
-                        <section class="md-panel">
-                            <div class="md-panel-head">
-                                <h2>Your contributions</h2>
-                                <a href="opportunities.html">Opportunities</a>
-                            </div>
-                            <div id="md-contrib">
-                                <div class="md-skel md-skel-row"></div>
-                            </div>
+                        <section class="home-section" aria-labelledby="md-events-h">
+                            <h2 id="md-events-h">Coming up</h2>
+                            <div id="md-events"><div class="home-skel"></div></div>
                         </section>
                     </aside>
                 </div>

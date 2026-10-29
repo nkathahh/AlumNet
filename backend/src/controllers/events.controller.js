@@ -6,6 +6,7 @@ const { annotateEvents } = require('../utils/recommend');
 const { reviewEdit, eventChanges, listInWords } = require('../utils/liveEdit');
 const { tellRegistrants } = require('../utils/eventNotice');
 const { checkText, MAX_CAPACITY } = require('../utils/fields');
+const { imageUrl } = require('../utils/images');
 
 // Loaded lazily: admin.controller requires this file too
 const logAdminAction = (...args) => require('./admin.controller').logAdminAction(...args);
@@ -53,7 +54,7 @@ async function listEvents(req, res, next) {
   try {
     const { userId } = req.user;
     const [rows] = await pool.execute(
-      `SELECT e.event_id, e.title, e.event_date, e.edited_at, e.description, e.topics, e.audience_departments, e.location, e.mode, e.capacity,
+      `SELECT e.event_id, e.title, e.event_date, e.edited_at, e.description, e.topics, e.audience_departments, e.location, e.mode, e.capacity, e.banner_key,
               MAX(u.name) AS organiser_name,
               (MAX(a.user_id IS NOT NULL) = 1 OR e.created_by IS NULL) AS is_official,
               COUNT(r.registration_id) AS attendee_count,
@@ -72,10 +73,11 @@ async function listEvents(req, res, next) {
       { userId }
     );
 
-    const events = rows.map((r) => {
+    const events = rows.map(({ banner_key: bannerKey, ...r }) => {
       const registered = Number(r.is_registered) === 1;
       return {
         ...r,
+        banner_url: imageUrl(bannerKey, 'event_banner', 1280),
         is_registered: registered,
         is_mine: Number(r.is_mine) === 1,
         waitlist_count: Number(r.waitlist_count),
@@ -440,13 +442,55 @@ async function listMyProposals(req, res, next) {
     const { userId } = req.user;
     const [rows] = await pool.execute(
       `SELECT e.event_id, e.title, e.event_date, e.status, e.rejection_reason, e.review_note, e.edited_at, e.cancel_reason,
-              e.description, e.topics, e.audience_departments, e.mode, e.location, e.capacity,
-              (SELECT COUNT(*) FROM event_registrations r WHERE r.event_id = e.event_id) AS attendee_count
+              e.description, e.topics, e.audience_departments, e.mode, e.location, e.capacity, e.banner_key,
+              (SELECT COUNT(*) FROM event_registrations r WHERE r.event_id = e.event_id) AS attendee_count,
+              EXISTS(SELECT 1 FROM images i WHERE i.kind = 'event_banner' AND i.event_id = e.event_id AND i.status = 'pending') AS banner_pending
        FROM events e WHERE e.created_by = :userId
        ORDER BY e.event_date DESC`,
       { userId }
     );
-    res.json(rows);
+    res.json(rows.map(({ banner_key: bannerKey, ...r }) => ({ ...r, banner_url: imageUrl(bannerKey, 'event_banner', 640), banner_pending: Number(r.banner_pending) === 1 })));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/*
+ * Events from the last year that have taken place, with their photos, so
+ * people can look back and add their own pictures.
+ */
+async function listPastEvents(req, res, next) {
+  try {
+    const { userId } = req.user;
+    const [rows] = await pool.execute(
+      `SELECT e.event_id, e.title, e.event_date, e.mode, e.banner_key, e.created_by,
+              COALESCE(u.name, 'Alumni office') AS organiser_name,
+              (a.user_id IS NOT NULL OR e.created_by IS NULL) AS is_official,
+              (SELECT COUNT(*) FROM event_registrations r WHERE r.event_id = e.event_id) AS attendee_count,
+              EXISTS(SELECT 1 FROM event_registrations r WHERE r.event_id = e.event_id AND r.user_id = :userId) AS attended,
+              (SELECT COUNT(*) FROM images i WHERE i.kind = 'event_photo' AND i.event_id = e.event_id AND i.status = 'live') AS photo_count,
+              (SELECT i.storage_key FROM images i WHERE i.kind = 'event_photo' AND i.event_id = e.event_id AND i.status = 'live' ORDER BY i.created_at LIMIT 1) AS cover_key
+       FROM events e
+       LEFT JOIN users u ON u.user_id = e.created_by
+       LEFT JOIN admins a ON a.user_id = e.created_by
+       WHERE e.status = 'approved' AND e.event_date < NOW() AND e.event_date > DATE_SUB(NOW(), INTERVAL 365 DAY)
+       ORDER BY e.event_date DESC LIMIT 60`,
+      { userId }
+    );
+    res.json(rows.map(({ banner_key: bannerKey, cover_key: coverKey, created_by: createdBy, ...r }) => {
+      const attended = Number(r.attended) === 1;
+      const mine = createdBy === userId;
+      return {
+        ...r,
+        is_official: Number(r.is_official) === 1,
+        attendee_count: Number(r.attendee_count),
+        attended,
+        is_mine: mine,
+        photo_count: Number(r.photo_count),
+        can_add_photos: attended || mine || req.user.role === 'admin',
+        cover_url: imageUrl(coverKey, 'event_photo', 480) || imageUrl(bannerKey, 'event_banner', 640)
+      };
+    }));
   } catch (err) {
     next(err);
   }
@@ -464,6 +508,7 @@ async function listDepartments(req, res, next) {
 }
 
 module.exports = {
+  listPastEvents,
   listDepartments,
   cleanTargeting,
   validateEventInput,

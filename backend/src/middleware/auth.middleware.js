@@ -82,6 +82,8 @@ async function requireAuth(req, res, next) {
       setSessionCookie(req, res, { userId: decoded.userId, role: decoded.role, sessionVersion: u.session_version, at: signedInAt });
     }
     req.user = { userId: decoded.userId, role: decoded.role, twoFactorEnabled: Boolean(u.totp_enabled) };
+    // Images on the page still load while the privacy or two-factor message is showing
+    if (req.method === 'GET' && req.originalUrl.startsWith('/media/')) return next();
     // The privacy notice changed since they last accepted it
     if (u.privacy_version !== PRIVACY_VERSION && !PRIVACY_EXEMPT.has(`${req.method} ${req.originalUrl.split('?')[0]}`)) {
       return res.status(403).json({
