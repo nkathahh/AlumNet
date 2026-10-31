@@ -1,3 +1,10 @@
+// The page's file name, e.g. "settings.html". Cloudflare Pages serves pages
+// without ".html" (/settings), so both forms give the same answer.
+function currentPage() {
+  const last = location.pathname.split('/').pop() || 'index.html';
+  return last.includes('.') ? last : `${last}.html`;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   wireAuthToggleTransition();
   initTheme();
@@ -74,7 +81,7 @@ const AUTH_PATHS = ['/auth/login', '/auth/google', '/auth/2fa/verify', '/auth/si
     const path = url.slice(API_BASE.length);
     if (res.status === 401 && !AUTH_PATHS.some((p) => path.startsWith(p))) {
       clearSession();
-      const page = location.pathname.split('/').pop();
+      const page = currentPage();
       if (PAGE_ROLES[page] || page === 'onboarding.html') window.location.href = 'login.html?expired=1';
     }
     if (res.status === 403 && path !== '/auth/privacy') {
@@ -102,7 +109,7 @@ function clearSession() {
 (function followSessionChanges() {
   window.addEventListener('storage', (e) => {
     if (!['alumnet_signed_in_at', 'alumnet_role', 'alumnet_token'].includes(e.key) && e.key !== null) return;
-    const page = location.pathname.split('/').pop();
+    const page = currentPage();
     if (PAGE_ROLES[page] || page === 'onboarding.html') window.location.reload();
   });
 })();
@@ -116,7 +123,7 @@ let twoFactorPromptShown = false;
 function showTwoFactorSetupPrompt() {
   if (twoFactorPromptShown || privacyPromptShown) return;
   twoFactorPromptShown = true;
-  if (location.pathname.split('/').pop() === 'settings.html') {
+  if (currentPage() === 'settings.html') {
     const banner = document.getElementById('st-2fa-reset');
     if (banner) banner.style.display = 'block';
     return;
@@ -163,7 +170,7 @@ function showPrivacyUpdate(version) {
     window.location.reload();
   };
 
-  if (location.pathname.split('/').pop() === 'settings.html') {
+  if (currentPage() === 'settings.html') {
     const host = document.getElementById('settings-page');
     if (!host) return;
     const banner = document.createElement('div');
@@ -364,7 +371,7 @@ function wireAuthToggleTransition() {
 }
 
 function guardRoute() {
-  const page = location.pathname.split('/').pop();
+  const page = currentPage();
   const allowed = PAGE_ROLES[page];
   if (!allowed) return;
   const token = localStorage.getItem('alumnet_token');
@@ -378,7 +385,7 @@ function renderSidebar() {
   if (!nav) return;
   const role = localStorage.getItem('alumnet_role');
   const groups = NAV_CONFIG[role] || [];
-  const currentPage = location.pathname.split('/').pop();
+  const thisPage = currentPage();
   const aside = nav.closest('.app-sidebar');
   if (aside) aside.classList.toggle('is-admin', role === 'admin');
   nav.setAttribute('aria-label', 'Main');
@@ -393,11 +400,11 @@ function renderSidebar() {
     applyBrand(cachedBrand());
   }
 
-  const onAdminPage = currentPage === 'admin.html';
+  const onAdminPage = thisPage === 'admin.html';
   const linkHTML = (l) => {
     const inner = `${navIcon(l.icon)}<span class="nav-label">${l.label}</span>`;
     if (l.href) {
-      const here = l.href === currentPage;
+      const here = l.href === thisPage;
       return `<a class="nav-link ${here ? 'active' : ''}" href="${l.href}"${here ? ' aria-current="page"' : ''}>${inner}</a>`;
     }
     // Tabs switch in place on the admin page; from other pages they open admin.html at that tab
@@ -411,7 +418,7 @@ function renderSidebar() {
       ${g.links.map(linkHTML).join('')}
     </div>`).join('');
 
-  renderSidebarFoot(role, currentPage);
+  renderSidebarFoot(role, thisPage);
 }
 
 /* ---------- The organisation's logo ---------- */
@@ -512,10 +519,10 @@ function wireBranding() {
 const ROLE_WORD = { mentee: 'Mentee', mentor: 'Mentor', admin: 'Admin' };
 
 // Who is signed in, Account settings, Dark mode and Sign out, always in the same place
-function renderSidebarFoot(role, currentPage) {
+function renderSidebarFoot(role, pageName) {
   const foot = document.querySelector('.app-sidebar-foot');
   if (!foot) return;
-  const settingsHere = currentPage === 'settings.html';
+  const settingsHere = pageName === 'settings.html';
   const dark = (localStorage.getItem('alumnet_theme') || 'light') === 'dark';
   foot.innerHTML = `
     <a class="side-user" href="${role === 'admin' ? 'settings.html' : 'profile.html'}">
@@ -5957,7 +5964,7 @@ function openFromLink(list, idKey, opener) {
   const id = new URLSearchParams(location.search).get('open');
   if (!id) return;
   const item = list.find((x) => String(x[idKey]) === id);
-  history.replaceState(null, '', location.pathname.split('/').pop());
+  history.replaceState(null, '', location.pathname.split('/').pop() || currentPage());
   if (item) opener(item);
 }
 

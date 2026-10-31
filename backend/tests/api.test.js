@@ -1919,6 +1919,47 @@ test('an admin sets the organisation logo; it shows before signing in, and only 
   assert.equal((await media(null, cfg.body.brand.wide_url)).status, 404);
 });
 
+test('behind the gateway: requests without the shared secret are refused, and images can live in the database', async () => {
+  // A second copy of the server, set up as on the Hugging Face Space
+  const port = Number(PORT) - 3;
+  const env = { ...process.env, NODE_ENV: 'test', PORT: String(port), JWT_SECRET, APP_URL: ROOT, GATEWAY_SECRET: 'gateway-test-secret',
+    MEDIA_DRIVER: 'db', SMTP_USER: '', SMTP_PASS: '', BREVO_API_KEY: '', ADMIN_2FA_REQUIRED: 'true', ML_SERVICE_URL: 'http://127.0.0.1:1' };
+  const copy = spawn(process.execPath, [path.join(__dirname, '..', 'src', 'server.js')], { env, stdio: 'ignore' });
+  try {
+    const base = `http://localhost:${port}`;
+    for (let i = 0; i < 50; i++) { try { if ((await fetch(`${base}/health`)).ok) break; } catch { /* starting */ } await wait(200); }
+    // Health checks need no secret; everything else does
+    assert.equal((await fetch(`${base}/health`)).status, 200);
+    assert.equal((await fetch(`${base}/api/config`)).status, 403);
+    assert.equal((await fetch(`${base}/api/config`, { headers: { 'x-alumnet-gateway': 'wrong' } })).status, 403);
+    const gw = { 'x-alumnet-gateway': 'gateway-test-secret', 'x-client-ip': '198.51.100.23', 'X-Requested-With': 'AlumNet' };
+    assert.equal((await fetch(`${base}/api/config`, { headers: gw })).status, 200);
+
+    // Sign in through the "gateway", upload a photo, and it is stored in the database
+    const login = await fetch(`${base}/api/auth/login`, { method: 'POST', headers: { ...gw, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'photo.viewer@example.org', password: 'Passw0rd1' }) });
+    assert.equal(login.status, 200);
+    const cookie = login.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
+    const up = await fetch(`${base}/api/images/avatar`, { method: 'POST', headers: { ...gw, Cookie: cookie, 'Content-Type': 'image/jpeg' }, body: await photo(500, 500) });
+    assert.equal(up.status, 201);
+    const { avatar_url: url } = await up.json();
+    const key = /\/media\/([a-f0-9]{32})-/.exec(url)[1];
+    const [rows] = await db.execute('SELECT name FROM media_files WHERE name LIKE :k', { k: `${key}-%` });
+    assert.equal(rows.length, 2);
+    const got = await fetch(base + url, { headers: { ...gw, Cookie: cookie } });
+    assert.equal(got.status, 200);
+    assert.equal(Buffer.from(await got.arrayBuffer()).subarray(8, 12).toString(), 'WEBP');
+    // The visitor's address from the gateway is the one rate limits count
+    const [[hit]] = await db.execute("SELECT COUNT(*) AS n FROM rate_limits WHERE rl_key LIKE '%198.51.100.23%'");
+    assert.ok(Number(hit.n) >= 1);
+    // Removing the photo removes its rows
+    assert.equal((await fetch(`${base}/api/images/avatar`, { method: 'DELETE', headers: { ...gw, Cookie: cookie } })).status, 200);
+    const [left] = await db.execute('SELECT name FROM media_files WHERE name LIKE :k', { k: `${key}-%` });
+    assert.equal(left.length, 0);
+  } finally {
+    await new Promise((resolve) => { copy.once('exit', resolve); copy.kill('SIGTERM'); });
+  }
+});
+
 test('text longer than the database allows gets a clear message, never a server error', async () => {
   const poster = await makeMember('Long Text Mentor', 'long.text@example.org', 'mentor');
   const x = (n) => 'x'.repeat(n);

@@ -1,12 +1,14 @@
 /*
- * Where image files are kept. Two interchangeable stores:
+ * Where image files are kept. Three interchangeable stores:
  *
  * - "local" (the default): a folder on this server, backend/uploads unless
  *   MEDIA_DIR says otherwise. Fine on a laptop or a server with a lasting disk.
- * - "s3": any S3-compatible bucket, such as Cloudflare R2 or Amazon S3. Use
- *   this on hosts whose disk is wiped on every deploy (Render's free plan),
- *   or when several copies of the server run. Set MEDIA_DRIVER=s3 and the
- *   S3_* settings in .env.
+ * - "db": a table in the MySQL database (media_files). Use this on free hosts
+ *   whose disk is wiped on every restart (a Hugging Face Space) when no bucket
+ *   is available. Images are small WebP files, so this suits a project of
+ *   this size; the database's own backups then include them.
+ * - "s3": any S3-compatible bucket, such as Cloudflare R2 or Amazon S3, for
+ *   larger deployments. Set MEDIA_DRIVER=s3 and the S3_* settings in .env.
  *
  * The bucket stays private: files are always served through AlumNet, which
  * checks who may see each one (see images.controller.js).
@@ -42,6 +44,31 @@ function localStore() {
     },
     async remove(name) {
       await fs.promises.unlink(full(name)).catch((err) => { if (err.code !== 'ENOENT') throw err; });
+    }
+  };
+}
+
+const SAFE_NAME = /^[a-f0-9]{32}-\d{2,4}\.webp$/;
+
+function dbStore() {
+  // Loaded when first used, so the local store never touches the database here
+  const pool = require('../config/db');
+  const { Readable } = require('stream');
+  const check = (name) => { if (!SAFE_NAME.test(name)) throw new Error('Bad file name'); return name; };
+  return {
+    name: 'db',
+    async put(name, buffer) {
+      await pool.execute(
+        'INSERT INTO media_files (name, data) VALUES (:name, :data) ON DUPLICATE KEY UPDATE data = VALUES(data)',
+        { name: check(name), data: buffer }
+      );
+    },
+    async get(name) {
+      const [[row]] = await pool.execute('SELECT data FROM media_files WHERE name = :name', { name: check(name) });
+      return row ? Readable.from([row.data]) : null;
+    },
+    async remove(name) {
+      await pool.execute('DELETE FROM media_files WHERE name = :name', { name: check(name) });
     }
   };
 }
@@ -82,7 +109,7 @@ function s3Store() {
 
 let store;
 function storage() {
-  if (!store) store = DRIVER === 's3' ? s3Store() : localStore();
+  if (!store) store = DRIVER === 's3' ? s3Store() : DRIVER === 'db' ? dbStore() : localStore();
   return store;
 }
 

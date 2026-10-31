@@ -1,146 +1,182 @@
 # Deploying AlumNet
 
-AlumNet runs online on three free services:
+AlumNet is deployed on free plans, following the routes in the course's Sprint III
+deployment guide: **Cloudflare** for the public address and gateway (Example 1) and
+**Hugging Face Docker Spaces** for the server and the model (Example 3, Route A).
 
-| Part | Host | Why |
+```
+Browser ──HTTPS──▶ Cloudflare Pages ──(gateway secret)──▶ Hugging Face Space: alumnet-api
+                    pages + gateway                          Node/Express server
+                    function                                  │            │
+                                                              │ ML_API_KEY │ TLS
+                                                              ▼            ▼
+                                             Hugging Face Space:     Aiven MySQL
+                                             alumnet-ml (BGE model)  (managed database)
+```
+
+| Part | Host | Where it is in the course guide |
 |---|---|---|
-| Database | Aiven for MySQL (free plan) | Managed MySQL 8 with encrypted connections |
-| ML service | Hugging Face Spaces (Docker, free CPU) | 16 GB of memory, enough for PyTorch and the model |
-| Backend and frontend | Render (free web service) | Runs the Node server, which also serves the pages |
+| Pages and gateway | Cloudflare Pages, deployed from GitHub `main` | Example 1, steps 3 to 6 |
+| Server (Express API) | Hugging Face Docker Space `alumnet-api` | Example 3, Route A ("a Docker Space when a custom runtime is needed") |
+| Matching model | Hugging Face Docker Space `alumnet-ml`, pinned model revision | Example 3, Route A |
+| Database | Aiven for MySQL, free plan | Example 2: "an appropriate managed database" |
+| Releases | GitHub Actions: tests, then publish to both Spaces | Example 3: "synchronising Spaces with GitHub Actions" |
 
-Do the steps in this order: each one needs details from the one before. Keep a private note
-of every password and key as you go. Never put them in the repository.
+**Why this combination.** Cloudflare Pages serves static pages and small functions, so it
+cannot run the Express server and its MySQL connection; the guide itself notes that Pages
+"serves the frontend, not" a backend. The AWS route (Example 2) uses billable resources, and no
+credit is provided. A Docker Space runs the unchanged server for free, and the Pages function
+acts as the gateway in front of it. None of the course examples hosts MySQL, so the database is
+on Aiven's free plan, with an encrypted connection. Agree this route with the supervisor.
+
+**Why the gateway is a Pages Function, not a separate Worker.** Example 1 puts the gateway on
+its own `api.` subdomain of a custom domain. AlumNet's sign-in uses a first-party cookie on the
+same address as the pages, and there is no paid domain yet, so the gateway runs as a Pages
+Function (a Cloudflare Worker that Pages deploys with the site) on the same address. If you
+later register the free Namecheap `.me` domain from the GitHub Student Pack, attach it in
+Pages → Custom domains (Example 1, steps 1, 2 and 5); nothing else changes.
+
+Do the steps in order: each one needs details from the one before. Keep a private note of
+every password and key. Never put them in the repository.
 
 ## Before you start
 
-Generate three random secrets. In PowerShell, run this three times and keep all three results:
+Generate four random secrets. In PowerShell, run this four times and keep the results:
 
 ```
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-The first is your `JWT_SECRET`, the second is your `ML_API_KEY` and the third is your
-`TOTP_ENC_KEY` (it encrypts two-factor secrets; never change it after people turn on two-factor).
+They are `JWT_SECRET`, `ML_API_KEY`, `TOTP_ENC_KEY` and `GATEWAY_SECRET`. If you are copying your
+local database (step 1), use your local `JWT_SECRET` and `TOTP_ENC_KEY` instead, so existing
+two-factor codes keep working. Never change `TOTP_ENC_KEY` after people turn on two-factor.
 
 ## 1. Database on Aiven
 
-1. Sign up at aiven.io and create a service: **MySQL**, **Free plan**.
-2. When it is running, open the service's **Overview** and note the **Host**, **Port**,
-   **User** (`avnadmin`) and **Password**. Download the **CA certificate** (`ca.pem`).
-3. In MySQL Workbench, add a connection to Aiven with that host, port, user and password.
-   On the **SSL** tab set *Use SSL* to **Require and Verify CA** and choose `ca.pem` as the
-   *SSL CA File*. Test the connection.
-4. Copy your local data across:
-   1. Connect to your **local** database. Choose **Server → Data Export**, tick `alumnet`,
-      select **Dump Structure and Data** and **Export to Self-Contained File**.
-      Under **Advanced Options**, set **set-gtid-purged** to **OFF**. Start the export.
-   2. Connect to **Aiven**. Choose **Server → Data Import**, pick the file, set
-      **Default Target Schema** to a new schema called `alumnet`, and start the import.
-5. Check that the tables and demo accounts are there.
-6. Write down the region you chose for Aiven here, and later for Render, Hugging Face and Brevo.
-   The privacy notice tells members their data may be kept outside Kenya; your report should name
-   the regions.
-7. From then on, apply new migrations to Aiven with the runner instead of by hand. On your
-   laptop, put the Aiven values in `backend/.env` for a moment (or set them in the terminal),
-   then from the `backend` folder run `npm run migrate -- --baseline=NNN` once with the last
-   migration the copied database already had, and `npm run migrate` after every update.
-   Put your local values back afterwards.
+1. Sign up at aiven.io (no card needed) and create a service: **MySQL**, **Free plan**.
+2. When it is running, note the **Host**, **Port**, **User** (`avnadmin`) and **Password**, and
+   download the **CA certificate** (`ca.pem`).
+3. In MySQL Workbench, add a connection to Aiven with those details. On the **SSL** tab set
+   *Use SSL* to **Require and Verify CA** and choose `ca.pem`. Test the connection.
+4. Either start empty (the server creates every table itself on first start), or copy your
+   local data:
+   1. Connect to your **local** database. **Server → Data Export**, tick `alumnet`, choose
+      **Dump Structure and Data** and **Export to Self-Contained File**. Under
+      **Advanced Options**, set **set-gtid-purged** to **OFF**.
+   2. Connect to **Aiven**. **Server → Data Import**, pick the file and set the
+      **Default Target Schema** to a new schema called `alumnet`.
+   3. The photo files stayed on your laptop, so clear the links to them:
+      ```
+      USE alumnet;
+      UPDATE users SET avatar_key = NULL;
+      UPDATE events SET banner_key = NULL;
+      UPDATE career_opportunities SET logo_key = NULL;
+      DELETE FROM images;
+      DELETE FROM app_settings WHERE setting_key LIKE 'brand_logo%';
+      ```
+   Starting empty instead: create the schema `alumnet` in Workbench, and after step 3 create the
+   first admin from your laptop with the Aiven settings in the terminal:
+   `node scripts/create-admin.js "Full Name" you@example.com <password>`.
+5. Note the region you chose. The privacy notice says data may be kept outside Kenya, and the
+   report should name the regions of Aiven, Hugging Face and Cloudflare.
 
-## 2. ML service on Hugging Face Spaces
+## 2. The two Hugging Face Spaces
 
-1. Sign up at huggingface.co. Choose **New → Space**.
-   - Name: `alumnet-ml`
-   - SDK: **Docker** (Blank template)
-   - Hardware: **CPU basic** (free)
-   - Visibility: **Public**. The service still refuses requests without your `ML_API_KEY`.
-2. In the Space, open **Files → Add file → Upload files** and upload these three files from
-   the `ml-service` folder: `Dockerfile`, `app.py` and `requirements-deploy.txt`. Commit.
-3. Open **Settings → Variables and secrets** and add these as **secrets**:
+1. Sign up at huggingface.co. If your supervisor agrees, ask to join the Strathmore
+   organisation (`SU-students-ai-321`) and create the Spaces there; otherwise use your own
+   account, as the course guide allows.
+2. Create two Spaces, both **Docker** (Blank), **CPU basic** (free), **Public**:
+   `alumnet-api` and `alumnet-ml`. Leave them empty: GitHub fills them in step 4.
+3. In **alumnet-ml → Settings → Variables and secrets**, add these **secrets**:
 
    | Name | Value |
    |---|---|
-   | `DB_HOST` | Aiven host |
-   | `DB_PORT` | Aiven port |
-   | `DB_USER` | `avnadmin` |
-   | `DB_PASSWORD` | Aiven password |
+   | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` | from Aiven (or the read-mostly user below) |
    | `DB_NAME` | `alumnet` |
    | `DB_SSL_CA` | the full text of `ca.pem`, including the BEGIN and END lines |
-   | `ML_API_KEY` | your second secret |
+   | `ML_API_KEY` | your `ML_API_KEY` |
+   | `MODEL_REVISION` | the commit id of the model release (see below) |
 
-4. The Space builds for about 10 minutes. When it shows **Running**, open
-   `https://<your-username>-alumnet-ml.hf.space/health`. It should show `{"status":"ok"}`.
-
-## 3. Backend and frontend on Render
-
-1. Run `npm install` in `backend` on your computer first, then commit and push. This updates
-   `package-lock.json` with the new packages, which Render needs.
-2. Sign in at render.com with GitHub. Choose **New → Web Service** and pick the AlumNet
-   repository.
-   - Root directory: leave empty
-   - Runtime: **Node**
-   - Build command: `cd backend && npm install`
-   - Start command: `cd backend && npm start`
-   - Instance type: **Free**
-   - Health check path (under Advanced): `/health`
-3. Add these environment variables:
+   The model revision: open huggingface.co/BAAI/bge-small-en-v1.5 → **Files and versions** →
+   **History**, and copy the id of the newest commit. Record it in Chapter 5: the service loads
+   exactly that release, and its `/health` page reports it.
+4. In **alumnet-api → Settings → Variables and secrets**, add these **secrets**:
 
    | Name | Value |
    |---|---|
-   | `NODE_ENV` | `production` |
-   | `APP_URL` | your Render address, for example `https://alumnet.onrender.com` |
    | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` | from Aiven |
    | `DB_NAME` | `alumnet` |
    | `DB_SSL` | `true` |
    | `DB_SSL_CA` | the full text of `ca.pem` |
-   | `JWT_SECRET` | your first secret |
+   | `JWT_SECRET`, `TOTP_ENC_KEY` | as in "Before you start" |
    | `JWT_EXPIRES_IN` | `7d` |
-   | `TOTP_ENC_KEY` | your third secret |
-   | `ML_SERVICE_URL` | `https://<your-username>-alumnet-ml.hf.space` |
-   | `ML_API_KEY` | your second secret |
-   | `GOOGLE_CLIENT_ID` | your Google OAuth client ID |
-   | `BREVO_API_KEY` and `MAIL_FROM` | see step 5 |
-   | `MAIL_DEV_REDIRECT` | your own email address |
+   | `ML_SERVICE_URL` | `https://<username>-alumnet-ml.hf.space` |
+   | `ML_API_KEY` | your `ML_API_KEY` |
+   | `GATEWAY_SECRET` | your `GATEWAY_SECRET` |
+   | `APP_URL` | your Cloudflare address from step 3, for example `https://alumnet.pages.dev` |
+   | `MEDIA_DRIVER` | `db` (images are kept in the database: a Space's disk is wiped on restart) |
+   | `BREVO_API_KEY`, `MAIL_FROM`, `MAIL_DEV_REDIRECT` | optional, see step 6 |
 
-4. Create the service. The first deploy takes a few minutes. Open your Render address: you
-   should see the AlumNet login page.
+## 3. Pages and gateway on Cloudflare
 
-## 4. Allow Google sign-in on the live site
+1. Sign up at cloudflare.com (no card needed for Pages). **Workers & Pages → Create →
+   Pages → Connect to Git**, and authorise only the AlumNet repository.
+2. Settings:
+   - Production branch: **main**
+   - Framework preset: **None**
+   - Build command: leave empty
+   - Build output directory: `frontend/public`
+   - Root directory: leave empty (the gateway in `functions/` is found from there)
+3. Under **Settings → Variables and secrets** (Production), add `BACKEND_URL` =
+   `https://<username>-alumnet-api.hf.space` and `GATEWAY_SECRET` (choose **Encrypt**). Then
+   **Deployments → Retry deployment** so the function picks them up.
+4. Note your address (for example `https://alumnet.pages.dev`) and put it in the API Space's
+   `APP_URL` secret.
 
-In Google Cloud Console, open **APIs & Services → Credentials**, edit your OAuth client and
-add your Render address (for example `https://alumnet.onrender.com`) under **Authorised
-JavaScript origins**. Keep `http://localhost:4000` for local use.
+## 4. Connect GitHub to the Spaces
 
-While the consent screen is in **Testing**, only the test users you added can sign in. Add
-each Google account you will demo with, or choose **Publish app**. The app only asks for
-name, email and profile, so publishing needs no Google review.
+1. On Hugging Face: **Settings → Access Tokens → Create new token**, type **Write** (or a
+   fine-grained token with write access to the two Spaces only).
+2. On GitHub: **Settings → Secrets and variables → Actions**.
+   - **Secrets:** `HF_TOKEN` = the token.
+   - **Variables:** `HF_USERNAME` = your Hugging Face username (or the organisation's name).
+3. Open **Actions → Deploy → Run workflow**. From now on, every push to `main` that passes CI is
+   published to both Spaces automatically, labelled with its commit.
+4. Each Space builds for about 10 minutes the first time. `alumnet-api` applies the database
+   migrations when it starts.
 
-## 5. Email on the live site
+## 5. Check the live release (and keep the evidence)
 
-Render's free plan blocks outgoing email over SMTP, so the live site sends email through
-Brevo's web API instead:
+1. `https://<username>-alumnet-ml.hf.space/health` shows `"status": "ok"`, the model and its
+   revision.
+2. `https://<username>-alumnet-api.hf.space/api/config` shows *"Open AlumNet from its main
+   address"*: the server refuses anything that skips the gateway.
+3. On your Cloudflare address: sign in as mentee, mentor and admin (the admin needs two-factor).
+   As a mentee open **Find a mentor**. As admin upload the logo in **Branding**.
+4. Failure tests the guide asks for: pause the `alumnet-ml` Space (Settings → Pause) and search
+   for a mentor (keyword search takes over); sign in, wait for the session to end and try again;
+   send an image that is too large.
+5. Record in Chapter 5: the three URLs, the commit shown on the Spaces, the model revision,
+   regions, and screenshots of these tests.
 
-1. Sign up at brevo.com (free: 300 emails a day).
-2. Under **Senders, domains and dedicated IPs → Senders**, add your Gmail address and
-   verify it.
-3. Under **SMTP & API → API keys**, create a key.
-4. In Render, set `BREVO_API_KEY` to the key and `MAIL_FROM` to the verified Gmail address.
+## 6. Optional: Google sign-in and email
 
-If email is not set up, reset links appear in Render's **Logs** tab instead.
+- **Google sign-in:** in Google Cloud Console → Credentials, add your Cloudflare address under
+  **Authorised JavaScript origins**, and set `GOOGLE_CLIENT_ID` on the API Space.
+- **Email:** Spaces cannot send over SMTP, so use Brevo's web API: sign up at brevo.com (free:
+  300 emails a day), verify your Gmail as a sender, create an API key and set `BREVO_API_KEY`
+  and `MAIL_FROM` on the API Space. `MAIL_DEV_REDIRECT` sends every email to your own inbox
+  during the demo. Without email, reset links appear in the API Space's **Logs**.
 
-## 6. Check the live site
+## Limits of the free plans
 
-1. Log in as each demo account with its email. Turn on two-factor for the admin account first,
-   because the admin tools stay locked without it.
-2. As a mentee, open **Find a mentor**. The first request after the Space has been idle can
-   take up to a minute.
-3. Use **Forgot password** and confirm the email arrives in your `MAIL_DEV_REDIRECT` inbox.
-4. Turn on two-factor in **Account settings**, log out and back in with a code.
-5. Sign in with Google using an account whose email matches, or one you linked in settings.
-
-## Before a demo
-
-Free services sleep when idle: Render after 15 minutes, Hugging Face after 48 hours. Open
-the site and load **Find a mentor** once, a few minutes before you present.
+- A free Space sleeps after 48 hours without visits and takes a minute or two to wake. Open
+  the site, and **Find a mentor**, a few minutes before a demo.
+- Cloudflare Pages Functions: 100,000 requests a day on the free plan; pages and images do not
+  count, only `/api`, `/media`, `/brand` and `/health`.
+- Aiven's free MySQL is small and has one node. Make your own backups (below).
+- Every free offer can change. Record the plan and the date you checked it, and what you will
+  do after assessment (keep or delete the Spaces, the Pages project and the Aiven service).
 
 ## Least privilege for the matching service
 
@@ -212,7 +248,7 @@ test database on every push.
    `RESTORE_DB_PORT`, `RESTORE_DB_USER`, `RESTORE_DB_PASSWORD`, `RESTORE_DB_SSL=true` and
    `RESTORE_DB_SSL_CA` set to the new service in the terminal. It builds `alumnet_restore_test`
    there and checks it.
-3. Point the Render `DB_NAME` (and host settings) at that database and restart. Anything
+3. Point the API Space's `DB_NAME` (and host settings) at that database and restart it. Anything
    written after the backup was made is lost, which is why backups should be frequent.
 
 ## Photos and images
@@ -221,17 +257,12 @@ Profile photos, event banners, event photos, logos and report screenshots are re
 WebP when they are uploaded and saved through `backend/src/utils/storage.js`.
 
 - **On your laptop** nothing is needed: files go to `backend/uploads` (ignored by git).
-- **On Render** the free plan's disk is wiped on every deploy, so use a bucket instead.
-  Cloudflare R2 is free up to 10 GB:
-  1. In the Cloudflare dashboard open **R2**, create a bucket called `alumnet-images` and
-     leave public access **off** (AlumNet serves every image and checks who may see it).
-  2. Under **Manage R2 API tokens** create a token with **Object Read & Write** on that
-     bucket. Copy the access key ID, secret and the S3 endpoint
-     (`https://<account-id>.r2.cloudflarestorage.com`).
-  3. Add to Render: `MEDIA_DRIVER=s3`, `S3_BUCKET=alumnet-images`, `S3_ENDPOINT`,
-     `S3_REGION=auto`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`.
-- Images are not in the database backups. R2 keeps them separately; if you need copies,
-  turn on bucket versioning or copy the bucket with `rclone` now and then.
+- **On the Hugging Face Space** set `MEDIA_DRIVER=db`: a Space's disk is wiped whenever it
+  restarts, so the WebP files are kept in the `media_files` table and are included in the
+  database backups.
+- **At larger scale** use a bucket: `MEDIA_DRIVER=s3` with Cloudflare R2 or Amazon S3
+  (`S3_BUCKET`, `S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`).
+  Keep the bucket private: AlumNet serves every image and checks who may see it.
 - At larger scale, put Cloudflare's CDN in front of `/media/*`: the images are already sent
   with long cache times and new addresses whenever one changes.
 
@@ -240,5 +271,7 @@ WebP when they are uploaded and saved through `backend/src/utils/storage.js`.
 - `ML_API_KEY` must be set on Hugging Face. On a Space the service refuses to start without it
   (it detects the Space automatically), so a missing key shows up as a failed build, not an open
   service.
-- `TOTP_ENC_KEY` must be set on Render before anyone turns on two-factor, and never changed.
+- `TOTP_ENC_KEY` must be set on the API Space before anyone turns on two-factor, and never changed.
+- `GATEWAY_SECRET` must be the same on the API Space and in Cloudflare Pages. Without it on the
+  Space, the server would accept requests that skip the gateway.
 - Admin sessions end after 30 minutes without use, so expect to sign in again after a break.

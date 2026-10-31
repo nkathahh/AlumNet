@@ -17,8 +17,33 @@ const pool = require('./config/db');
 
 const app = express();
 
-// Needed behind a hosting proxy (Render) so rate limiting sees real client addresses
+// Needed behind a hosting proxy so rate limiting sees real client addresses
 app.set('trust proxy', 1);
+
+/*
+ * Behind the Cloudflare gateway (see gateway/proxy.js), requests must carry
+ * the shared GATEWAY_SECRET. The backend's own address on Hugging Face is
+ * public, so without this anyone could skip the gateway. The gateway also
+ * passes on the visitor's real address, which rate limits and sign-up checks
+ * use; it can only be trusted because the secret proves where it came from.
+ * Without GATEWAY_SECRET (on a laptop or in the tests) nothing changes.
+ */
+const GATEWAY_SECRET = process.env.GATEWAY_SECRET || '';
+if (GATEWAY_SECRET) {
+  const crypto = require('crypto');
+  const net = require('net');
+  const expected = crypto.createHash('sha256').update(GATEWAY_SECRET).digest();
+  app.use((req, res, next) => {
+    if (req.path === '/health') return next();
+    const supplied = crypto.createHash('sha256').update(req.get('x-alumnet-gateway') || '').digest();
+    if (!crypto.timingSafeEqual(supplied, expected)) {
+      return res.status(403).json({ error: 'Open AlumNet from its main address.' });
+    }
+    const ip = String(req.get('x-client-ip') || '').trim();
+    if (net.isIP(ip)) Object.defineProperty(req, 'ip', { value: ip, configurable: true });
+    next();
+  });
+}
 
 // Security headers on every response. The content security policy only
 // allows scripts from AlumNet itself and Google's sign-in, so injected
@@ -164,7 +189,7 @@ setInterval(() => require('./controllers/moderation.controller').remindStale(), 
 const PORT = process.env.PORT || 4000;
 const server = app.listen(PORT, () => console.log(`AlumNet running at http://localhost:${PORT}`));
 
-// Stop cleanly when asked (Render redeploying, or the tests finishing): finish
+// Stop cleanly when asked (the host redeploying, or the tests finishing): finish
 // requests in progress, close the database pool, then exit. A clean exit is
 // also what lets the coverage tool record which code the tests ran.
 function shutDown() {

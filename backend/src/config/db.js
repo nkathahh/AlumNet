@@ -22,7 +22,7 @@ const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   namedPlaceholders: true,
-  // Times are Nairobi time wherever the server runs (Render and Aiven use UTC),
+  // Times are Nairobi time wherever the server runs (hosts and Aiven use UTC),
   // so "2 pm" stays 2 pm and NOW() matches what members see
   timezone: '+03:00'
 });
