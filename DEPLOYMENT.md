@@ -1,33 +1,37 @@
 # Deploying AlumNet
 
-AlumNet is deployed on free plans, following the routes in the course's Sprint III
-deployment guide: **Cloudflare** for the public address and gateway (Example 1) and
-**Hugging Face Docker Spaces** for the server and the model (Example 3, Route A).
+AlumNet is deployed on free and student plans, following the course's Sprint III deployment
+guide: **Cloudflare** for the public address and gateway (Example 1) and **Azure Container
+Apps** for the server and the model, paid for by **Azure for Students** credit (the alternative
+the guide names under "Plan credits around the chosen host").
 
 ```
-Browser ──HTTPS──▶ Cloudflare Pages ──(gateway secret)──▶ Hugging Face Space: alumnet-api
+Browser ──HTTPS──▶ Cloudflare Pages ──(gateway secret)──▶ Azure Container App: alumnet-api
                     pages + gateway                          Node/Express server
-                    function                                  │            │
-                                                              │ ML_API_KEY │ TLS
-                                                              ▼            ▼
-                                             Hugging Face Space:     Aiven MySQL
-                                             alumnet-ml (BGE model)  (managed database)
+                    function                                  │               │
+                                                              │ internal only │ TLS
+                                                              │ + ML_API_KEY  │
+                                                              ▼               ▼
+                                             Azure Container App:      Aiven MySQL
+                                             alumnet-ml (BGE model)    (managed database)
 ```
 
 | Part | Host | Where it is in the course guide |
 |---|---|---|
 | Pages and gateway | Cloudflare Pages, deployed from GitHub `main` | Example 1, steps 3 to 6 |
-| Server (Express API) | Hugging Face Docker Space `alumnet-api` | Example 3, Route A ("a Docker Space when a custom runtime is needed") |
-| Matching model | Hugging Face Docker Space `alumnet-ml`, pinned model revision | Example 3, Route A |
+| Server (Express API) | Azure Container App `alumnet-api` | "Azure credit, which may support an alternative deployment agreed with your supervisor" |
+| Matching model | Azure Container App `alumnet-ml`, pinned model revision, no public address | Same; model loaded from the Hugging Face Hub at a fixed revision (Example 3) |
 | Database | Aiven for MySQL, free plan | Example 2: "an appropriate managed database" |
-| Releases | GitHub Actions: tests, then publish to both Spaces | Example 3: "synchronising Spaces with GitHub Actions" |
+| Releases | GitHub Actions: tests, then build both containers, labelled with the commit | Example 3: a sync workflow from GitHub `main` |
 
 **Why this combination.** Cloudflare Pages serves static pages and small functions, so it
-cannot run the Express server and its MySQL connection; the guide itself notes that Pages
-"serves the frontend, not" a backend. The AWS route (Example 2) uses billable resources, and no
-credit is provided. A Docker Space runs the unchanged server for free, and the Pages function
-acts as the gateway in front of it. None of the course examples hosts MySQL, so the database is
-on Aiven's free plan, with an encrypted connection. Agree this route with the supervisor.
+cannot run the Express server and its MySQL connection, and a free Worker allows only 10 ms of
+processing per request, too little for password checks. Hugging Face Docker Spaces stopped
+being free in July 2026, and the AWS route (Example 2) uses billable resources. Azure for
+Students gives $100 of credit with no card, and Container Apps has a free monthly allowance
+(180,000 vCPU-seconds and 2 million requests) and can scale to zero, so a demo deployment costs
+nothing or very little of the credit. None of the course examples hosts MySQL, so the database
+is on Aiven's free plan, with an encrypted connection. Agree this route with the supervisor.
 
 **Why the gateway is a Pages Function, not a separate Worker.** Example 1 puts the gateway on
 its own `api.` subdomain of a custom domain. AlumNet's sign-in uses a first-party cookie on the
@@ -41,15 +45,15 @@ every password and key. Never put them in the repository.
 
 ## Before you start
 
-Generate four random secrets. In PowerShell, run this four times and keep the results:
+From your local `backend\.env`, copy `JWT_SECRET` and `TOTP_ENC_KEY` into your private notes.
+The Azure setup script asks for them, and reusing them keeps two-factor working for the
+accounts you copy across. It makes `ML_API_KEY` and `GATEWAY_SECRET` itself. Never change
+`TOTP_ENC_KEY` after people turn on two-factor. If you start with an empty database, make
+the two values with:
 
 ```
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
-
-They are `JWT_SECRET`, `ML_API_KEY`, `TOTP_ENC_KEY` and `GATEWAY_SECRET`. If you are copying your
-local database (step 1), use your local `JWT_SECRET` and `TOTP_ENC_KEY` instead, so existing
-two-factor codes keep working. Never change `TOTP_ENC_KEY` after people turn on two-factor.
 
 ## 1. Database on Aiven
 
@@ -61,122 +65,134 @@ two-factor codes keep working. Never change `TOTP_ENC_KEY` after people turn on 
 4. Either start empty (the server creates every table itself on first start), or copy your
    local data:
    1. Connect to your **local** database. **Server → Data Export**, tick `alumnet`, choose
-      **Dump Structure and Data** and **Export to Self-Contained File**. Under
-      **Advanced Options**, set **set-gtid-purged** to **OFF**.
+      **Dump Structure and Data** and **Export to Self-Contained File**, and tick
+      **Include Create Schema**. Under **Advanced Options**, set **set-gtid-purged** to **OFF**.
    2. Connect to **Aiven**. **Server → Data Import**, pick the file and set the
-      **Default Target Schema** to a new schema called `alumnet`.
+      **Default Target Schema** to a new schema called `alumnet`. Click **Start Import**.
    3. The photo files stayed on your laptop, so clear the links to them:
       ```
       USE alumnet;
+      SET SQL_SAFE_UPDATES = 0;
       UPDATE users SET avatar_key = NULL;
       UPDATE events SET banner_key = NULL;
       UPDATE career_opportunities SET logo_key = NULL;
       DELETE FROM images;
       DELETE FROM app_settings WHERE setting_key LIKE 'brand_logo%';
+      SET SQL_SAFE_UPDATES = 1;
       ```
+   If the import fails with *"Unable to create or change a table without a primary key"*, set
+   `sql_require_primary_key` to off in Aiven → Service settings → Advanced configuration.
    Starting empty instead: create the schema `alumnet` in Workbench, and after step 3 create the
    first admin from your laptop with the Aiven settings in the terminal:
    `node scripts/create-admin.js "Full Name" you@example.com <password>`.
-5. Note the region you chose. The privacy notice says data may be kept outside Kenya, and the
-   report should name the regions of Aiven, Hugging Face and Cloudflare.
+5. The free plan powers the service off after a long period without use. If the site stops
+   working, check that it is running in the Aiven console. Note the region for the report.
 
-## 2. The two Hugging Face Spaces
+## 2. Publish the two containers from GitHub
 
-1. Sign up at huggingface.co. If your supervisor agrees, ask to join the Strathmore
-   organisation (`SU-students-ai-321`) and create the Spaces there; otherwise use your own
-   account, as the course guide allows.
-2. Create two Spaces, both **Docker** (Blank), **CPU basic** (free), **Public**:
-   `alumnet-api` and `alumnet-ml`. Leave them empty: GitHub fills them in step 4.
-3. In **alumnet-ml → Settings → Variables and secrets**, add these **secrets**:
+1. Get the model revision: open huggingface.co/BAAI/bge-small-en-v1.5 → **Files and
+   versions** → **History**, and copy the id of the newest commit. Record it in Chapter 5.
+2. On GitHub: **Settings → Secrets and variables → Actions → Variables → New repository
+   variable**: `MODEL_REVISION` = that id. The matching service is built with exactly that
+   release of the model and loads the same one when it runs.
+3. **Actions → Deploy → Run workflow**. It builds `alumnet-api` and `alumnet-ml` (about 10
+   minutes the first time) and stores them in GitHub's container registry, labelled with the
+   commit. From now on this happens after every push to `main` that passes CI.
+4. Make the two images public so Azure can fetch them: on your GitHub profile open
+   **Packages**, then for each of `alumnet-api` and `alumnet-ml`: **Package settings → Change
+   visibility → Public**. They contain no secrets: `.env` files are never copied in.
 
-   | Name | Value |
-   |---|---|
-   | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` | from Aiven (or the read-mostly user below) |
-   | `DB_NAME` | `alumnet` |
-   | `DB_SSL_CA` | the full text of `ca.pem`, including the BEGIN and END lines |
-   | `ML_API_KEY` | your `ML_API_KEY` |
-   | `MODEL_REVISION` | the commit id of the model release (see below) |
+## 3. The two Container Apps on Azure
 
-   The model revision: open huggingface.co/BAAI/bge-small-en-v1.5 → **Files and versions** →
-   **History**, and copy the id of the newest commit. Record it in Chapter 5: the service loads
-   exactly that release, and its `/health` page reports it.
-4. In **alumnet-api → Settings → Variables and secrets**, add these **secrets**:
+1. Go to azure.microsoft.com/free/students, choose **Start free** and verify with your
+   Strathmore email. No card is needed.
+2. In the Azure portal, open **Cloud Shell** (the `>_` icon at the top), choose **Bash** and
+   **No storage account required**.
+3. Use **Manage files → Upload** to upload `ca.pem` and `deploy/azure/setup.sh` from your
+   AlumNet folder, then run:
+   ```
+   bash setup.sh
+   ```
+   It asks for the Aiven details, `JWT_SECRET` and `TOTP_ENC_KEY` (typed without being shown),
+   and creates:
+   - `alumnet-ml`: 1 vCPU and 2 GiB, **internal only**, so it has no public address at all and
+     only `alumnet-api` can reach it, still with `ML_API_KEY`.
+   - `alumnet-api`: 0.5 vCPU and 1 GiB, public HTTPS address, refusing anything without the
+     gateway secret. It applies the database migrations when it starts.
+   Both scale to zero when nobody is using them, which keeps them inside the free allowance.
+   Every password and key is stored as a Container Apps secret, not a plain setting.
+4. If Azure refuses the region (*"RequestDisallowedByPolicy"*), run it again and choose one of
+   the regions your subscription allows (shown in the error), ideally near your Aiven region.
+5. Copy the two values it prints at the end, `BACKEND_URL` and `GATEWAY_SECRET`, into your
+   private notes.
 
-   | Name | Value |
-   |---|---|
-   | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` | from Aiven |
-   | `DB_NAME` | `alumnet` |
-   | `DB_SSL` | `true` |
-   | `DB_SSL_CA` | the full text of `ca.pem` |
-   | `JWT_SECRET`, `TOTP_ENC_KEY` | as in "Before you start" |
-   | `JWT_EXPIRES_IN` | `7d` |
-   | `ML_SERVICE_URL` | `https://<username>-alumnet-ml.hf.space` |
-   | `ML_API_KEY` | your `ML_API_KEY` |
-   | `GATEWAY_SECRET` | your `GATEWAY_SECRET` |
-   | `APP_URL` | your Cloudflare address from step 3, for example `https://alumnet.pages.dev` |
-   | `MEDIA_DRIVER` | `db` (images are kept in the database: a Space's disk is wiped on restart) |
-   | `BREVO_API_KEY`, `MAIL_FROM`, `MAIL_DEV_REDIRECT` | optional, see step 6 |
+**Later releases.** Each Deploy run page shows two `az containerapp update` commands. Paste
+them into Cloud Shell to switch the live site to that release. To make this automatic, add a
+secret `AZURE_CREDENTIALS` (from `az ad sp create-for-rbac --role contributor --scopes
+/subscriptions/<id>/resourceGroups/alumnet --json-auth`) and a variable `AZURE_RESOURCE_GROUP`
+= `alumnet` on GitHub; student subscriptions sometimes do not allow this, and the commands
+work either way.
 
-## 3. Pages and gateway on Cloudflare
+## 4. Pages and gateway on Cloudflare
 
 1. Sign up at cloudflare.com (no card needed for Pages). **Workers & Pages → Create →
    Pages → Connect to Git**, and authorise only the AlumNet repository.
 2. Settings:
+   - Project name: `alumnet` (your address becomes `https://alumnet.pages.dev`; if the name
+     is taken, use the address Cloudflare gives you and update `APP_URL`, below)
    - Production branch: **main**
    - Framework preset: **None**
    - Build command: leave empty
    - Build output directory: `frontend/public`
    - Root directory: leave empty (the gateway in `functions/` is found from there)
-3. Under **Settings → Variables and secrets** (Production), add `BACKEND_URL` =
-   `https://<username>-alumnet-api.hf.space` and `GATEWAY_SECRET` (choose **Encrypt**). Then
-   **Deployments → Retry deployment** so the function picks them up.
-4. Note your address (for example `https://alumnet.pages.dev`) and put it in the API Space's
-   `APP_URL` secret.
-
-## 4. Connect GitHub to the Spaces
-
-1. On Hugging Face: **Settings → Access Tokens → Create new token**, type **Write** (or a
-   fine-grained token with write access to the two Spaces only).
-2. On GitHub: **Settings → Secrets and variables → Actions**.
-   - **Secrets:** `HF_TOKEN` = the token.
-   - **Variables:** `HF_USERNAME` = your Hugging Face username (or the organisation's name).
-3. Open **Actions → Deploy → Run workflow**. From now on, every push to `main` that passes CI is
-   published to both Spaces automatically, labelled with its commit.
-4. Each Space builds for about 10 minutes the first time. `alumnet-api` applies the database
-   migrations when it starts.
+3. Open **Environment variables (advanced)** and add `BACKEND_URL` and `GATEWAY_SECRET` from
+   step 3 (choose **Encrypt** for the secret). **Save and Deploy**.
+4. If your address is not `https://alumnet.pages.dev`, update the server in Cloud Shell:
+   `az containerapp update -n alumnet-api -g alumnet --set-env-vars APP_URL=https://<your address>`
 
 ## 5. Check the live release (and keep the evidence)
 
-1. `https://<username>-alumnet-ml.hf.space/health` shows `"status": "ok"`, the model and its
-   revision.
-2. `https://<username>-alumnet-api.hf.space/api/config` shows *"Open AlumNet from its main
-   address"*: the server refuses anything that skips the gateway.
-3. On your Cloudflare address: sign in as mentee, mentor and admin (the admin needs two-factor).
+1. `https://<alumnet-api address>/api/config` shows *"Open AlumNet from its main address"*:
+   the server refuses anything that skips the gateway. `alumnet-ml` has no public address to
+   test, which is the point.
+2. On your Cloudflare address: sign in as mentee, mentor and admin (the admin needs two-factor).
    As a mentee open **Find a mentor**. As admin upload the logo in **Branding**.
-4. Failure tests the guide asks for: pause the `alumnet-ml` Space (Settings → Pause) and search
-   for a mentor (keyword search takes over); sign in, wait for the session to end and try again;
-   send an image that is too large.
-5. Record in Chapter 5: the three URLs, the commit shown on the Spaces, the model revision,
-   regions, and screenshots of these tests.
+3. Failure tests the guide asks for: stop `alumnet-ml` (portal → alumnet-ml → **Stop**) and search for a mentor (keyword search takes over), then
+   start it again; sign in, wait for the session to end and try again; send an image that is
+   too large.
+4. Release evidence: `az containerapp show -n alumnet-api -g alumnet --query
+   "properties.template.containers[0].image" -o tsv` shows the image and commit that is live;
+   the Deploy run page shows the same commit and the model revision.
+5. Record in Chapter 5: the Cloudflare address, the commit, the model revision, the Azure and
+   Aiven regions, the date, and screenshots of these tests.
 
 ## 6. Optional: Google sign-in and email
 
 - **Google sign-in:** in Google Cloud Console → Credentials, add your Cloudflare address under
-  **Authorised JavaScript origins**, and set `GOOGLE_CLIENT_ID` on the API Space.
-- **Email:** Spaces cannot send over SMTP, so use Brevo's web API: sign up at brevo.com (free:
-  300 emails a day), verify your Gmail as a sender, create an API key and set `BREVO_API_KEY`
-  and `MAIL_FROM` on the API Space. `MAIL_DEV_REDIRECT` sends every email to your own inbox
-  during the demo. Without email, reset links appear in the API Space's **Logs**.
+  **Authorised JavaScript origins**, and set `GOOGLE_CLIENT_ID` on `alumnet-api`
+  (`az containerapp update ... --set-env-vars GOOGLE_CLIENT_ID=...`).
+- **Email:** use Brevo's web API: sign up at brevo.com (free: 300 emails a day), verify your
+  Gmail as a sender, create an API key and add it as a secret on `alumnet-api`
+  (`az containerapp secret set ... --secrets brevo-key=<key>`, then
+  `--set-env-vars BREVO_API_KEY=secretref:brevo-key MAIL_FROM=<your email>`).
+  `MAIL_DEV_REDIRECT` sends every email to your own inbox during the demo. Without email,
+  reset links appear in `alumnet-api`'s **Log stream**.
 
 ## Limits of the free plans
 
-- A free Space sleeps after 48 hours without visits and takes a minute or two to wake. Open
-  the site, and **Find a mentor**, a few minutes before a demo.
+- Both containers scale to zero. The first visit after a quiet period waits about 10 seconds
+  for the server and up to a minute for the matching service (search uses keywords until it is
+  ready). Open the site, and **Find a mentor**, a few minutes before a demo.
+- Container Apps beyond the free allowance is charged to the $100 student credit. When the
+  credit is used up the subscription is disabled, not charged to a card. Check **Cost
+  Management** in the portal before and after a demo.
 - Cloudflare Pages Functions: 100,000 requests a day on the free plan; pages and images do not
   count, only `/api`, `/media`, `/brand` and `/health`.
-- Aiven's free MySQL is small and has one node. Make your own backups (below).
+- Aiven's free MySQL is small, has one node and powers off when unused for a long time. Make
+  your own backups (below).
 - Every free offer can change. Record the plan and the date you checked it, and what you will
-  do after assessment (keep or delete the Spaces, the Pages project and the Aiven service).
+  do after assessment (keep or delete the Container Apps, the Pages project and the Aiven
+  service).
 
 ## Least privilege for the matching service
 
@@ -192,8 +208,7 @@ GRANT SELECT ON alumnet.staff_directory TO 'alumnet_ml'@'%';
 GRANT SELECT, INSERT, UPDATE ON alumnet.profile_embeddings TO 'alumnet_ml'@'%';
 ```
 
-Use this user's details for `DB_USER` and `DB_PASSWORD` in the Hugging Face
-Space. If the service is ever compromised, it cannot change accounts, posts
+Use this user's details for `DB_USER` and `DB_PASSWORD` on `alumnet-ml`. If the service is ever compromised, it cannot change accounts, posts
 or reports.
 
 
@@ -248,7 +263,7 @@ test database on every push.
    `RESTORE_DB_PORT`, `RESTORE_DB_USER`, `RESTORE_DB_PASSWORD`, `RESTORE_DB_SSL=true` and
    `RESTORE_DB_SSL_CA` set to the new service in the terminal. It builds `alumnet_restore_test`
    there and checks it.
-3. Point the API Space's `DB_NAME` (and host settings) at that database and restart it. Anything
+3. Point `alumnet-api`'s `DB_NAME` (and host settings) at that database and restart it. Anything
    written after the backup was made is lost, which is why backups should be frequent.
 
 ## Photos and images
@@ -257,8 +272,8 @@ Profile photos, event banners, event photos, logos and report screenshots are re
 WebP when they are uploaded and saved through `backend/src/utils/storage.js`.
 
 - **On your laptop** nothing is needed: files go to `backend/uploads` (ignored by git).
-- **On the Hugging Face Space** set `MEDIA_DRIVER=db`: a Space's disk is wiped whenever it
-  restarts, so the WebP files are kept in the `media_files` table and are included in the
+- **On Azure Container Apps** set `MEDIA_DRIVER=db` (the setup script does): a container's disk is
+  wiped whenever it restarts, so the WebP files are kept in the `media_files` table and are included in the
   database backups.
 - **At larger scale** use a bucket: `MEDIA_DRIVER=s3` with Cloudflare R2 or Amazon S3
   (`S3_BUCKET`, `S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`).
@@ -268,10 +283,10 @@ WebP when they are uploaded and saved through `backend/src/utils/storage.js`.
 
 ## Security settings to check after deploying
 
-- `ML_API_KEY` must be set on Hugging Face. On a Space the service refuses to start without it
-  (it detects the Space automatically), so a missing key shows up as a failed build, not an open
-  service.
-- `TOTP_ENC_KEY` must be set on the API Space before anyone turns on two-factor, and never changed.
-- `GATEWAY_SECRET` must be the same on the API Space and in Cloudflare Pages. Without it on the
-  Space, the server would accept requests that skip the gateway.
+- `ML_API_KEY` must be set on `alumnet-ml`. Its image sets `ML_REQUIRE_KEY=1`, so the service
+  refuses to start without the key, and a missing key shows up as a failed start, not an open
+  service. It also has no public address (internal ingress).
+- `TOTP_ENC_KEY` must be set on `alumnet-api` before anyone turns on two-factor, and never changed.
+- `GATEWAY_SECRET` must be the same on `alumnet-api` and in Cloudflare Pages. Without it on the
+  server, the server would accept requests that skip the gateway.
 - Admin sessions end after 30 minutes without use, so expect to sign in again after a break.

@@ -1,13 +1,17 @@
 name: Deploy
 
-# Publishes a tested release to the two Hugging Face Spaces: the AlumNet
-# server (alumnet-api) and the matching service (alumnet-ml). It runs only
-# after the CI workflow has passed on main, so untested code is never
-# deployed. Cloudflare Pages deploys the pages itself from main.
+# Publishes a tested release. It runs only after the CI workflow has passed on
+# main, so untested code is never deployed. It builds the two containers, the
+# AlumNet server (alumnet-api) and the matching service (alumnet-ml), labels
+# them with the commit, and stores them in GitHub's container registry (GHCR).
+# Azure Container Apps runs them. Cloudflare Pages deploys the pages itself
+# from main.
 #
 # Needs, under Settings > Secrets and variables > Actions:
-#   secret   HF_TOKEN      a Hugging Face access token with write access
-#   variable HF_USERNAME   your Hugging Face username (or the organisation's)
+#   variable MODEL_REVISION     the evaluated commit of BAAI/bge-small-en-v1.5
+#   optional secret AZURE_CREDENTIALS, plus variable AZURE_RESOURCE_GROUP:
+#     when set, the Container Apps are switched to the new release here.
+#     Without them, the run page shows the two commands to run in Azure Cloud Shell.
 
 on:
   workflow_run:
@@ -20,64 +24,109 @@ concurrency:
   group: deploy
   cancel-in-progress: false
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
-  spaces:
-    name: Publish to Hugging Face Spaces
+  images:
+    name: Build and publish the containers
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-24.04
+    env:
+      # The commit CI tested, not whatever is newest
+      RELEASE: ${{ github.event.workflow_run.head_sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
-          # The commit CI tested, not whatever is newest
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ env.RELEASE }}
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Prepare the two Space folders
+      - name: Prepare the two build folders
         run: |
           mkdir -p out/api out/ml
-          # Server: its Dockerfile and description, the backend and the migrations (no tests, no secrets)
-          cp deploy/api-space/Dockerfile deploy/api-space/README.md deploy/api-space/.dockerignore out/api/
+          # Server: its Dockerfile, the backend and the migrations (no tests, no secrets)
+          cp deploy/api-space/Dockerfile deploy/api-space/.dockerignore out/api/
           rsync -a --exclude node_modules --exclude tests --exclude uploads --exclude coverage --exclude '.env' --exclude '.env.*' backend out/api/
           cp backend/.env.example out/api/backend/.env.example
           cp -r database out/api/
-          # Matching service: the files its Dockerfile uses
-          cp ml-service/Dockerfile ml-service/app.py ml-service/requirements-deploy.txt out/ml/
-          cp deploy/ml-space/README.md out/ml/
+          # Matching service: only the files its Dockerfile uses
+          cp ml-service/Dockerfile ml-service/.dockerignore ml-service/app.py ml-service/requirements-deploy.txt out/ml/
 
-      - name: Upload to the Spaces
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          HF_USERNAME: ${{ vars.HF_USERNAME }}
-          RELEASE: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - name: Work out the image names
         run: |
-          pip install huggingface_hub==0.26.2
-          python - <<'PY'
-          import os
-          from huggingface_hub import HfApi
-          api = HfApi(token=os.environ["HF_TOKEN"])
-          owner = os.environ["HF_USERNAME"]
-          release = os.environ["RELEASE"][:7]
-          for name, folder in [("alumnet-api", "out/api"), ("alumnet-ml", "out/ml")]:
-              repo = f"{owner}/{name}"
-              api.create_repo(repo, repo_type="space", space_sdk="docker", exist_ok=True)
-              # delete_patterns removes files that are no longer in the release
-              api.upload_folder(repo_id=repo, repo_type="space", folder_path=folder,
-                                commit_message=f"Release {release} from GitHub main", delete_patterns=["*"])
-              print(f"Published {release} to https://huggingface.co/spaces/{repo}")
-          PY
+          owner="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          echo "API_IMAGE=ghcr.io/${owner}/alumnet-api" >> "$GITHUB_ENV"
+          echo "ML_IMAGE=ghcr.io/${owner}/alumnet-ml" >> "$GITHUB_ENV"
+          echo "TAG=${RELEASE:0:7}" >> "$GITHUB_ENV"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push the server
+        uses: docker/build-push-action@v6
+        with:
+          context: out/api
+          push: true
+          tags: ${{ env.API_IMAGE }}:${{ env.TAG }},${{ env.API_IMAGE }}:latest
+          labels: org.opencontainers.image.revision=${{ env.RELEASE }}
+
+      - name: Build and push the matching service
+        uses: docker/build-push-action@v6
+        with:
+          context: out/ml
+          push: true
+          build-args: MODEL_REVISION=${{ vars.MODEL_REVISION || 'main' }}
+          tags: ${{ env.ML_IMAGE }}:${{ env.TAG }},${{ env.ML_IMAGE }}:latest
+          labels: org.opencontainers.image.revision=${{ env.RELEASE }}
+
+      - name: Check whether Azure sign-in is set up
+        id: azure
+        env:
+          CREDS: ${{ secrets.AZURE_CREDENTIALS }}
+        run: echo "ready=$([ -n "$CREDS" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Sign in to Azure
+        if: steps.azure.outputs.ready == 'true'
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Switch the Container Apps to this release
+        if: steps.azure.outputs.ready == 'true'
+        env:
+          GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+        run: |
+          az containerapp update --name alumnet-ml --resource-group "$GROUP" --image "$ML_IMAGE:$TAG" --revision-suffix "r$TAG"
+          az containerapp update --name alumnet-api --resource-group "$GROUP" --image "$API_IMAGE:$TAG" --revision-suffix "r$TAG"
 
       - name: Record the release on the run page
         env:
-          RELEASE: ${{ github.event.workflow_run.head_sha || github.sha }}
-          HF_USERNAME: ${{ vars.HF_USERNAME }}
+          READY: ${{ steps.azure.outputs.ready }}
+          GROUP: ${{ vars.AZURE_RESOURCE_GROUP || 'alumnet' }}
+          MODEL: ${{ vars.MODEL_REVISION || 'main (not pinned)' }}
         run: |
           {
-            echo "## Released ${RELEASE:0:7}"
+            echo "## Release ${TAG}"
             echo ""
-            echo "- Server: https://huggingface.co/spaces/${HF_USERNAME}/alumnet-api"
-            echo "- Matching service: https://huggingface.co/spaces/${HF_USERNAME}/alumnet-ml"
-            echo "- Pages: deployed by Cloudflare Pages from the same commit on main"
+            echo "Commit: \`${RELEASE}\`  "
+            echo "Model: BAAI/bge-small-en-v1.5 at revision \`${MODEL}\`"
+            echo ""
+            echo "- Server image: \`${API_IMAGE}:${TAG}\`"
+            echo "- Matching service image: \`${ML_IMAGE}:${TAG}\`"
+            echo ""
+            if [ "$READY" = "true" ]; then
+              echo "Both Container Apps were switched to this release."
+            else
+              echo "To switch the live site to this release, run in Azure Cloud Shell:"
+              echo ""
+              echo '```'
+              echo "az containerapp update --name alumnet-ml --resource-group ${GROUP} --image ${ML_IMAGE}:${TAG}"
+              echo "az containerapp update --name alumnet-api --resource-group ${GROUP} --image ${API_IMAGE}:${TAG}"
+              echo '```'
+            fi
           } >> "$GITHUB_STEP_SUMMARY"

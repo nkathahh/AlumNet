@@ -1,5 +1,5 @@
-# AlumNet server (Node and Express) for a Hugging Face Docker Space.
-# The deploy workflow copies this file, backend/ and database/ into the Space.
+# AlumNet server (Node and Express). The deploy workflow builds it from this
+# file, backend/ and database/, and Azure Container Apps runs it.
 # The pages themselves are served by Cloudflare Pages, not from here.
 FROM node:22-slim
 
@@ -7,7 +7,7 @@ ENV NODE_ENV=production \
     PORT=7860 \
     MEDIA_DRIVER=db
 WORKDIR /home/node/app
-# Spaces run containers as user 1000, which is "node" in this image
+# Run as the image's ordinary "node" user, never as root
 RUN chown node:node /home/node/app
 USER node
 
