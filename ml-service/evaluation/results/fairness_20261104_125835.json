@@ -1,0 +1,105 @@
+{
+  "run_at": "2026-11-04T12:58:34",
+  "settings": {
+    "mentees": 40,
+    "capacity": 3,
+    "trials": 200,
+    "seed": 7,
+    "mentors": 20,
+    "mentee_profiles": 15,
+    "places_total": 60,
+    "band_points": 2,
+    "model": "BAAI/bge-small-en-v1.5",
+    "labels_used": true
+  },
+  "scenarios": {
+    "Without the free-places rule, mentee picks the first": {
+      "gini": {
+        "mean": 0.315,
+        "sd": 0.011
+      },
+      "mentors_with_none": {
+        "mean": 4.205,
+        "sd": 0.844
+      },
+      "relevant_share": {
+        "mean": 0.645,
+        "sd": 0.071
+      },
+      "mean_label": {
+        "mean": 1.425,
+        "sd": 0.125
+      },
+      "unplaced": {
+        "mean": 0,
+        "sd": 0.0
+      }
+    },
+    "With the free-places rule, mentee picks the first": {
+      "gini": {
+        "mean": 0.309,
+        "sd": 0.012
+      },
+      "mentors_with_none": {
+        "mean": 3.88,
+        "sd": 0.772
+      },
+      "relevant_share": {
+        "mean": 0.661,
+        "sd": 0.069
+      },
+      "mean_label": {
+        "mean": 1.461,
+        "sd": 0.119
+      },
+      "unplaced": {
+        "mean": 0,
+        "sd": 0.0
+      }
+    },
+    "Without the free-places rule, mentee picks one of the top 3": {
+      "gini": {
+        "mean": 0.304,
+        "sd": 0.014
+      },
+      "mentors_with_none": {
+        "mean": 3.48,
+        "sd": 0.836
+      },
+      "relevant_share": {
+        "mean": 0.308,
+        "sd": 0.072
+      },
+      "mean_label": {
+        "mean": 0.864,
+        "sd": 0.137
+      },
+      "unplaced": {
+        "mean": 0,
+        "sd": 0.0
+      }
+    },
+    "With the free-places rule, mentee picks one of the top 3": {
+      "gini": {
+        "mean": 0.296,
+        "sd": 0.016
+      },
+      "mentors_with_none": {
+        "mean": 3.05,
+        "sd": 0.926
+      },
+      "relevant_share": {
+        "mean": 0.315,
+        "sd": 0.077
+      },
+      "mean_label": {
+        "mean": 0.884,
+        "sd": 0.142
+      },
+      "unplaced": {
+        "mean": 0,
+        "sd": 0.0
+      }
+    }
+  }
+}

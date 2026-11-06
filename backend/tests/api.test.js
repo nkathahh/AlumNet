@@ -11,7 +11,7 @@
  */
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
-const { spawn } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
 const path = require('node:path');
 const bcrypt = require('bcrypt');
 const mysql = require('mysql2/promise');
@@ -1246,6 +1246,35 @@ test('mentees can save mentors to a shortlist', async () => {
   assert.equal((await mentee.me.call('GET', '/mentors/saved')).body.length, 0);
 });
 
+test("FR-11: a mentee's own shortlist and events refine the ranking a little, never another member's activity", async () => {
+  const { interactionSignals, SIGNAL_CAP } = require('../src/controllers/recommendations.controller');
+  const mentee = await makeMember('Signal Mentee', 'signal.mentee@example.org', 'mentee');
+  const saved = await makeMember('Saved Mentor', 'saved.mentor@example.org', 'mentor');
+  const cargo = await makeMember('Cargo Mentor', 'cargo.mentor@example.org', 'mentor');
+  const other = await makeMember('Unrelated Mentor', 'unrelated.mentor@example.org', 'mentor');
+  await db.execute("UPDATE profiles SET skills = 'Dangerous goods, cargo handling' WHERE user_id = :id", { id: cargo.id });
+  await db.execute("UPDATE profiles SET skills = 'Cabin service, first aid' WHERE user_id = :id", { id: other.id });
+  assert.equal((await mentee.me.call('POST', `/mentors/${saved.id}/save`)).status, 201);
+  const [ev] = await db.execute(
+    `INSERT INTO events (title, description, topics, event_date, mode, location, created_by, status)
+     VALUES ('Cargo safety day', 'Talks and a warehouse tour', 'Dangerous goods, Cargo handling', DATE_SUB(NOW(), INTERVAL 10 DAY), 'in_person', 'JKIA', :h, 'approved')`,
+    { h: other.id }
+  );
+  await db.execute('INSERT INTO event_registrations (event_id, user_id) VALUES (:e, :u)', { e: ev.insertId, u: mentee.id });
+
+  const signals = await interactionSignals(mentee.id, [saved.id, cargo.id, other.id]);
+  assert.deepEqual(signals.get(saved.id), { boost: 2, reasons: ['On your shortlist'] });
+  assert.equal(signals.get(cargo.id).boost, 1);
+  assert.match(signals.get(cargo.id).reasons[0], /Matches the event you joined: Cargo safety day/);
+  assert.deepEqual(signals.get(other.id), { boost: 0, reasons: [] });
+  for (const v of signals.values()) assert.ok(v.boost <= SIGNAL_CAP);
+
+  // Someone else's shortlist and registrations change nothing for this mentee
+  const stranger = await makeMember('Signal Stranger', 'signal.stranger@example.org', 'mentee');
+  const none = await interactionSignals(stranger.id, [saved.id, cargo.id, other.id]);
+  assert.ok([...none.values()].every((v) => v.boost === 0 && v.reasons.length === 0));
+});
+
 /* ---------------- Mentorship outcomes (Module 5) ---------------- */
 
 async function activeMentorship(tag) {
@@ -2074,6 +2103,74 @@ test('security headers are set on pages and API responses', async () => {
   assert.match(res.headers.get('content-security-policy'), /script-src 'self'/);
   assert.equal(res.headers.get('x-frame-options'), 'DENY');
   assert.equal(res.headers.get('referrer-policy'), 'no-referrer');
+});
+
+test('the live pages get the same security headers as the server (Cloudflare Pages _headers file)', async () => {
+  const served = (await fetch(`${ROOT}/login.html`)).headers;
+  const file = require('node:fs').readFileSync(path.join(__dirname, '..', '..', 'frontend', 'public', '_headers'), 'utf8');
+  const header = (name) => (file.match(new RegExp(`^\\s+${name}: (.+)$`, 'mi')) || [])[1];
+  for (const name of ['Content-Security-Policy', 'X-Content-Type-Options', 'X-Frame-Options', 'Referrer-Policy', 'Permissions-Policy']) {
+    assert.equal(header(name), served.get(name), `${name} differs between _headers and the server`);
+  }
+  // Images only from AlumNet itself
+  assert.match(served.get('content-security-policy'), /img-src 'self' data: blob:;/);
+});
+
+test('in production the server refuses to start with missing or weak secrets', () => {
+  const { secretProblems } = require('../src/config/checkSecrets');
+  const good = { JWT_SECRET: 'a'.repeat(64), TOTP_ENC_KEY: 'b'.repeat(64), ML_SERVICE_URL: 'https://alumnet-ml.internal.example', ML_API_KEY: 'c'.repeat(64) };
+  assert.deepEqual(secretProblems(good), []);
+  assert.equal(secretProblems({ ...good, JWT_SECRET: 'short' }).length, 1);
+  assert.equal(secretProblems({ ...good, TOTP_ENC_KEY: undefined }).length, 1);
+  assert.equal(secretProblems({ ...good, ML_API_KEY: '' }).length, 1);
+  // A matching service on the same machine needs no key
+  assert.deepEqual(secretProblems({ ...good, ML_SERVICE_URL: 'http://localhost:5000', ML_API_KEY: '' }), []);
+  const run = spawnSync(process.execPath, ['-e', "require('./src/config/checkSecrets').checkSecrets()"], {
+    cwd: path.join(__dirname, '..'), env: { PATH: process.env.PATH, NODE_ENV: 'production', JWT_SECRET: 'short' }, encoding: 'utf8'
+  });
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /will not start in production/);
+});
+
+test('NFR-05: when the database is unreachable the server says it is starting, then recovers on its own', async () => {
+  const net = require('node:net');
+  const port = PORT - 7;
+  const dbPort = PORT - 8;
+  const env = { ...process.env, NODE_ENV: 'test', PORT: String(port), DB_PORT: String(dbPort), START_RETRY_SECONDS: '1', JWT_SECRET, APP_URL: ROOT,
+    SMTP_USER: '', SMTP_PASS: '', BREVO_API_KEY: '', ML_SERVICE_URL: 'http://127.0.0.1:1', MEDIA_DRIVER: 'local', MEDIA_DIR };
+  const proc = spawn(process.execPath, [path.join(__dirname, '..', 'scripts', 'start.js')], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+  let log = '';
+  proc.stdout.on('data', (d) => { log += d; });
+  proc.stderr.on('data', (d) => { log += d; });
+  let proxy;
+  try {
+    let first;
+    for (let i = 0; i < 50 && !first; i++) {
+      try { first = await fetch(`http://localhost:${port}/health`); } catch { await wait(200); }
+    }
+    assert.ok(first, `start.js did not answer:\n${log}`);
+    assert.equal(first.status, 503);
+    assert.match((await first.json()).error, /starting/);
+
+    // The database comes back (a stand-in that forwards to the real one)
+    proxy = net.createServer((c) => {
+      const up = net.connect(Number(process.env.DB_PORT || 3306), process.env.DB_HOST || '127.0.0.1');
+      c.pipe(up).pipe(c);
+      up.on('error', () => c.destroy());
+      c.on('error', () => up.destroy());
+    });
+    await new Promise((r) => proxy.listen(dbPort, '127.0.0.1', r));
+    let healthy = false;
+    for (let i = 0; i < 60 && !healthy; i++) {
+      await wait(250);
+      try { healthy = (await fetch(`http://localhost:${port}/health`)).status === 200; } catch { /* restarting */ }
+    }
+    assert.ok(healthy, `the server did not recover:\n${log}`);
+    assert.match(log, /Database not ready \(attempt 1\)/);
+  } finally {
+    if (proc.exitCode === null) await new Promise((r) => { proc.once('exit', r); proc.kill('SIGTERM'); });
+    if (proxy) await new Promise((r) => proxy.close(r));
+  }
 });
 
 test('protected routes refuse requests without a session', async () => {

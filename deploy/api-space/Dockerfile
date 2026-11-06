@@ -18,5 +18,7 @@ COPY --chown=node backend backend
 COPY --chown=node database database
 
 EXPOSE 7860
-# Applies any new database migrations, then starts the server
-CMD ["sh", "-c", "cd backend && node scripts/migrate.js && node src/server.js"]
+# Waits for the database if it is not reachable yet, applies any new
+# migrations, then starts the server (backend/scripts/start.js)
+WORKDIR /home/node/app/backend
+CMD ["node", "scripts/start.js"]

@@ -188,11 +188,87 @@ work either way.
   Management** in the portal before and after a demo.
 - Cloudflare Pages Functions: 100,000 requests a day on the free plan; pages and images do not
   count, only `/api`, `/media`, `/brand` and `/health`.
-- Aiven's free MySQL is small, has one node and powers off when unused for a long time. Make
-  your own backups (below).
-- Every free offer can change. Record the plan and the date you checked it, and what you will
-  do after assessment (keep or delete the Container Apps, the Pages project and the Aiven
-  service).
+- Aiven's free MySQL is small, has one node and powers off when unused for a long time. If
+  that happens the server answers "AlumNet is starting" and retries every 15 seconds
+  (`backend/scripts/start.js`), then carries on by itself once you press **Power on** in the
+  Aiven console. Check it is **Running** an hour before a demo. Make your own backups (below).
+- Every free offer can change. Record the plan and the date you checked it (see the offer
+  record below).
+
+## Offer record and after assessment
+
+| Service | Plan | Limits that matter | Ends |
+|---|---|---|---|
+| Azure for Students | $100 credit, no card | Container Apps free allowance first, then the credit; the subscription is disabled, never charged, when the credit runs out | 4 November 2027 (renewable while a student) |
+| Aiven for MySQL | Free | 1 GB storage, one node, powers off when unused | No end date |
+| Cloudflare Pages | Free | 100,000 function requests a day | No end date |
+| GitHub | Free | Actions minutes and package storage | No end date |
+| Brevo | Free | 300 emails a day | No end date |
+
+**Cost alert.** In the Azure portal: **Cost Management → Budgets → Add**, scope the
+Azure for Students subscription, amount $10, alert at 50% and 100% to your email.
+
+**After assessment**, either keep the release running for the period agreed with the
+supervisor, or close it down:
+```
+az group delete --name alumnet --yes
+```
+then delete the **alumnet** project in Cloudflare (Settings → Delete project) and the
+**alumnet-db** service in Aiven (take a backup first, below).
+
+## Releases and rolling back
+
+Every release is a pair of images labelled with the commit (`alumnet-api:<commit>` and
+`alumnet-ml:<commit>`), and the previous images stay in GitHub's registry.
+
+1. **Tag the release you submit**, so assessors can find the exact code:
+   ```
+   git tag -a v1.0.0 -m "AlumNet Sprint III release"
+   git push origin v1.0.0
+   ```
+2. **Record what is live** (for Table 5.4):
+   ```
+   az containerapp show -n alumnet-api -g alumnet --query "properties.template.containers[0].image" -o tsv
+   ```
+   The image digest is on GitHub under **Packages → alumnet-api → the tag**.
+3. **Roll back** if a release misbehaves: point both apps at the previous commit's images,
+   which takes about a minute and needs no rebuild:
+   ```
+   az containerapp update -n alumnet-api -g alumnet --image ghcr.io/nkathahh/alumnet-api:<previous commit>
+   az containerapp update -n alumnet-ml -g alumnet --image ghcr.io/nkathahh/alumnet-ml:<previous commit>
+   ```
+   Database migrations only ever add tables and columns, so an older server still works on
+   the newer database.
+
+## Secrets: use different ones for the laptop and the live site
+
+The live server must not share `JWT_SECRET` with your laptop: a session token made on the
+laptop would otherwise be accepted by the live site for the same user ids. Give the live
+server its own (everyone just signs in again). Keep `TOTP_ENC_KEY` the same, because the
+two-factor secrets copied across were encrypted with it.
+```
+az containerapp secret set -n alumnet-api -g alumnet --secrets jwt-secret=$(openssl rand -hex 32)
+az containerapp update -n alumnet-api -g alumnet --set-env-vars ROTATED_AT=$(date +%s) --output none
+```
+In production the server refuses to start if `JWT_SECRET` or `ML_API_KEY` is shorter than 32
+characters or `TOTP_ENC_KEY` is not 64 hex characters, and says which one.
+
+## Least privilege for the server
+
+The setup script connects both apps as `avnadmin`, Aiven's administrator. Give the server its
+own user that can only use the `alumnet` database (it still needs to create tables, because
+it applies migrations when it starts). In Workbench, connected to Aiven as `avnadmin`:
+```sql
+CREATE USER 'alumnet_app'@'%' IDENTIFIED BY 'a-long-random-password';
+GRANT ALL PRIVILEGES ON alumnet.* TO 'alumnet_app'@'%';
+```
+Then, in Cloud Shell:
+```
+az containerapp secret set -n alumnet-api -g alumnet --secrets db-password='a-long-random-password'
+az containerapp update -n alumnet-api -g alumnet --set-env-vars DB_USER=alumnet_app --output none
+```
+Do the same for `alumnet-ml` with the read-mostly user in the next section. `avnadmin` is
+then only used by you, from Workbench.
 
 ## Least privilege for the matching service
 
@@ -290,3 +366,10 @@ WebP when they are uploaded and saved through `backend/src/utils/storage.js`.
 - `GATEWAY_SECRET` must be the same on `alumnet-api` and in Cloudflare Pages. Without it on the
   server, the server would accept requests that skip the gateway.
 - Admin sessions end after 30 minutes without use, so expect to sign in again after a break.
+- The pages Cloudflare serves get the same security headers as the server, from
+  `frontend/public/_headers`. A test fails if the two drift apart. Check them on the live
+  site with your browser's developer tools (Network → a page → Response headers).
+- The Aiven allowlist is "Open to all"; the password and TLS protect it. To narrow it, add
+  only your own IP and Azure's outbound addresses
+  (`az containerapp show -n alumnet-api -g alumnet --query properties.outboundIpAddresses`),
+  remembering that those can change on the consumption plan.

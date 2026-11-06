@@ -1,4 +1,5 @@
 require('dotenv').config();
+require('./config/checkSecrets').checkSecrets();
 const path = require('path');
 const express = require('express');
 const cors = require('cors');
@@ -52,9 +53,11 @@ app.use((req, res, next) => {
   res.setHeader('Content-Security-Policy', [
     "default-src 'self'",
     "script-src 'self' https://accounts.google.com/gsi/client",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com/gsi/style",
-    "font-src 'self' https://fonts.gstatic.com",
-    "img-src 'self' data: https:",
+    // Inline styles stay allowed (the pages use style attributes); they cannot run script
+    "style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style",
+    "font-src 'self'",
+    // Every image comes from AlumNet itself (blob: is the preview before an upload)
+    "img-src 'self' data: blob:",
     "connect-src 'self' https://accounts.google.com/gsi/",
     "frame-src https://accounts.google.com/gsi/",
     "object-src 'none'",

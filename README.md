@@ -160,13 +160,19 @@ encodes mentee and mentor profiles and ranks mentors by cosine similarity.
 ```
 AlumNet/
 ├── backend/            Express API and the server for the frontend
-│   ├── scripts/        create-admin.js
-│   └── src/            config, controllers, middleware, routes, utils
-├── frontend/public/    HTML pages, css/style.css, js/main.js, assets
-├── ml-service/         Flask recommendation service and deployment Dockerfile
+│   ├── scripts/        migrate, start (live), create-admin, backup, restore-check, latency
+│   ├── src/            config, controllers, middleware, routes, utils
+│   └── tests/          API tests (node --test)
+├── frontend/public/    HTML pages, css/style.css, js/main.js, assets, _headers, _routes.json
+├── ml-service/         Flask recommendation service, its tests and Dockerfile
 │   └── evaluation/     Matching evaluation kit (data, labels, scripts, results)
-├── database/           schema.sql, migrations 001 to 010, sample datasets
-└── DEPLOYMENT.md       Step-by-step guide to putting AlumNet online
+├── database/           migrations 001 to 027, sample datasets
+├── gateway/, functions/  Cloudflare Pages gateway in front of the server
+├── deploy/             Server Dockerfile and the Azure setup script
+├── e2e/                Browser tests (script injection, accessibility, phone layout)
+├── .github/workflows/  CI (tests, coverage, audit) and Deploy (builds the containers)
+├── DEPLOYMENT.md       Step-by-step guide to putting AlumNet online
+└── USER_GUIDE.md       How mentees, mentors and admins use AlumNet
 ```
 
 ## Running locally

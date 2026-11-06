@@ -94,7 +94,8 @@ const AUTH_PATHS = ['/auth/login', '/auth/google', '/auth/2fa/verify', '/auth/si
 })();
 
 function clearSession() {
-  localStorage.removeItem('alumnet_token');
+  localStorage.removeItem('alumnet_signed_in');
+  localStorage.removeItem('alumnet_token'); // the name older versions used
   localStorage.removeItem('alumnet_role');
   localStorage.removeItem('alumnet_signed_in_at');
 }
@@ -108,7 +109,7 @@ function clearSession() {
  */
 (function followSessionChanges() {
   window.addEventListener('storage', (e) => {
-    if (!['alumnet_signed_in_at', 'alumnet_role', 'alumnet_token'].includes(e.key) && e.key !== null) return;
+    if (!['alumnet_signed_in_at', 'alumnet_role', 'alumnet_signed_in'].includes(e.key) && e.key !== null) return;
     const page = currentPage();
     if (PAGE_ROLES[page] || page === 'onboarding.html') window.location.reload();
   });
@@ -374,9 +375,9 @@ function guardRoute() {
   const page = currentPage();
   const allowed = PAGE_ROLES[page];
   if (!allowed) return;
-  const token = localStorage.getItem('alumnet_token');
+  const hasSession = localStorage.getItem('alumnet_signed_in');
   const role = localStorage.getItem('alumnet_role');
-  if (!token) { window.location.href = 'login.html'; return; }
+  if (!hasSession) { window.location.href = 'login.html'; return; }
   if (!allowed.includes(role)) window.location.href = HOME_PAGE[role] || 'login.html';
 }
 
@@ -589,10 +590,10 @@ function wireRoleVisibility() {
 
 async function updateSidebar() {
   const nameEl = document.getElementById('side-user-name');
-  const token = localStorage.getItem('alumnet_token');
-  if (!nameEl || !token) return;
+  const hasSession = localStorage.getItem('alumnet_signed_in');
+  if (!nameEl || !hasSession) return;
   try {
-    const res = await fetch(`${API_BASE}/profile/me`, { headers: { Authorization: `Bearer ${token}` } });
+    const res = await fetch(`${API_BASE}/profile/me`);
     if (!res.ok) return;
     const data = await res.json();
     const p = data.profile || data;
@@ -757,7 +758,7 @@ function wireSignupForm() {
 // The real session is the HttpOnly cookie. These two values only help the
 // page decide which menu to draw; the server checks every request itself.
 function saveSession(result) {
-  localStorage.setItem('alumnet_token', 'cookie');
+  localStorage.setItem('alumnet_signed_in', '1');
   localStorage.setItem('alumnet_role', result.role);
   // Changes on every sign-in, so other open tabs notice (see followSessionChanges)
   localStorage.setItem('alumnet_signed_in_at', String(Date.now()));
@@ -769,10 +770,10 @@ function showFormError(el, message) {
   el.style.display = message ? 'block' : 'none';
 }
 
-async function postJSON(path, body, token) {
+async function postJSON(path, body) {
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body || {})
   });
   let data = {};
@@ -1042,15 +1043,15 @@ function wirePasswordToggle(buttonId, inputId) {
 async function renderMentorList() {
   const list = document.getElementById('mentor-list');
   if (!list) return;
-  const token = localStorage.getItem('alumnet_token');
-  if (!token) { window.location.href = 'login.html'; return; }
+  const hasSession = localStorage.getItem('alumnet_signed_in');
+  if (!hasSession) { window.location.href = 'login.html'; return; }
 
   list.innerHTML = '<p style="color:var(--slate); padding:20px 4px;">Loading recommendations...</p>';
 
   try {
     const [recRes, reqRes] = await Promise.all([
-      fetch(`${API_BASE}/recommendations`, { headers: { Authorization: `Bearer ${token}` } }),
-      fetch(`${API_BASE}/mentorship-requests`, { headers: { Authorization: `Bearer ${token}` } })
+      fetch(`${API_BASE}/recommendations`),
+      fetch(`${API_BASE}/mentorship-requests`)
     ]);
     const data = await recRes.json();
     const myRequests = reqRes.ok ? await reqRes.json() : [];
@@ -1107,7 +1108,7 @@ function apiMentorCardHTML(m, alreadyRequested) {
         <div class="mentor-name-row">
           <span class="mentor-name" style="cursor:pointer; text-decoration:underline;" data-action="view-profile" data-mentor-id="${m.mentor_id}">${escapeHTML(m.name)}</span>
           ${m.verified ? verifiedBadgeHTML('Verified former KQ staff') : ''}
-          ${m.fit ? fitPillHTML(m.fit) : `<span class="match-score">${m.score}% match</span>`}
+          ${m.fit ? fitPillHTML(m.fit) : ''}
         </div>
         ${m.headline ? `<div class="req-headline" style="margin-bottom:4px;">${escapeHTML(m.headline)}</div>` : ''}
         <div class="mentor-meta" style="margin:0 0 8px;">
@@ -1115,6 +1116,7 @@ function apiMentorCardHTML(m, alreadyRequested) {
         </div>
         ${availabilityHTML(m)}
         ${matchBreakdownHTML(m.breakdown)}
+        ${m.signals && m.signals.length ? `<div class="fit-why">${m.signals.map(escapeHTML).join(' · ')}</div>` : ''}
       </div>
       <div class="mentor-actions">
         ${saveButtonHTML(m)}
@@ -1126,7 +1128,7 @@ function apiMentorCardHTML(m, alreadyRequested) {
 }
 
 function wireMentorCardActions(list) {
-  const token = localStorage.getItem('alumnet_token');
+  const hasSession = localStorage.getItem('alumnet_signed_in');
 
   wireSaveButtons(list);
 
@@ -1153,8 +1155,8 @@ let allMyRequests = [];
 async function renderRequests() {
   const list = document.getElementById('requests-list');
   if (!list) return;
-  const token = localStorage.getItem('alumnet_token');
-  if (!token) return;
+  const hasSession = localStorage.getItem('alumnet_signed_in');
+  if (!hasSession) return;
 
   let activeTab = 'pending';
   const tabs = document.querySelectorAll('.tab');
@@ -1162,7 +1164,7 @@ async function renderRequests() {
   async function load() {
     list.innerHTML = '<p style="color:var(--slate); padding:20px 4px;">Loading...</p>';
     try {
-      const res = await fetch(`${API_BASE}/mentorship-requests`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`${API_BASE}/mentorship-requests`);
       const data = await res.json();
       if (!res.ok) { list.innerHTML = `<p style="color:var(--kq-red); padding:20px 4px;">${data.error}</p>`; return; }
       allMyRequests = data;
@@ -1204,18 +1206,16 @@ async function renderRequests() {
           let res;
           if (btn.dataset.action === 'withdraw') {
             res = await fetch(`${API_BASE}/mentorship-requests/${btn.dataset.requestId}`, {
-              method: 'DELETE',
-              headers: { Authorization: `Bearer ${token}` }
+              method: 'DELETE'
             });
           } else if (btn.dataset.action === 'end') {
             res = await fetch(`${API_BASE}/mentorship-requests/${btn.dataset.requestId}/end`, {
-              method: 'POST',
-              headers: { Authorization: `Bearer ${token}` }
+              method: 'POST'
             });
           } else {
             res = await fetch(`${API_BASE}/mentorship-requests/${btn.dataset.requestId}`, {
               method: 'PATCH',
-              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ decision: btn.dataset.action })
             });
           }
@@ -1620,8 +1620,8 @@ function wireProfilePhoto() {
 async function wireProfileForm() {
   const form = document.getElementById('profile-form');
   if (!form) return;
-  const token = localStorage.getItem('alumnet_token');
-  if (!token) { window.location.href = 'login.html'; return; }
+  const hasSession = localStorage.getItem('alumnet_signed_in');
+  if (!hasSession) { window.location.href = 'login.html'; return; }
 
   const view = document.getElementById('pf-view');
   const editBtn = document.getElementById('pf-edit-btn');
@@ -1629,7 +1629,7 @@ async function wireProfileForm() {
   let profile = {};
 
   async function load() {
-    const res = await fetch(`${API_BASE}/profile/me`, { headers: { Authorization: `Bearer ${token}` } });
+    const res = await fetch(`${API_BASE}/profile/me`);
     if (!res.ok) throw new Error('Could not load profile');
     profile = await res.json();
     drawProfile(profile);
@@ -1721,7 +1721,7 @@ async function wireProfileForm() {
     try {
       const res = await fetch(`${API_BASE}/profile/me`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       });
       const result = await res.json();
@@ -1746,8 +1746,8 @@ function colorFromName(name) {
 
 
 async function openMentorProfile(mentorId) {
-  const token = localStorage.getItem('alumnet_token');
-  const res = await fetch(`${API_BASE}/profile/${mentorId}`, { headers: { Authorization: `Bearer ${token}` } });
+  const hasSession = localStorage.getItem('alumnet_signed_in');
+  const res = await fetch(`${API_BASE}/profile/${mentorId}`);
   const data = await res.json();
   if (!res.ok) { toast(data.error || 'Could not load profile'); return; }
 
@@ -1809,15 +1809,15 @@ let eventFilter = 'all';
 async function renderEvents() {
   const grid = document.getElementById('event-grid');
   if (!grid) return;
-  const token = localStorage.getItem('alumnet_token');
-  if (!token) return;
+  const hasSession = localStorage.getItem('alumnet_signed_in');
+  if (!hasSession) return;
 
   if (!allEvents.length) {
     grid.innerHTML = '<p style="color:var(--slate); padding:20px 4px;">Loading events...</p>';
   }
 
   try {
-    const res = await fetch(`${API_BASE}/events`, { headers: { Authorization: `Bearer ${token}` } });
+    const res = await fetch(`${API_BASE}/events`);
     const data = await res.json();
     if (!res.ok) {
       grid.innerHTML = `<p style="color:var(--kq-red); padding:20px 4px;">${escapeHTML(data.error || 'Could not load events.')}</p>`;
@@ -1846,7 +1846,7 @@ function drawEvents(arg) {
   listShown.events = wantsMore(arg) ? listShown.events + LIST_STEP : LIST_STEP;
   const grid = document.getElementById('event-grid');
   if (!grid) return;
-  const token = localStorage.getItem('alumnet_token');
+  const hasSession = localStorage.getItem('alumnet_signed_in');
   const base = eventFilter === 'mine' ? allEvents.filter((e) => e.is_registered) : allEvents;
   const list = base.filter(eventMatchesFilters);
   const searching = eventFiltersActive();
@@ -1895,8 +1895,7 @@ function drawEvents(arg) {
       const done = { register: 'You are registered. It is in My events.', cancel: 'Your registration is cancelled.', unwait: 'You have left the waiting list.' }[action];
       try {
         const r = await fetch(`${API_BASE}/events/${btn.dataset.eventId}/${route[1]}`, {
-          method: route[0],
-          headers: { Authorization: `Bearer ${token}` }
+          method: route[0]
         });
         const body = await r.json().catch(() => ({}));
         if (!r.ok) toast(body.error || 'Could not do that. Please try again.');
@@ -2220,7 +2219,7 @@ function openProposeEventModal(existing = null, opts = {}) {
         ? `${Number(existing.attendee_count) ? `${Number(existing.attendee_count)} registered ${Number(existing.attendee_count) === 1 ? 'person' : 'people'} will be told if the date, time, format or venue changes. ` : ''}${asAdmin ? '' : 'Changing the meeting link to a new site, or anything the scam checks pick up, sends it back to the alumni office before it is live again.'}`
         : 'Your proposal is still waiting for review. Your changes replace it.';
   const submitText = !existing ? 'Submit for review' : existing.status === 'changes_requested' ? 'Resubmit for review' : 'Save changes';
-  const token = localStorage.getItem('alumnet_token');
+  const hasSession = localStorage.getItem('alumnet_signed_in');
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop';
   backdrop.innerHTML = `
@@ -2303,7 +2302,7 @@ function openProposeEventModal(existing = null, opts = {}) {
     try {
       const res = await fetch(existing ? `${API_BASE}${asAdmin ? '/admin' : ''}/events/${existing.event_id}` : `${API_BASE}/events`, {
         method: existing ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
       const result = await res.json();
@@ -2356,10 +2355,10 @@ function openCancelEventDialog(event, { admin = false } = {}) {
 async function renderMyProposals() {
   const mount = document.getElementById('my-proposals');
   if (!mount) return;
-  const token = localStorage.getItem('alumnet_token');
+  const hasSession = localStorage.getItem('alumnet_signed_in');
 
   try {
-    const res = await fetch(`${API_BASE}/events/my-proposals`, { headers: { Authorization: `Bearer ${token}` } });
+    const res = await fetch(`${API_BASE}/events/my-proposals`);
     const rows = await res.json();
     if (!res.ok) { mount.innerHTML = ''; return; }
     if (!rows.length) {
@@ -2418,10 +2417,10 @@ function drawMyProposals() {
 async function renderAdminPendingEvents() {
   const list = document.getElementById('admin-pending-events');
   if (!list) return;
-  const token = localStorage.getItem('alumnet_token');
+  const hasSession = localStorage.getItem('alumnet_signed_in');
 
   try {
-    const res = await fetch(`${API_BASE}/admin/events/pending`, { headers: { Authorization: `Bearer ${token}` } });
+    const res = await fetch(`${API_BASE}/admin/events/pending`);
     const rows = await res.json();
     if (!res.ok) { list.innerHTML = `<p>${escapeHTML(rows.error || 'Could not load proposals.')}</p>`; return; }
     if (!rows.length) {
@@ -2455,7 +2454,7 @@ async function renderAdminPendingEvents() {
         btn.disabled = true;
         await fetch(`${API_BASE}/admin/events/${btn.dataset.reviewEvent}/review`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ decision: btn.dataset.decision })
         });
         renderAdminPendingEvents();
@@ -2514,12 +2513,12 @@ function closingLabel(dateStr) {
 async function renderOpportunities() {
   const list = document.getElementById('opportunities-list');
   if (!list) return;
-  const token = localStorage.getItem('alumnet_token');
-  if (!token) return;
+  const hasSession = localStorage.getItem('alumnet_signed_in');
+  if (!hasSession) return;
 
   list.innerHTML = '<p style="color:var(--slate); padding:20px 4px;">Loading opportunities...</p>';
   try {
-    const res = await fetch(`${API_BASE}/opportunities`, { headers: { Authorization: `Bearer ${token}` } });
+    const res = await fetch(`${API_BASE}/opportunities`);
     const data = await res.json();
     if (!res.ok) {
       list.innerHTML = `<p style="color:var(--kq-red); padding:20px 4px;">${escapeHTML(data.error || 'Could not load opportunities.')}</p>`;
@@ -2712,7 +2711,7 @@ function wireOpportunitiesPage() {
 function openPostOpportunityModal(existing = null) {
   // Called straight from a click handler, the argument is the click event, not a post
   if (!existing || !existing.opportunity_id) existing = null;
-  const token = localStorage.getItem('alumnet_token');
+  const hasSession = localStorage.getItem('alumnet_signed_in');
   const today = new Date().toLocaleDateString('en-CA');
   const typeOptions = Object.entries(OPPORTUNITY_TYPES)
     .map(([value, label]) => `<option value="${value}">${label}</option>`).join('');
@@ -2794,7 +2793,7 @@ function openPostOpportunityModal(existing = null) {
     try {
       const res = await fetch(existing ? `${API_BASE}/opportunities/${existing.opportunity_id}` : `${API_BASE}/opportunities`, {
         method: existing ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
       const result = await res.json();
@@ -2853,10 +2852,10 @@ function postReviewNoteHTML(state, p) {
 async function renderMyPosts() {
   const mount = document.getElementById('my-posts');
   if (!mount) return;
-  const token = localStorage.getItem('alumnet_token');
+  const hasSession = localStorage.getItem('alumnet_signed_in');
 
   try {
-    const res = await fetch(`${API_BASE}/opportunities/mine`, { headers: { Authorization: `Bearer ${token}` } });
+    const res = await fetch(`${API_BASE}/opportunities/mine`);
     const rows = await res.json();
     if (!res.ok) { mount.innerHTML = ''; return; }
     const count = document.getElementById('my-posts-count');
@@ -2965,13 +2964,13 @@ async function renderAdminTable() {
   const statRow = document.getElementById('stat-row');
   const tbody = document.getElementById('admin-table-body');
   if (!statRow || !tbody) return;
-  const token = localStorage.getItem('alumnet_token');
-  if (!token) return;
+  const hasSession = localStorage.getItem('alumnet_signed_in');
+  if (!hasSession) return;
 
   try {
     const [statsRes, usersRes] = await Promise.all([
-      fetch(`${API_BASE}/admin/stats`, { headers: { Authorization: `Bearer ${token}` } }),
-      fetch(`${API_BASE}/admin/users`, { headers: { Authorization: `Bearer ${token}` } })
+      fetch(`${API_BASE}/admin/stats`),
+      fetch(`${API_BASE}/admin/users`)
     ]);
     const stats = await statsRes.json();
     const users = await usersRes.json();
@@ -3565,9 +3564,9 @@ function wireAdminTabs() {
 async function renderAdminEvents() {
   const tbody = document.getElementById('admin-events-body');
   if (!tbody) return;
-  const token = localStorage.getItem('alumnet_token');
+  const hasSession = localStorage.getItem('alumnet_signed_in');
 
-  const res = await fetch(`${API_BASE}/admin/events`, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await fetch(`${API_BASE}/admin/events`);
   const events = await res.json();
   if (!res.ok) { tbody.innerHTML = `<tr><td colspan="5">${escapeHTML(events.error)}</td></tr>`; return; }
 
@@ -3614,7 +3613,7 @@ function wireAdminEventForm() {
   drawBannerField();
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const token = localStorage.getItem('alumnet_token');
+    const hasSession = localStorage.getItem('alumnet_signed_in');
     const errorEl = document.getElementById('event-form-error');
     if (errorEl) errorEl.style.display = 'none';
 
@@ -3631,7 +3630,7 @@ function wireAdminEventForm() {
 
     const res = await fetch(`${API_BASE}/admin/events`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
 
@@ -3660,9 +3659,9 @@ function wireAdminEventForm() {
 async function renderAdminOpportunities() {
   const list = document.getElementById('admin-opportunities-list');
   if (!list) return;
-  const token = localStorage.getItem('alumnet_token');
+  const hasSession = localStorage.getItem('alumnet_signed_in');
 
-  const res = await fetch(`${API_BASE}/admin/opportunities/pending`, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await fetch(`${API_BASE}/admin/opportunities/pending`);
   const opps = await res.json();
   if (!res.ok) { list.innerHTML = `<p>${escapeHTML(opps.error)}</p>`; return; }
   if (!opps.length) { list.innerHTML = '<p style="color:var(--slate); padding:20px 4px;">Nothing pending review.</p>'; return; }
@@ -3696,7 +3695,7 @@ async function renderAdminOpportunities() {
     btn.addEventListener('click', async () => {
       await fetch(`${API_BASE}/admin/opportunities/${btn.dataset.review}/review`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ decision: btn.dataset.decision })
       });
       renderAdminOpportunities();
@@ -3940,11 +3939,11 @@ function timeAgo(dateStr) {
 async function renderNotifications() {
   const list = document.getElementById('notif-list');
   if (!list) return;
-  const token = localStorage.getItem('alumnet_token');
-  if (!token) return;
+  const hasSession = localStorage.getItem('alumnet_signed_in');
+  if (!hasSession) return;
 
   try {
-    const res = await fetch(`${API_BASE}/notifications`, { headers: { Authorization: `Bearer ${token}` } });
+    const res = await fetch(`${API_BASE}/notifications`);
     const rows = await res.json();
     if (!res.ok) {
       list.innerHTML = `<p style="color:var(--kq-red); padding:20px 4px;">${rows.error || 'Could not load notifications.'}</p>`;
@@ -3967,8 +3966,7 @@ async function renderNotifications() {
     list.querySelectorAll('[data-notif-id]').forEach((item) => {
       item.addEventListener('click', async () => {
         await fetch(`${API_BASE}/notifications/${item.dataset.notifId}/read`, {
-          method: 'PATCH',
-          headers: { Authorization: `Bearer ${token}` }
+          method: 'PATCH'
         });
         if (item.dataset.link) {
           window.location.href = item.dataset.link;
@@ -3989,8 +3987,7 @@ function wireMarkAllRead() {
   btn.addEventListener('click', async () => {
     btn.disabled = true;
     await fetch(`${API_BASE}/notifications/read-all`, {
-      method: 'PATCH',
-      headers: { Authorization: `Bearer ${localStorage.getItem('alumnet_token')}` }
+      method: 'PATCH'
     });
     btn.disabled = false;
     renderNotifications();
@@ -4001,10 +3998,10 @@ function wireMarkAllRead() {
 // Red unread count on the Notifications link in the sidebar
 async function updateNotifBadge() {
   const link = document.querySelector('#sidebar-nav a[href="notifications.html"]');
-  const token = localStorage.getItem('alumnet_token');
-  if (!link || !token) return;
+  const hasSession = localStorage.getItem('alumnet_signed_in');
+  if (!link || !hasSession) return;
   try {
-    const res = await fetch(`${API_BASE}/notifications/unread-count`, { headers: { Authorization: `Bearer ${token}` } });
+    const res = await fetch(`${API_BASE}/notifications/unread-count`);
     if (!res.ok) return;
     const { count } = await res.json();
     let badge = link.querySelector('.nav-badge');
@@ -4109,9 +4106,7 @@ MD_ICONS.search = '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>';
 
 async function mdGet(path) {
   try {
-    const res = await fetch(`${API_BASE}${path}`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('alumnet_token')}` }
-    });
+    const res = await fetch(`${API_BASE}${path}`, {});
     return res.ok ? await res.json() : null;
   } catch {
     return null;
@@ -4616,7 +4611,7 @@ async function renderAdminOverview() {
 /* ===================== Account settings ===================== */
 
 function authHeaders(json = true) {
-  const headers = { Authorization: `Bearer ${localStorage.getItem('alumnet_token')}` };
+  const headers = {};
   if (json) headers['Content-Type'] = 'application/json';
   return headers;
 }
