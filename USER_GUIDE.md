@@ -26,6 +26,11 @@ and keep the backup codes somewhere safe. Admins must turn it on.
 **Your data.** In **Account settings** you can **Download my data** or **Delete my account**.
 You will be asked to accept the privacy notice again whenever it changes.
 
+**Event photos.** Under **Alumni events > Past events**, open an event to see its highlights
+full screen (arrow keys or swipe to move, Download to keep one) and the link to the full
+Google Photos album. If you attended, you can add photos; the alumni office checks them first.
+Photos the alumni office adds are credited to the KQ Alumni Office.
+
 **Staying safe.** Mentoring on AlumNet is free: never pay anyone. Use **Report** on any
 profile, post or event that looks wrong, and block anyone who bothers you.
 
@@ -44,11 +49,16 @@ profile, post or event that looks wrong, and block anyone who bothers you.
 ## Mentors
 
 1. On **My profile**, say whether you are taking mentees and how many (up to your limit).
-2. **Mentee requests** shows new requests with each introduction. Accept or decline; only
-   accepting shares contact details.
+2. **Mentee requests** shows how many free places you have, then each request with the
+   mentee's goals, skills, what you have in common and how many days are left to reply.
+   Search, filter by department and sort (expiring soonest first by default). Accept or
+   decline; only accepting shares contact details. Tick several requests to decline them
+   together with one short note. Accept is switched off once your places are full.
 3. Use **Open workspace** for each mentee to agree goals and log meetings.
 4. **Post an opportunity** on Opportunities or **Propose an event** on Alumni events. Posts are
    checked by the alumni office before they appear.
+5. After an event you organised, open it under **Past events**: add the share link of a Google
+   Photos album with every photo, upload the best 6 to 12 as highlights and choose the cover.
 
 ## Admins (alumni office)
 

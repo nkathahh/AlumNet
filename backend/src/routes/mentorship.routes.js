@@ -5,6 +5,8 @@ const mentorship = require('../controllers/mentorship.controller');
 
 router.post('/', requireAuth, mentorship.createRequest);
 router.get('/', requireAuth, mentorship.listMyRequests);
+router.get('/places', requireAuth, mentorship.myPlaces);
+router.post('/decline', requireAuth, mentorship.declineMany);
 router.patch('/:id', requireAuth, mentorship.respondToRequest);
 router.delete('/:id', requireAuth, mentorship.withdrawRequest);
 router.post('/:id/end', requireAuth, mentorship.endMentorship);

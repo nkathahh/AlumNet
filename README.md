@@ -166,7 +166,7 @@ AlumNet/
 ├── frontend/public/    HTML pages, css/style.css, js/main.js, assets, _headers, _routes.json
 ├── ml-service/         Flask recommendation service, its tests and Dockerfile
 │   └── evaluation/     Matching evaluation kit (data, labels, scripts, results)
-├── database/           migrations 001 to 027, sample datasets
+├── database/           migrations 001 to 028, sample datasets
 ├── gateway/, functions/  Cloudflare Pages gateway in front of the server
 ├── deploy/             Server Dockerfile and the Azure setup script
 ├── e2e/                Browser tests (script injection, accessibility, phone layout)

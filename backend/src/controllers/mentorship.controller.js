@@ -3,6 +3,7 @@ const { avatarUrl } = require('../utils/images');
 const { createNotification, getUserName } = require('../utils/notify');
 const { isBlockedEitherWay, fileAutomaticReport, parseFlags } = require('./safety.controller');
 const { scanText } = require('../utils/scam');
+const { skillCoverage } = require('../utils/fit');
 
 // A mentee can have this many requests waiting at once, so nobody sprays every mentor
 const MAX_PENDING = 5;
@@ -161,7 +162,8 @@ async function listMyRequests(req, res, next) {
                     (SELECT COUNT(*) FROM mentorship_meetings mt WHERE mt.request_id = r.request_id) AS meetings,
                     EXISTS(SELECT 1 FROM mentorship_feedback f WHERE f.request_id = r.request_id AND f.user_id = :userId) AS feedback_given,
                     u.user_id AS other_user_id, u.name AS other_name, u.department AS other_department, u.avatar_key AS other_avatar_key,
-                    u.email AS other_email, p.headline AS other_headline, sd.employment_status AS other_hr_status
+                    u.email AS other_email, p.headline AS other_headline, sd.employment_status AS other_hr_status,
+                    p.skills AS other_skills, p.career_interests AS other_goals, p.experience AS other_experience
    FROM mentorship_requests r
    JOIN users u ON u.user_id = r.${otherColumn}
    LEFT JOIN profiles p ON p.user_id = u.user_id
@@ -171,9 +173,23 @@ async function listMyRequests(req, res, next) {
             { userId }
         );
 
+        // Mentors see what each mentee wants help with, and which of their own skills it touches
+        let mySkills = '';
+        if (role === 'mentor') {
+            const [[me]] = await pool.execute('SELECT skills FROM profiles WHERE user_id = :userId', { userId });
+            mySkills = me ? me.skills : '';
+        }
+
         // Contact details are shared only once the mentor has accepted
-        res.json(rows.map(({ other_email: email, other_hr_status: hr, risk_flags: flags, other_avatar_key: avatarKey, ...r }) => ({
+        res.json(rows.map(({ other_email: email, other_hr_status: hr, risk_flags: flags, other_avatar_key: avatarKey, other_skills: skills, other_goals: goals, other_experience: experience, ...r }) => ({
             ...r,
+            ...(role === 'mentor' ? {
+                other_skills: skills || '',
+                other_goals: goals || '',
+                other_experience: experience || '',
+                in_common: skillCoverage(mySkills, `${goals || ''}, ${skills || ''}`).have
+            } : {}),
+            expires_at: r.status === 'pending' ? new Date(new Date(r.requested_at).getTime() + EXPIRY_DAYS * 86400000) : null,
             other_avatar_url: avatarUrl(avatarKey, 96),
             // Only the person receiving the message sees the caution
             message_warnings: role === 'mentor' ? parseFlags(flags).filter((f) => f.level !== 'low').map((f) => f.label) : [],
@@ -262,6 +278,72 @@ async function respondToRequest(req, res, next) {
     } catch (err) { next(err); }
 }
 
+/*
+ * GET /mentorship-requests/places (mentors): how many mentees they can take
+ * and how many people are waiting, for the banner on the requests page.
+ */
+async function myPlaces(req, res, next) {
+    try {
+        const { userId, role } = req.user;
+        if (role !== 'mentor') return res.status(403).json({ error: 'Only mentors have mentoring places' });
+        const [[row]] = await pool.execute(
+            `SELECT m.max_mentees, m.accepting_mentees,
+                    (SELECT COUNT(*) FROM mentorship_requests r WHERE r.mentor_id = m.user_id AND r.status = 'accepted') AS active,
+                    (SELECT COUNT(*) FROM mentorship_requests r WHERE r.mentor_id = m.user_id AND r.status = 'pending') AS pending
+             FROM mentors m WHERE m.user_id = :userId`,
+            { userId }
+        );
+        if (!row) return res.status(404).json({ error: 'Mentor not found' });
+        const max = Number(row.max_mentees);
+        const active = Number(row.active);
+        res.json({ max_mentees: max, active, free: Math.max(0, max - active), pending: Number(row.pending), accepting: Boolean(row.accepting_mentees) });
+    } catch (err) { next(err); }
+}
+
+/*
+ * POST /mentorship-requests/decline  { ids: [..], note }
+ * Declines several waiting requests at once. Each mentee is told, with the
+ * mentor's short note if there is one.
+ */
+const MAX_BULK = 50;
+const NOTE_MAX = 160;
+async function declineMany(req, res, next) {
+    try {
+        const { userId, role } = req.user;
+        if (role !== 'mentor') return res.status(403).json({ error: 'Only mentors can respond to requests' });
+        const ids = Array.isArray(req.body && req.body.ids) ? [...new Set(req.body.ids.map(Number))].filter((n) => Number.isInteger(n) && n > 0) : [];
+        if (!ids.length) return res.status(400).json({ error: 'Choose at least one request.' });
+        if (ids.length > MAX_BULK) return res.status(400).json({ error: `Decline up to ${MAX_BULK} at a time.` });
+        const raw = req.body.note;
+        if (raw !== undefined && raw !== null && typeof raw !== 'string') return res.status(400).json({ error: 'The note must be text' });
+        const note = String(raw || '').replace(/[\u0000-\u001f\u007f]+/g, ' ').trim();
+        if (note.length > NOTE_MAX) return res.status(400).json({ error: `Keep the note to ${NOTE_MAX} characters or fewer.` });
+        if (note && scanText(note).level === 'high') return res.status(400).json({ error: 'The note looks like it asks for money or personal details. Please reword it.' });
+
+        const mentorName = await getUserName(userId);
+        let declined = 0;
+        for (const id of ids) {
+            const [[request]] = await pool.execute(
+                "SELECT mentee_id FROM mentorship_requests WHERE request_id = :id AND mentor_id = :userId AND status = 'pending'",
+                { id, userId }
+            );
+            if (!request) continue;
+            const [changed] = await pool.execute(
+                "UPDATE mentorship_requests SET status = 'declined', responded_at = NOW() WHERE request_id = :id AND status = 'pending'",
+                { id }
+            );
+            if (!changed.affectedRows) continue;
+            declined++;
+            await createNotification(
+                request.mentee_id, 'request_declined',
+                note ? `${mentorName} declined your mentorship request: "${note}"` : `${mentorName} declined your mentorship request.`,
+                'requests.html'
+            );
+        }
+        res.json({ declined, skipped: ids.length - declined });
+    } catch (err) { next(err); }
+}
+
 async function endMentorship(req, res, next) {
   try {
     const { userId, role } = req.user;
@@ -328,4 +410,4 @@ async function withdrawRequest(req, res, next) {
   } catch (err) { next(err); }
 }
 
-module.exports = { expireStaleRequests, tellWaitingMentees, createRequest, listMyRequests, respondToRequest, withdrawRequest, endMentorship };
+module.exports = { expireStaleRequests, tellWaitingMentees, createRequest, listMyRequests, respondToRequest, withdrawRequest, endMentorship, myPlaces, declineMany };

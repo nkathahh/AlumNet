@@ -28,6 +28,8 @@ router.post('/events/:id/banner', upload, images.setEventBanner);
 router.delete('/events/:id/banner', images.removeEventBanner);
 router.get('/events/:id/photos', images.listEventPhotos);
 router.post('/events/:id/photos', upload, images.addEventPhoto);
+router.put('/events/:id/album', images.setEventAlbum);
+router.put('/events/:id/cover', images.setEventCover);
 router.post('/opportunities/:id/logo', upload, images.setLogo);
 router.delete('/opportunities/:id/logo', images.removeLogo);
 router.post('/reports/:id/screenshots', upload, images.addReportScreenshot);

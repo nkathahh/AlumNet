@@ -469,7 +469,9 @@ async function listPastEvents(req, res, next) {
               (SELECT COUNT(*) FROM event_registrations r WHERE r.event_id = e.event_id) AS attendee_count,
               EXISTS(SELECT 1 FROM event_registrations r WHERE r.event_id = e.event_id AND r.user_id = :userId) AS attended,
               (SELECT COUNT(*) FROM images i WHERE i.kind = 'event_photo' AND i.event_id = e.event_id AND i.status = 'live') AS photo_count,
-              (SELECT i.storage_key FROM images i WHERE i.kind = 'event_photo' AND i.event_id = e.event_id AND i.status = 'live' ORDER BY i.created_at LIMIT 1) AS cover_key
+              e.album_url,
+              (SELECT i.storage_key FROM images i WHERE i.kind = 'event_photo' AND i.event_id = e.event_id AND i.status = 'live'
+               ORDER BY (i.image_id = e.cover_image_id) DESC, i.created_at LIMIT 1) AS cover_key
        FROM events e
        LEFT JOIN users u ON u.user_id = e.created_by
        LEFT JOIN admins a ON a.user_id = e.created_by

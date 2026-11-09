@@ -139,18 +139,47 @@ const addEventPhoto = handle(async (req, res) => {
   });
 });
 
+// Who may manage an event's photos: the organiser or the alumni office
+const canManageEvent = (req, event) => isAdmin(req) || event.created_by === req.user.userId;
+
+// Photos the alumni office adds are credited to the office, like the events it hosts.
+// Admins still see which admin added them.
+function photoCredit(row, req) {
+  if (!row.uploaded_by_admin) return row.uploaded_by_name || 'A former member';
+  return isAdmin(req) && row.uploaded_by_name ? `KQ Alumni Office (${row.uploaded_by_name})` : 'KQ Alumni Office';
+}
+
 const listEventPhotos = handle(async (req, res) => {
   const id = Number(req.params.id);
-  const [[event]] = await pool.execute('SELECT event_id, status, event_date, created_by FROM events WHERE event_id = :id', { id });
+  const [[event]] = await pool.execute(
+    `SELECT e.event_id, e.title, e.status, e.event_date, e.location, e.mode, e.created_by, e.album_url, e.cover_image_id,
+            COALESCE(u.name, 'Alumni office') AS organiser_name, (a.user_id IS NOT NULL OR e.created_by IS NULL) AS is_official
+     FROM events e LEFT JOIN users u ON u.user_id = e.created_by LEFT JOIN admins a ON a.user_id = e.created_by
+     WHERE e.event_id = :id`,
+    { id }
+  );
   if (!event || (event.status !== 'approved' && !isAdmin(req) && event.created_by !== req.user.userId)) return res.status(404).json({ error: 'Event not found' });
   const [rows] = await pool.execute(
-    `SELECT i.image_id, i.storage_key, i.status, i.caption, i.width, i.height, i.created_at, i.uploaded_by, u.name AS uploaded_by_name
-     FROM images i LEFT JOIN users u ON u.user_id = i.uploaded_by
+    `SELECT i.image_id, i.storage_key, i.status, i.caption, i.width, i.height, i.created_at, i.uploaded_by, u.name AS uploaded_by_name,
+            (ad.user_id IS NOT NULL) AS uploaded_by_admin
+     FROM images i LEFT JOIN users u ON u.user_id = i.uploaded_by LEFT JOIN admins ad ON ad.user_id = i.uploaded_by
      WHERE i.kind = 'event_photo' AND i.event_id = :id AND (i.status = 'live' OR i.uploaded_by = :me OR :admin = 1)
-     ORDER BY i.created_at`,
-    { id, me: req.user.userId, admin: isAdmin(req) ? 1 : 0 }
+     ORDER BY (i.image_id = :cover) DESC, i.created_at`,
+    { id, me: req.user.userId, admin: isAdmin(req) ? 1 : 0, cover: event.cover_image_id || 0 }
   );
+  const official = Number(event.is_official) === 1;
   res.json({
+    event: {
+      event_id: event.event_id,
+      title: event.title,
+      event_date: event.event_date,
+      location: event.location,
+      mode: event.mode,
+      host: official ? 'KQ Alumni Office' : event.organiser_name,
+      album_url: event.album_url,
+      cover_image_id: event.cover_image_id
+    },
+    can_manage: event.status === 'approved' && canManageEvent(req, event),
     can_add: event.status === 'approved' && new Date(event.event_date) <= new Date() && (await canAddPhotos(req, event)),
     photos: rows.map((r) => ({
       image_id: r.image_id,
@@ -158,12 +187,60 @@ const listEventPhotos = handle(async (req, res) => {
       caption: r.caption,
       width: r.width,
       height: r.height,
-      uploaded_by_name: r.uploaded_by_name || 'A former member',
+      created_at: r.created_at,
+      uploaded_by_name: photoCredit({ ...r, uploaded_by_admin: Number(r.uploaded_by_admin) === 1 }, req),
       is_mine: r.uploaded_by === req.user.userId,
+      is_cover: r.image_id === event.cover_image_id,
       thumb_url: imageUrl(r.storage_key, 'event_photo', 480),
       url: imageUrl(r.storage_key, 'event_photo', 1600)
     }))
   });
+});
+
+// Only Google Photos share links are accepted, so the button can never send members somewhere unexpected
+const ALBUM_HOSTS = new Set(['photos.app.goo.gl', 'photos.google.com', 'goo.gl']);
+function cleanAlbumUrl(value) {
+  const text = String(value || '').trim();
+  if (!text) return { url: null };
+  if (text.length > 300) return { error: 'That link is too long.' };
+  let u;
+  try { u = new URL(text); } catch { return { error: 'Paste the full share link, starting with https://' }; }
+  if (u.protocol !== 'https:' || u.username || u.password || !ALBUM_HOSTS.has(u.hostname.toLowerCase())) {
+    return { error: 'Use a Google Photos share link (photos.app.goo.gl or photos.google.com).' };
+  }
+  if (u.hostname.toLowerCase() === 'goo.gl' && !u.pathname.startsWith('/photos/')) return { error: 'Use a Google Photos share link.' };
+  return { url: u.toString() };
+}
+
+// PUT /images/events/:id/album  { album_url }  (empty removes it)
+const setEventAlbum = handle(async (req, res) => {
+  const id = Number(req.params.id);
+  const [[event]] = await pool.execute('SELECT event_id, title, status, created_by FROM events WHERE event_id = :id', { id });
+  if (!event || event.status !== 'approved') return res.status(404).json({ error: 'Event not found' });
+  if (!canManageEvent(req, event)) return res.status(403).json({ error: 'Only the organiser or the alumni office can change the album link.' });
+  const { url, error } = cleanAlbumUrl(req.body && req.body.album_url);
+  if (error) return res.status(400).json({ error });
+  await pool.execute('UPDATE events SET album_url = :url WHERE event_id = :id', { url, id });
+  if (isAdmin(req) && event.created_by !== req.user.userId) {
+    await logAdminAction(req.user.userId, url ? 'event_album_set' : 'event_album_removed', 'events', id, `${url ? 'Linked' : 'Removed'} the Google Photos album for "${event.title}"`, event.title);
+  }
+  res.json({ album_url: url, message: url ? 'Album link saved.' : 'Album link removed.' });
+});
+
+// PUT /images/events/:id/cover  { image_id }
+const setEventCover = handle(async (req, res) => {
+  const id = Number(req.params.id);
+  const imageId = Number(req.body && req.body.image_id);
+  const [[event]] = await pool.execute('SELECT event_id, status, created_by FROM events WHERE event_id = :id', { id });
+  if (!event || event.status !== 'approved') return res.status(404).json({ error: 'Event not found' });
+  if (!canManageEvent(req, event)) return res.status(403).json({ error: 'Only the organiser or the alumni office can choose the cover photo.' });
+  const [[img]] = await pool.execute(
+    "SELECT image_id FROM images WHERE image_id = :imageId AND event_id = :id AND kind = 'event_photo' AND status = 'live'",
+    { imageId: Number.isInteger(imageId) ? imageId : 0, id }
+  );
+  if (!img) return res.status(400).json({ error: 'Choose a photo from this event that others can already see.' });
+  await pool.execute('UPDATE events SET cover_image_id = :imageId WHERE event_id = :id', { imageId, id });
+  res.json({ cover_image_id: imageId, message: 'Cover photo set.' });
 });
 
 /* ---------- Company logo ---------- */
@@ -422,7 +499,7 @@ async function serveMedia(req, res, next) {
 }
 
 module.exports = {
-  setAvatar, removeAvatar, setEventBanner, removeEventBanner, addEventPhoto, listEventPhotos,
+  setAvatar, removeAvatar, setEventBanner, removeEventBanner, addEventPhoto, listEventPhotos, setEventAlbum, setEventCover, cleanAlbumUrl,
   setLogo, removeLogo, addReportScreenshot, removeImage, listPending, decidePending, serveMedia,
   setBrandLogo, removeBrandLogo, serveBrand, brandInfo,
   MAX_EVENT_PHOTOS, MAX_REPORT_SCREENSHOTS

@@ -23,10 +23,16 @@
 
         <main class="app-main">
 
-            <p class="st-banner" id="admin-2fa-required" style="display:none;">
-                Admin tools are locked until you turn on two-factor authentication.
-                <a href="settings.html" class="md-link">Go to Account settings</a>
-            </p>
+            <section class="admin-locked-card" id="admin-2fa-required" style="display:none;" aria-labelledby="admin-locked-title">
+                <h1 id="admin-locked-title">Turn on two-factor sign-in to use the admin tools</h1>
+                <p>Admin accounts can see members' personal data, so AlumNet asks for a code from your phone as well as your password.</p>
+                <ol>
+                    <li>Install Google Authenticator or Microsoft Authenticator on your phone.</li>
+                    <li>Open <strong>Account settings</strong> and choose <strong>Turn on two-factor</strong>.</li>
+                    <li>Scan the QR code, type the 6-digit code and keep your backup codes safe.</li>
+                </ol>
+                <a href="settings.html" class="btn btn-primary">Go to Account settings</a>
+            </section>
 
             <!-- Kept for the user table code; the overview shows these numbers instead -->
             <div class="stat-row" id="stat-row" style="display:none;"></div>

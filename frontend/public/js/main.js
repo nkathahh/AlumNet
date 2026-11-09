@@ -577,8 +577,12 @@ function setRequestsSubtitle() {
   const el = document.getElementById('requests-subtitle');
   if (!el) return;
   const role = localStorage.getItem('alumnet_role');
+  // The heading matches the sidebar link that opens this page
+  const heading = el.closest('.app-header') && el.closest('.app-header').querySelector('h1');
+  if (heading) heading.textContent = role === 'mentor' ? 'Mentee requests' : 'My requests';
+  document.title = `${role === 'mentor' ? 'Mentee requests' : 'My requests'} AlumNet`;
   el.textContent = role === 'mentor'
-    ? 'Requests from mentees awaiting your decision.'
+    ? 'People who have asked you to mentor them.'
     : 'Mentorship requests you have sent to mentors.';
 }
 
@@ -1040,7 +1044,7 @@ function wirePasswordToggle(buttonId, inputId) {
    Mentor recommendations (FR-04): calls the ML service
    -------------------------------------------------------------------- */
 
-async function renderMentorList() {
+async function renderMentorList(attempt = 0) {
   const list = document.getElementById('mentor-list');
   if (!list) return;
   const hasSession = localStorage.getItem('alumnet_signed_in');
@@ -1059,6 +1063,13 @@ async function renderMentorList() {
       myRequests.filter((r) => ['pending', 'accepted'].includes(r.status)).map((r) => r.other_user_id)
     );
 
+    // On the free plan the matching service sleeps when idle and takes about a minute to wake.
+    // That is not an error: say so calmly and try again by itself.
+    if (recRes.status === 503 && data.code !== 'profile_incomplete' && attempt < 8) {
+      list.innerHTML = `<div class="recs-waking" role="status"><span class="spinner" aria-hidden="true"></span><div><strong>Finding your best matches...</strong><span>The matching service is waking up. This can take up to a minute; this page updates by itself. You can browse all mentors below meanwhile.</span></div></div>`;
+      setTimeout(() => { if (document.getElementById('mentor-list')) renderMentorList(attempt + 1); }, 10000);
+      return;
+    }
     if (!recRes.ok) {
       list.innerHTML = data.code === 'profile_incomplete'
         ? `<div class="md">${mdEmpty('search', 'Finish your profile to see matches', 'Mentors are matched on your skills, experience and career interests. Add them and your matches appear here.', 'profile.html#edit', 'Complete my profile')}</div>`
@@ -1157,33 +1168,134 @@ async function renderRequests() {
   if (!list) return;
   const hasSession = localStorage.getItem('alumnet_signed_in');
   if (!hasSession) return;
+  const isMentor = localStorage.getItem('alumnet_role') === 'mentor';
 
   let activeTab = 'pending';
+  let places = null;
+  const picked = new Set();
+  const view = { q: '', dept: '', sort: 'expiring' };
   const tabs = document.querySelectorAll('.tab');
+  const tools = document.getElementById('requests-tools');
+  const banner = document.getElementById('requests-places');
+  const inTab = (r, tab) => r.status === tab || (tab === 'declined' && r.status === 'expired');
 
   async function load() {
     list.innerHTML = '<p style="color:var(--slate); padding:20px 4px;">Loading...</p>';
     try {
-      const res = await fetch(`${API_BASE}/mentorship-requests`);
+      const [res, placesRes] = await Promise.all([
+        fetch(`${API_BASE}/mentorship-requests`),
+        isMentor ? apiSend('GET', '/mentorship-requests/places') : Promise.resolve(null)
+      ]);
       const data = await res.json();
-      if (!res.ok) { list.innerHTML = `<p style="color:var(--kq-red); padding:20px 4px;">${data.error}</p>`; return; }
+      if (!res.ok) { list.innerHTML = `<p style="color:var(--kq-red); padding:20px 4px;">${escapeHTML(data.error || 'Could not load your requests.')}</p>`; return; }
       allMyRequests = data;
+      places = placesRes && placesRes.ok ? placesRes.data : null;
+      for (const id of [...picked]) if (!allMyRequests.some((r) => r.request_id === id && r.status === 'pending')) picked.delete(id);
+      drawTools();
       draw();
     } catch {
       list.innerHTML = '<p style="color:var(--kq-red); padding:20px 4px;">Could not reach the server.</p>';
     }
   }
 
+  // Places banner: how many mentees the mentor can still take
+  function drawBanner() {
+    if (!banner) return;
+    if (!places || activeTab !== 'pending') { banner.hidden = true; return; }
+    const { free, max_mentees: max, active, pending, accepting } = places;
+    banner.hidden = false;
+    banner.className = `req-places ${free === 0 ? 'is-full' : ''}`;
+    banner.innerHTML = `
+      <div>
+        <strong>${free === 0 ? 'All your places are taken' : `You have ${free} free place${free === 1 ? '' : 's'}`}${pending ? ` and ${pending} ${pending === 1 ? 'person' : 'people'} waiting` : ''}.</strong>
+        <span>${active} of ${max} places in use${accepting ? '' : ', new requests paused'}. ${free === 0 && pending ? 'End a mentorship or add places on your profile before accepting anyone else, or decline the requests you cannot take so people can ask someone else.' : pending > free && free > 0 ? `You can accept ${free} more. Decline the others so they can ask someone else.` : 'Requests expire after 14 days without a reply.'}</span>
+      </div>
+      <a class="btn btn-secondary md-btn-sm" href="profile.html">Change places</a>`;
+  }
+
+  function drawTools() {
+    tabs.forEach((t) => {
+      const n = allMyRequests.filter((r) => inTab(r, t.dataset.tab)).length;
+      t.innerHTML = `${escapeHTML(t.dataset.label || (t.dataset.label = t.textContent.trim()))}${n ? ` <span class="tab-count">${n}</span>` : ''}`;
+    });
+    if (!tools) return;
+    const depts = [...new Set(allMyRequests.map((r) => r.other_department).filter(Boolean))].sort();
+    tools.hidden = allMyRequests.length < 2;
+    tools.innerHTML = `
+      <input type="search" id="req-q" class="search-pill" maxlength="100" placeholder="Search by name, skill or message" value="${escapeHTML(view.q)}" aria-label="Search requests">
+      <select id="req-dept" class="select-pill" aria-label="Department">
+        <option value="">Any department</option>
+        ${depts.map((d) => `<option ${d === view.dept ? 'selected' : ''}>${escapeHTML(d)}</option>`).join('')}
+      </select>
+      <select id="req-sort" class="select-pill" aria-label="Sort">
+        <option value="expiring" ${view.sort === 'expiring' ? 'selected' : ''}>${activeTab === 'pending' ? 'Expiring soonest' : 'Oldest first'}</option>
+        <option value="newest" ${view.sort === 'newest' ? 'selected' : ''}>Newest first</option>
+        ${isMentor ? `<option value="common" ${view.sort === 'common' ? 'selected' : ''}>Most in common with you</option>` : ''}
+        <option value="name" ${view.sort === 'name' ? 'selected' : ''}>Name A to Z</option>
+      </select>`;
+    const q = tools.querySelector('#req-q');
+    q.oninput = () => { view.q = q.value; draw(); };
+    tools.querySelector('#req-dept').onchange = (e) => { view.dept = e.target.value; draw(); };
+    tools.querySelector('#req-sort').onchange = (e) => { view.sort = e.target.value; draw(); };
+  }
+
+  function visible() {
+    const words = view.q.toLowerCase().split(/\s+/).filter(Boolean);
+    const rows = allMyRequests.filter((r) => inTab(r, activeTab)
+      && (!view.dept || r.other_department === view.dept)
+      && words.every((w) => [r.other_name, r.other_headline, r.other_department, r.message, r.other_skills, r.other_goals].join(' ').toLowerCase().includes(w)));
+    const time = (r) => new Date(r.requested_at).getTime();
+    const sorters = {
+      expiring: (a, b) => time(a) - time(b),
+      newest: (a, b) => time(b) - time(a),
+      common: (a, b) => (b.in_common || []).length - (a.in_common || []).length || time(a) - time(b),
+      name: (a, b) => a.other_name.localeCompare(b.other_name)
+    };
+    return rows.sort(sorters[view.sort] || sorters.expiring);
+  }
+
   function draw() {
-    // Expired requests sit with declined ones: both mean "no longer waiting"
-    const filtered = allMyRequests.filter((r) => r.status === activeTab || (activeTab === 'declined' && r.status === 'expired'));
+    drawBanner();
+    const filtered = visible();
+    const total = allMyRequests.filter((r) => inTab(r, activeTab)).length;
+    const selectable = isMentor && activeTab === 'pending';
+    const shownPicked = filtered.filter((r) => picked.has(r.request_id)).length;
+    const bulk = selectable && filtered.length ? `
+      <div class="req-bulk">
+        <label class="check-row"><input type="checkbox" id="req-all" ${shownPicked && shownPicked === filtered.length ? 'checked' : ''}><span>Select all shown</span></label>
+        <span class="md-muted st-small">${picked.size ? `${picked.size} selected` : ''}</span>
+        <button type="button" class="btn btn-secondary md-btn-sm" id="req-decline-many" ${picked.size ? '' : 'disabled'}>Decline selected</button>
+      </div>` : '';
+    const count = total && filtered.length !== total ? `<p class="md-muted st-small req-showing">Showing ${filtered.length} of ${total}.</p>` : '';
     list.innerHTML = filtered.length
-      ? filtered.map(requestCardHTML).join('')
-      : `<p style="color: var(--slate); padding: 20px 4px;">No ${activeTab} requests.</p>`;
+      ? bulk + count + filtered.map((r) => requestCardHTML(r, { free: places ? places.free : undefined, selectable, selected: picked.has(r.request_id) })).join('')
+      : `<p style="color: var(--slate); padding: 20px 4px;">${total ? 'No requests match your search.' : `No ${activeTab} requests.`}</p>`;
 
     list.querySelectorAll('[data-profile]').forEach((a) => {
       a.addEventListener('click', (e) => { e.preventDefault(); openMentorProfile(a.dataset.profile); });
     });
+    list.querySelectorAll('[data-pick]').forEach((box) => {
+      box.onchange = () => { const id = Number(box.dataset.pick); if (box.checked) picked.add(id); else picked.delete(id); draw(); };
+    });
+    const all = list.querySelector('#req-all');
+    if (all) all.onchange = () => { filtered.forEach((r) => (all.checked ? picked.add(r.request_id) : picked.delete(r.request_id))); draw(); };
+    const many = list.querySelector('#req-decline-many');
+    if (many) many.onclick = async () => {
+      const n = picked.size;
+      const note = await askDialog({
+        title: `Decline ${n} request${n === 1 ? '' : 's'}?`,
+        text: 'Each person is told, so they can ask another mentor. You can add a short note that everyone you decline will see.',
+        confirmText: `Decline ${n}`,
+        danger: true,
+        input: { label: 'Note (optional, up to 160 characters)', placeholder: 'e.g. My places are full this quarter. I wish you well.', maxLength: 160 }
+      });
+      if (note === null) return;
+      const r = await apiSend('POST', '/mentorship-requests/decline', { ids: [...picked], note: note || undefined });
+      if (!r.ok) { toast(r.data.error || 'Could not decline them.'); return; }
+      toast(`Declined ${r.data.declined}.${r.data.skipped ? ` ${r.data.skipped} had already changed.` : ''}`);
+      picked.clear();
+      load();
+    };
     list.querySelectorAll('[data-workspace]').forEach((btn) => {
       btn.onclick = () => openWorkspace(btn.dataset.workspace, allMyRequests.find((r) => String(r.request_id) === btn.dataset.workspace), load);
     });
@@ -1201,30 +1313,13 @@ async function renderRequests() {
       btn.addEventListener('click', async () => {
         if (btn.dataset.action === 'end' && !(await askConfirm('End this mentorship?', 'You can both still see the history. The other person is told.', { confirmText: 'End mentorship', danger: true }))) return;
         btn.closest('.request-card').querySelectorAll('button').forEach((b) => (b.disabled = true));
-
-        try {
-          let res;
-          if (btn.dataset.action === 'withdraw') {
-            res = await fetch(`${API_BASE}/mentorship-requests/${btn.dataset.requestId}`, {
-              method: 'DELETE'
-            });
-          } else if (btn.dataset.action === 'end') {
-            res = await fetch(`${API_BASE}/mentorship-requests/${btn.dataset.requestId}/end`, {
-              method: 'POST'
-            });
-          } else {
-            res = await fetch(`${API_BASE}/mentorship-requests/${btn.dataset.requestId}`, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ decision: btn.dataset.action })
-            });
-          }
-
-          if (!res.ok) { const err = await res.json(); toast(err.error || 'Action failed'); }
-          load();
-        } catch {
-          toast('Could not reach the server.');
-        }
+        let r;
+        if (btn.dataset.action === 'withdraw') r = await apiSend('DELETE', `/mentorship-requests/${btn.dataset.requestId}`);
+        else if (btn.dataset.action === 'end') r = await apiSend('POST', `/mentorship-requests/${btn.dataset.requestId}/end`);
+        else r = await apiSend('PATCH', `/mentorship-requests/${btn.dataset.requestId}`, { decision: btn.dataset.action });
+        if (!r.ok) toast(r.data.error || 'That did not work. Please try again.');
+        picked.delete(Number(btn.dataset.requestId));
+        load();
       });
     });
   }
@@ -1234,6 +1329,7 @@ async function renderRequests() {
       tabs.forEach((t) => t.classList.remove('active'));
       tab.classList.add('active');
       activeTab = tab.dataset.tab;
+      drawTools();
       draw();
     });
   });
@@ -1401,7 +1497,14 @@ function openFeedbackDialog(requestId, otherName, onDone) {
   });
 }
 
-function requestCardHTML(r) {
+// ctx (requests page, mentors): { free } places left, { selected } ticked for declining together
+function daysLeftText(r) {
+  if (!r.expires_at) return '';
+  const days = Math.ceil((new Date(r.expires_at) - Date.now()) / 86400000);
+  return days <= 1 ? 'Expires today' : `${days} days left to reply`;
+}
+
+function requestCardHTML(r, ctx = {}) {
   const role = localStorage.getItem('alumnet_role');
   const canDecide = role === 'mentor' && r.status === 'pending';
   const canWithdraw = role === 'mentee' && r.status === 'pending';
@@ -1410,9 +1513,13 @@ function requestCardHTML(r) {
 
   let actionHTML;
   if (canDecide) {
-    actionHTML = `<div style="display:flex; gap:8px;">
-      <button class="btn btn-primary" data-action="accepted" data-request-id="${r.request_id}">Accept</button>
-      <button class="btn btn-secondary" data-action="declined" data-request-id="${r.request_id}">Decline</button>
+    const full = ctx.free === 0;
+    actionHTML = `<div class="req-side-actions">
+      <div style="display:flex; gap:8px;">
+        <button class="btn btn-primary" data-action="accepted" data-request-id="${r.request_id}" ${full ? 'disabled aria-disabled="true" title="All your places are taken. End a mentorship or add places on your profile first."' : ''}>Accept</button>
+        <button class="btn btn-secondary" data-action="declined" data-request-id="${r.request_id}">Decline</button>
+      </div>
+      <span class="req-days ${/today|^[1-3] days/.test(daysLeftText(r)) ? 'soon' : ''}">${escapeHTML(daysLeftText(r))}</span>
     </div>`;
   } else if (canWithdraw) {
     actionHTML = `<button class="btn btn-secondary" data-action="withdraw" data-request-id="${r.request_id}">Withdraw</button>`;
@@ -1449,18 +1556,30 @@ function requestCardHTML(r) {
     ? `<div class="req-message"><span class="md-muted st-small">${role === 'mentor' ? 'Their message' : 'Your message'}</span><br>${escapeHTML(r.message)}</div>${caution}`
     : (role === 'mentor' && r.status === 'pending' ? '<div class="req-message md-muted st-small">No introduction was included.</div>' : '');
 
+  // What the mentee wants help with, so the mentor can decide without opening the profile
+  const details = role === 'mentor' && ['pending', 'accepted'].includes(r.status) && (r.other_goals || r.other_skills) ? `
+    <dl class="req-details">
+      ${r.other_goals ? `<div><dt>Wants help with</dt><dd>${escapeHTML(r.other_goals)}</dd></div>` : ''}
+      ${r.other_skills ? `<div><dt>Skills</dt><dd class="req-chips">${splitList(r.other_skills).slice(0, 6).map((k) => `<span class="tag">${escapeHTML(k)}</span>`).join('')}</dd></div>` : ''}
+      ${r.in_common && r.in_common.length ? `<div><dt>In common with you</dt><dd><strong>${escapeHTML(r.in_common.join(', '))}</strong></dd></div>` : ''}
+    </dl>` : '';
+  const pick = ctx.selectable ? `<label class="req-pick"><input type="checkbox" data-pick="${r.request_id}" ${ctx.selected ? 'checked' : ''}><span class="sr-only">Select ${escapeHTML(r.other_name)}</span></label>` : '';
+
   return `
-    <div class="request-card request-card-rich">
+    <div class="request-card request-card-rich${ctx.selected ? ' is-picked' : ''}">
+      ${pick}
       ${avatarHTML(r.other_name, r.other_avatar_url, 'people-av req-av')}
       <div class="req-main">
         <strong><a href="#" class="req-name" data-profile="${r.other_user_id}">${escapeHTML(r.other_name)}</a></strong>
         ${r.other_verified ? verifiedBadgeHTML(role === 'mentor' ? 'Verified current KQ staff' : 'Verified former KQ staff') : ''}<br>
         ${r.other_headline ? `<span class="req-headline">${escapeHTML(r.other_headline)}</span><br>` : ''}
         <span style="font-size:0.82rem; color:var(--slate);">${escapeHTML(r.other_department || '')} · ${r.status === 'ended' && r.ended_at ? `Ended on ${new Date(r.ended_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : `Requested on ${date}`}</span>
+        ${details}
         ${message}
         ${contact}
         ${['accepted', 'ended'].includes(r.status) ? `<div class="req-progress md-muted st-small">${r.goals_total ? `Goals: ${r.goals_done} of ${r.goals_total} done` : 'No goals yet'} · ${r.meetings} meeting${r.meetings === 1 ? '' : 's'} logged</div>` : ''}
         <div class="req-safety">
+          <button type="button" class="btn-quiet st-small" data-profile="${r.other_user_id}">View profile</button>
           <button type="button" class="btn-quiet st-small" data-safety="report" data-user="${r.other_user_id}" data-name="${escapeHTML(r.other_name)}">Report</button>
           <button type="button" class="btn-quiet st-small" data-safety="block" data-user="${r.other_user_id}" data-name="${escapeHTML(r.other_name)}">Block</button>
         </div>
@@ -2105,19 +2224,24 @@ async function renderPastEvents() {
   box.innerHTML = `<div class="event-grid">${data.map((e) => `
     <article class="event-card past-card">
       ${e.cover_url ? `<img class="event-banner" src="${escapeHTML(e.cover_url)}" alt="" loading="lazy" decoding="async">` : '<div class="event-banner event-banner-empty" aria-hidden="true"></div>'}
-      <div class="date">${escapeHTML(new Date(e.event_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }))}</div>
+      <div class="date">${escapeHTML(eventWhen(e.event_date).date)}</div>
       <h3>${escapeHTML(e.title)}</h3>
       <div class="event-meta">
         <div>Hosted by ${escapeHTML(e.is_official ? 'KQ Alumni Office' : e.organiser_name)}</div>
-        <div>${e.photo_count ? `${e.photo_count} photo${e.photo_count === 1 ? '' : 's'}` : 'No photos yet'}${e.attended ? ', you were there' : ''}</div>
+        <div>${e.photo_count ? `${e.photo_count} highlight${e.photo_count === 1 ? '' : 's'}` : 'No photos yet'}${e.album_url ? ' and a full album' : ''}${e.attended ? ', you were there' : ''}</div>
       </div>
-      <button type="button" class="btn ${e.photo_count ? 'btn-secondary' : e.can_add_photos ? 'btn-primary' : 'btn-secondary'} btn-block" data-gallery="${e.event_id}" data-title="${escapeHTML(e.title)}">
-        ${e.photo_count ? 'See photos' : e.can_add_photos ? 'Add the first photo' : 'See photos'}
+      <button type="button" class="btn ${e.photo_count || !e.can_add_photos ? 'btn-secondary' : 'btn-primary'} btn-block" data-gallery="${e.event_id}" data-title="${escapeHTML(e.title)}">
+        ${e.photo_count || e.album_url ? 'See photos' : e.can_add_photos ? 'Add the first photo' : 'See photos'}
       </button>
     </article>`).join('')}</div>`;
   box.querySelectorAll('[data-gallery]').forEach((btn) => { btn.onclick = () => openEventGallery(btn.dataset.gallery, btn.dataset.title); });
 }
 
+/*
+ * An event's photos: the highlights kept on AlumNet, with the chosen cover
+ * shown large, and a link to the full Google Photos album when there is one.
+ * The organiser and the alumni office can set the album link and the cover.
+ */
 async function openEventGallery(eventId, title) {
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop';
@@ -2127,24 +2251,60 @@ async function openEventGallery(eventId, title) {
   const onKey = (e) => { if (e.key === 'Escape' && !document.querySelector('.photo-viewer')) close(); };
   document.addEventListener('keydown', onKey);
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+  const isAdminUser = localStorage.getItem('alumnet_role') === 'admin';
 
   const draw = async () => {
     const { ok, data } = await apiSend('GET', `/images/events/${eventId}/photos`);
-    const body = backdrop.querySelector('#gal-body');
-    if (!ok) { body.innerHTML = `<p style="color:var(--kq-red);">${escapeHTML(data.error || 'Could not load the photos.')}</p>`; return; }
-    const photos = data.photos;
-    body.innerHTML = `
-      ${photos.length ? `<ul class="gallery-grid">${photos.map((p, i) => `
-        <li>
-          <button type="button" class="gallery-thumb" data-view="${i}" aria-label="Open photo ${i + 1}${p.caption ? `: ${escapeHTML(p.caption)}` : ''}">
-            <img src="${escapeHTML(p.thumb_url)}" alt="" loading="lazy" decoding="async">
-            ${p.status === 'pending' ? '<span class="gallery-flag">Being checked</span>' : ''}
-          </button>
-          ${p.is_mine || localStorage.getItem('alumnet_role') === 'admin' ? `<button type="button" class="btn-quiet st-small" data-remove-photo="${p.image_id}">Remove</button>` : ''}
-        </li>`).join('')}</ul>` : '<p class="md-muted">No photos yet.</p>'}
+    const card = backdrop.querySelector('.gallery-card');
+    if (!ok) { card.querySelector('#gal-body').innerHTML = `<p style="color:var(--kq-red);">${escapeHTML(data.error || 'Could not load the photos.')}</p>`; return; }
+    const { photos, event: ev } = data;
+    const when = eventWhen(ev.event_date).date;
+    const where = ev.mode === 'virtual' ? 'Online' : ev.location;
+    const live = photos.filter((p) => p.status === 'live').length;
+    card.innerHTML = `
+      <div class="gal-head">
+        <div>
+          <h3 id="gal-title">${escapeHTML(ev.title)}</h3>
+          <p class="gal-meta">${escapeHTML([when, where, `Hosted by ${ev.host}`].filter(Boolean).join(' · '))}</p>
+        </div>
+        <button type="button" class="btn-quiet gal-x" data-gal-close aria-label="Close">Close</button>
+      </div>
+      ${ev.album_url ? `
+        <a class="gal-album" href="${escapeHTML(ev.album_url)}" target="_blank" rel="noopener noreferrer">
+          <span class="gal-album-icon" aria-hidden="true"></span>
+          <span><strong>See every photo on Google Photos</strong><span class="md-muted">The full album opens in a new tab. The highlights are below.</span></span>
+        </a>` : ''}
+      ${photos.length ? `
+        <p class="gal-count">${live} highlight${live === 1 ? '' : 's'}${photos.length > live ? `, ${photos.length - live} waiting to be checked` : ''}</p>
+        <ul class="gallery-grid gal-mosaic">${photos.map((p, i) => `
+          <li class="${i === 0 ? 'gal-feature' : ''}">
+            <button type="button" class="gallery-thumb" data-view="${i}" aria-label="Open photo ${i + 1} of ${photos.length}${p.caption ? `: ${escapeHTML(p.caption)}` : ''}">
+              <img src="${escapeHTML(i === 0 ? p.url : p.thumb_url)}" alt="" loading="lazy" decoding="async">
+              ${p.status === 'pending' ? '<span class="gallery-flag">Being checked</span>' : ''}
+              ${p.is_cover ? '<span class="gallery-flag gal-cover-flag">Cover</span>' : ''}
+              ${p.caption ? `<span class="gal-caption">${escapeHTML(p.caption)}</span>` : ''}
+            </button>
+            ${(p.is_mine || isAdminUser || (data.can_manage && p.status === 'live' && !p.is_cover)) ? `
+              <div class="gal-tools">
+                ${data.can_manage && p.status === 'live' && !p.is_cover ? `<button type="button" class="btn-quiet st-small" data-cover="${p.image_id}">Make cover</button>` : ''}
+                ${p.is_mine || isAdminUser ? `<button type="button" class="btn-quiet st-small" data-remove-photo="${p.image_id}">Remove</button>` : ''}
+              </div>` : ''}
+          </li>`).join('')}</ul>`
+        : `<p class="md-muted gal-empty">${ev.album_url ? 'No highlights here yet. Use the album link above to see the photos.' : 'No photos yet.'}</p>`}
+      ${data.can_manage ? `
+        <form class="gallery-add" id="gal-album" novalidate>
+          <h4>Google Photos album</h4>
+          <p class="field-hint">Keep every photo in a shared Google Photos album and add its share link here. Upload only the best 6 to 12 to AlumNet.</p>
+          <div class="gal-album-row">
+            <input type="url" id="gal-album-url" maxlength="300" placeholder="https://photos.app.goo.gl/..." value="${escapeHTML(ev.album_url || '')}" aria-label="Album share link">
+            <button type="submit" class="btn btn-secondary">${ev.album_url ? 'Update' : 'Save link'}</button>
+            ${ev.album_url ? '<button type="button" class="btn-quiet st-small" data-album-remove>Remove</button>' : ''}
+          </div>
+          <p class="st-msg" id="gal-album-msg" role="status"></p>
+        </form>` : ''}
       ${data.can_add ? `
         <form class="gallery-add" id="gal-add" novalidate>
-          <h4>Add photos</h4>
+          <h4>Add highlights</h4>
           <div class="field">
             <label for="gal-files">Photos (JPG, PNG or WebP, up to 5 MB each)</label>
             <input type="file" id="gal-files" accept="${IMAGE_TYPES.join(',')}" multiple>
@@ -2156,17 +2316,24 @@ async function openEventGallery(eventId, title) {
           <label class="check-row"><input type="checkbox" id="gal-consent"><span>Everyone clearly shown agreed to these photos being shared with AlumNet members.</span></label>
           <p class="st-msg" id="gal-msg" role="status"></p>
           <button type="submit" class="btn btn-primary">Add photos</button>
-          ${localStorage.getItem('alumnet_role') === 'admin' ? '' : '<p class="field-hint">The alumni office checks each photo before other members see it.</p>'}
-        </form>` : ''}
-      <div class="dlg-actions"><button type="button" class="btn btn-secondary" data-gal-close>Close</button></div>`;
-    body.querySelector('[data-gal-close]').onclick = close;
-    body.querySelectorAll('[data-view]').forEach((b) => { b.onclick = () => openPhotoViewer(photos, Number(b.dataset.view)); });
-    body.querySelectorAll('[data-remove-photo]').forEach((b) => {
+          ${isAdminUser ? '' : '<p class="field-hint">The alumni office checks each photo before other members see it.</p>'}
+        </form>` : ''}`;
+    card.querySelector('[data-gal-close]').onclick = close;
+    card.querySelectorAll('[data-view]').forEach((b) => {
+      b.onclick = () => openPhotoViewer(photos, Number(b.dataset.view), { title: ev.title, download: true });
+    });
+    card.querySelectorAll('[data-cover]').forEach((b) => {
       b.onclick = async () => {
-        const admin = localStorage.getItem('alumnet_role') === 'admin';
+        const r = await apiSend('PUT', `/images/events/${eventId}/cover`, { image_id: Number(b.dataset.cover) });
+        toast(r.ok ? 'Cover photo set.' : r.data.error || 'Could not set the cover.');
+        draw();
+      };
+    });
+    card.querySelectorAll('[data-remove-photo]').forEach((b) => {
+      b.onclick = async () => {
         const photo = photos.find((p) => String(p.image_id) === b.dataset.removePhoto);
         let note = '';
-        if (admin && !photo.is_mine) {
+        if (isAdminUser && !photo.is_mine) {
           note = await askDialog({ title: 'Remove this photo?', text: 'The person who added it is told why.', confirmText: 'Remove', danger: true, input: { label: 'Why', placeholder: 'e.g. Shows someone who did not agree', required: 'Give a reason.' } });
           if (note === null) return;
         } else if (!(await askConfirm('Remove this photo?', 'It is deleted straight away.', { confirmText: 'Remove', danger: true }))) return;
@@ -2175,7 +2342,19 @@ async function openEventGallery(eventId, title) {
         draw();
       };
     });
-    const form = body.querySelector('#gal-add');
+    const albumForm = card.querySelector('#gal-album');
+    if (albumForm) {
+      const saveAlbum = async (value) => {
+        const r = await apiSend('PUT', `/images/events/${eventId}/album`, { album_url: value });
+        if (!r.ok) { setMsg(albumForm.querySelector('#gal-album-msg'), r.data.error || 'Could not save the link.'); return; }
+        toast(r.data.message);
+        draw();
+      };
+      albumForm.onsubmit = (e) => { e.preventDefault(); saveAlbum(albumForm.querySelector('#gal-album-url').value.trim()); };
+      const rm = albumForm.querySelector('[data-album-remove]');
+      if (rm) rm.onclick = () => saveAlbum('');
+    }
+    const form = card.querySelector('#gal-add');
     if (form) {
       form.onsubmit = async (e) => {
         e.preventDefault();
@@ -2194,14 +2373,14 @@ async function openEventGallery(eventId, title) {
           if (r.ok) added++; else problems.push(`${f.name}: ${r.data.error}`);
         }
         btn.disabled = false;
-        if (added) toast(`${added} photo${added === 1 ? '' : 's'} added.${localStorage.getItem('alumnet_role') === 'admin' ? '' : ' Others see them once the alumni office has checked them.'}`);
+        if (added) toast(`${added} photo${added === 1 ? '' : 's'} added.${isAdminUser ? '' : ' Others see them once the alumni office has checked them.'}`);
         await draw();
         if (problems.length) setMsg(backdrop.querySelector('#gal-msg') || msg, problems.join(' '));
       };
     }
   };
   await draw();
-  const first = backdrop.querySelector('button, input');
+  const first = backdrop.querySelector('[data-view], button, input');
   if (first) first.focus();
 }
 
@@ -3502,6 +3681,7 @@ function wireAdminAdmins() {
 }
 
 /* Admin tools need 2FA: show one clear message instead of empty tabs */
+let adminLocked = false;
 async function checkAdminTwoFactor() {
   const banner = document.getElementById('admin-2fa-required');
   if (!banner) return;
@@ -3511,7 +3691,10 @@ async function checkAdminTwoFactor() {
     const data = await res.json();
     if (data.code !== 'two_factor_required') return;
     banner.style.display = 'block';
-    document.querySelectorAll('[id^="admin-tab-"]').forEach((el) => { el.style.opacity = '0.35'; el.style.pointerEvents = 'none'; });
+    adminLocked = true;
+    // Hide the tools rather than greying them out: their empty numbers would be misleading
+    document.querySelectorAll('[id^="admin-tab-"]').forEach((el) => { el.hidden = true; el.style.setProperty('display', 'none', 'important'); });
+    document.querySelectorAll('[data-admin-tab]').forEach((l) => l.setAttribute('aria-disabled', 'true'));
   } catch { /* offline */ }
 }
 
@@ -3519,6 +3702,7 @@ async function checkAdminTwoFactor() {
 const ADMIN_TABS = ['overview', 'verification', 'reports', 'users', 'admins', 'hr', 'events', 'opportunities', 'impact', 'logs', 'branding'];
 
 function showAdminTab(name) {
+  if (adminLocked) return;
   ADMIN_TABS.forEach((t) => {
     const el = document.getElementById(`admin-tab-${t}`);
     if (el) el.style.display = t === name ? 'block' : 'none';
@@ -3890,35 +4074,67 @@ function chosenImage(root, id) {
 }
 
 // A full-size view of a photo, closed with Esc, the button or a click outside
-function openPhotoViewer(photos, start = 0) {
+/*
+ * Full-screen photo viewer: arrows, swipe on phones, a "3 of 12" counter,
+ * full screen and (for event photos) download.
+ */
+function openPhotoViewer(photos, start = 0, opts = {}) {
   let i = start;
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop photo-viewer';
   const opener = document.activeElement;
+  const many = photos.length > 1;
+  const move = (step) => { if (!many) return; i = (i + step + photos.length) % photos.length; draw(); };
+  const fileName = () => `${String(opts.title || 'AlumNet photo').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').slice(0, 60) || 'photo'}-${i + 1}.webp`;
   const draw = () => {
     const p = photos[i];
     backdrop.innerHTML = `
-      <div class="photo-viewer-card" role="dialog" aria-modal="true" aria-label="Photo ${i + 1} of ${photos.length}">
-        <img src="${escapeHTML(p.url)}" alt="${escapeHTML(p.caption || `Photo ${i + 1} of ${photos.length}`)}">
-        <div class="photo-viewer-bar">
-          <p>${p.caption ? `<strong>${escapeHTML(p.caption)}</strong><br>` : ''}<span class="md-muted">Added by ${escapeHTML(p.uploaded_by_name || 'a member')}${p.status === 'pending' ? ', waiting for the alumni office to check it' : ''}</span></p>
-          <div class="photo-viewer-actions">
-            ${photos.length > 1 ? `<button type="button" class="btn btn-secondary md-btn-sm" data-pv-move="-1">Previous</button><button type="button" class="btn btn-secondary md-btn-sm" data-pv-move="1">Next</button>` : ''}
-            <button type="button" class="btn btn-primary md-btn-sm" data-pv-close>Close</button>
+      <div class="pv" role="dialog" aria-modal="true" aria-label="Photo ${i + 1} of ${photos.length}">
+        <div class="pv-top">
+          <span class="pv-count" aria-live="polite">${many ? `${i + 1} of ${photos.length}` : ''}</span>
+          <div class="pv-top-actions">
+            ${opts.download ? `<a class="pv-btn" href="${escapeHTML(p.url)}" download="${escapeHTML(fileName())}">Download</a>` : ''}
+            ${document.fullscreenEnabled ? '<button type="button" class="pv-btn" data-pv-full>Full screen</button>' : ''}
+            <button type="button" class="pv-btn pv-close" data-pv-close>Close</button>
           </div>
         </div>
+        <div class="pv-stage">
+          ${many ? '<button type="button" class="pv-arrow pv-prev" data-pv-move="-1" aria-label="Previous photo"></button>' : ''}
+          <img src="${escapeHTML(p.url)}" alt="${escapeHTML(p.caption || `Photo ${i + 1} of ${photos.length}`)}" draggable="false">
+          ${many ? '<button type="button" class="pv-arrow pv-next" data-pv-move="1" aria-label="Next photo"></button>' : ''}
+        </div>
+        <div class="pv-bar">
+          ${p.caption ? `<strong>${escapeHTML(p.caption)}</strong>` : ''}
+          <span>Added by ${escapeHTML(p.uploaded_by_name || 'a member')}${p.status === 'pending' ? ', waiting for the alumni office to check it' : ''}</span>
+        </div>
       </div>`;
-    backdrop.querySelectorAll('[data-pv-move]').forEach((b) => { b.onclick = () => { i = (i + Number(b.dataset.pvMove) + photos.length) % photos.length; draw(); backdrop.querySelector(`[data-pv-move="${b.dataset.pvMove}"]`).focus(); }; });
+    backdrop.querySelectorAll('[data-pv-move]').forEach((b) => { b.onclick = () => { move(Number(b.dataset.pvMove)); backdrop.querySelector(`[data-pv-move="${b.dataset.pvMove}"]`).focus(); }; });
     backdrop.querySelector('[data-pv-close]').onclick = close;
+    const full = backdrop.querySelector('[data-pv-full]');
+    if (full) full.onclick = () => (document.fullscreenElement ? document.exitFullscreen() : backdrop.requestFullscreen()).catch(() => {});
+    // Preload the next photo so moving on is instant
+    if (many) { const next = new Image(); next.src = photos[(i + 1) % photos.length].url; }
   };
-  const close = () => { backdrop.remove(); document.removeEventListener('keydown', onKey); if (opener && opener.focus) opener.focus(); };
+  const close = () => {
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    backdrop.remove(); document.removeEventListener('keydown', onKey);
+    if (opener && opener.focus) opener.focus();
+  };
   const onKey = (e) => {
     if (e.key === 'Escape') close();
-    if (e.key === 'ArrowRight' && photos.length > 1) { i = (i + 1) % photos.length; draw(); }
-    if (e.key === 'ArrowLeft' && photos.length > 1) { i = (i - 1 + photos.length) % photos.length; draw(); }
+    if (e.key === 'ArrowRight') move(1);
+    if (e.key === 'ArrowLeft') move(-1);
   };
+  // Swipe left or right on touch screens
+  let startX = null;
+  backdrop.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'mouse') startX = e.clientX; });
+  backdrop.addEventListener('pointerup', (e) => {
+    if (startX === null) return;
+    const dx = e.clientX - startX; startX = null;
+    if (Math.abs(dx) > 50) move(dx < 0 ? 1 : -1);
+  });
   document.addEventListener('keydown', onKey);
-  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop || e.target.classList.contains('pv-stage')) close(); });
   draw();
   document.body.appendChild(backdrop);
   backdrop.querySelector('[data-pv-close]').focus();
@@ -4177,14 +4393,15 @@ function homeEventsHTML(events, emptyText) {
   return list.map((e) => {
     const d = mdDate(e.event_date || e.date);
     const where = e.mode === 'virtual' ? 'Online' : (e.location || 'In person');
-    const when = d ? `${d.toLocaleDateString('en-GB', { weekday: 'long' })}, ${d.toLocaleTimeString('en-GB', { hour: 'numeric', minute: '2-digit', hour12: true }).replace(' ', '\u00a0')}` : '';
+    // Same style as the event cards: 24-hour Nairobi time
+    const when = d ? `${d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: KQ_TZ })}, ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: KQ_TZ })}` : '';
     const mine = e.is_registered || e.registered || e.user_registered;
     return `
       <a class="home-event" href="events.html">
-        <span class="home-datebox" aria-hidden="true"><span class="m">${d ? d.toLocaleDateString('en-GB', { month: 'short' }) : ''}</span><span class="d">${d ? d.getDate() : ''}</span></span>
+        <span class="home-datebox" aria-hidden="true"><span class="m">${d ? d.toLocaleDateString('en-GB', { month: 'short', timeZone: KQ_TZ }) : ''}</span><span class="d">${d ? d.toLocaleDateString('en-GB', { day: 'numeric', timeZone: KQ_TZ }) : ''}</span></span>
         <span>
           <span class="home-item-title">${escapeHTML(e.title || 'Event')}</span>
-          <span class="home-item-meta">${d ? escapeHTML(d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })) + ', ' : ''}${escapeHTML([when.split(', ')[1], where].filter(Boolean).join(', '))}</span>
+          <span class="home-item-meta">${escapeHTML([when, where].filter(Boolean).join(', '))}</span>
           ${mine ? '<span class="home-item-flag">You are registered</span>' : ''}
         </span>
       </a>`;
@@ -4195,7 +4412,7 @@ const MENTORING_GUIDE = `
   <ol class="guide-steps">
     <li><strong>Complete your profile.</strong> Mentors are suggested from your skills, experience and career interests, so add all three.</li>
     <li><strong>Ask a mentor.</strong> Open Find a mentor, read a profile and send a short note saying what you would like help with.</li>
-    <li><strong>Wait for a reply.</strong> The mentor has 14 days to accept or decline. You are told either way, and you can ask up to three people at once.</li>
+    <li><strong>Wait for a reply.</strong> The mentor has 14 days to accept or decline. You are told either way, and you can have up to 5 requests waiting at once.</li>
     <li><strong>Meet and agree goals.</strong> Once they accept you both see each other's email. Use the workspace on My requests to note goals and log meetings.</li>
   </ol>
   <p class="md-muted">Something wrong? Every profile and request has a Report button, and an admin reviews it.</p>`;
@@ -4273,7 +4490,7 @@ async function renderMenteeDashboard() {
   } else if (!active.length && !pending.length) {
     next = { h: 'Your next step: ask a mentor', p: 'Pick someone below, read their profile and send a short note saying what you would like help with.', href: 'recommendations.html', btn: 'Find a mentor' };
   } else if (!active.length) {
-    next = { h: 'Waiting for a reply', p: `Mentors have 14 days to answer, and you are told either way. You can ask up to three people at once.`, href: 'requests.html', btn: 'See my requests', calm: true };
+    next = { h: 'Waiting for a reply', p: `Mentors have 14 days to answer, and you are told either way. You can have up to 5 requests waiting at once.`, href: 'requests.html', btn: 'See my requests', calm: true };
   } else if (!met) {
     next = { h: `Plan your first meeting with ${escapeHTML(String(active[0].other_name || 'your mentor').split(' ')[0])}`, p: 'Agree two or three goals together, then log the meeting in your shared workspace.', href: 'requests.html#accepted', btn: 'Open workspace' };
   } else {
@@ -4379,7 +4596,7 @@ async function renderMentorDashboard() {
   const free = Math.max(0, maxM - active.length);
   const seatHTML = [
     ...active.map((r) => `<div class="seat">${avatarHTML(r.other_name, r.other_avatar_url, 'seat-av')}<span class="seat-name">${escapeHTML(String(r.other_name || '').split(' ')[0])}</span></div>`),
-    ...Array.from({ length: Math.min(free, 6) }, () => `<div class="seat open"><span class="seat-av" aria-hidden="true">Free</span><span class="seat-name">${paused ? 'Paused' : 'Open'}</span></div>`)
+    ...Array.from({ length: Math.min(free, 6) }, () => `<div class="seat open"><span class="seat-av" aria-hidden="true">+</span><span class="seat-name">${paused ? 'Paused' : 'Free'}</span></div>`)
   ].join('');
   document.getElementById('md-seats').innerHTML = `
     <div class="seats-head">
@@ -4421,8 +4638,8 @@ async function renderMentorDashboard() {
             ${r.message ? `<blockquote>${escapeHTML(r.message)}</blockquote>` : '<p class="home-muted" style="margin:12px 0 16px;">No message was added.</p>'}
             ${warn ? `<p class="queue-warn" style="margin:-6px 0 14px;">Take care: ${escapeHTML(r.message_warnings.join(', '))}.</p>` : ''}
             <div class="ask-actions">
-              <button type="button" class="btn btn-primary" data-ask="accepted" data-id="${r.request_id}" data-name="${first}">Accept ${first}</button>
-              <button type="button" class="btn btn-secondary" data-ask="declined" data-id="${r.request_id}" data-name="${first}">Decline politely</button>
+              <button type="button" class="btn btn-primary" data-ask="accepted" data-id="${r.request_id}" data-name="${first}" ${free === 0 ? 'disabled title="All your places are taken. End a mentorship or add places first."' : ''}>Accept ${first}</button>
+              <button type="button" class="btn btn-secondary" data-ask="declined" data-id="${r.request_id}" data-name="${first}">Decline</button>
               <a class="home-link" href="requests.html">See full request</a>
             </div>
             <p class="st-msg" role="status"></p>
@@ -4910,8 +5127,8 @@ async function drawGooglePanel(linked) {
     else setMsg(document.getElementById('google-msg'), data.error);
   }, 'continue_with');
   if (!shown) {
-    setMsg(document.getElementById('google-msg'), 'Google sign-in is not set up on this server yet.');
-    document.getElementById('google-msg').style.color = 'var(--slate)';
+    const section = panel.closest('section');
+    if (section) section.hidden = true;
   }
 }
 
@@ -5060,7 +5277,7 @@ function askDialog({ title, text, confirmText = 'Confirm', danger = false, input
       <div class="modal-card dlg" role="dialog" aria-modal="true" aria-labelledby="ask-title">
         <h3 id="ask-title">${escapeHTML(title)}</h3>
         ${text ? `<p class="st-text">${escapeHTML(text)}</p>` : ''}
-        ${input ? `<div class="field"><label for="ask-input">${escapeHTML(input.label)}</label><input type="text" id="ask-input" maxlength="255" placeholder="${escapeHTML(input.placeholder || '')}"></div>` : ''}
+        ${input ? `<div class="field"><label for="ask-input">${escapeHTML(input.label)}</label><input type="text" id="ask-input" maxlength="${Number(input.maxLength) || 255}" placeholder="${escapeHTML(input.placeholder || '')}"></div>` : ''}
         <p class="st-msg dlg-msg"></p>
         <div class="dlg-actions">
           <button type="button" class="btn btn-secondary" data-ask="no">Cancel</button>

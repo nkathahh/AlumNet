@@ -15,12 +15,27 @@ async function main() {
     process.exit(1);
   }
   const passwordHash = await bcrypt.hash(password, 10);
-  const [result] = await pool.execute(
-    `INSERT INTO users (name, email, password_hash, country, city, status, email_verified_at, onboarded_at, privacy_accepted_at)
-     VALUES (:name, :email, :passwordHash, 'Kenya', 'Nairobi', 'active', NOW(), NOW(), NOW())`,
-    { name, email: email.trim().toLowerCase(), passwordHash }
-  );
-  await pool.execute('INSERT INTO admins (user_id, admin_level) VALUES (:userId, "super")', { userId: result.insertId });
+  // One transaction, so a failure never leaves a user without the admin role.
+  // Text values use single quotes: some hosted MySQL servers (Aiven) read
+  // double quotes as column names.
+  const conn = await pool.getConnection();
+  let result;
+  try {
+    await conn.beginTransaction();
+    [result] = await conn.execute(
+      `INSERT INTO users (name, email, password_hash, country, city, status, email_verified_at, onboarded_at, privacy_accepted_at)
+       VALUES (:name, :email, :passwordHash, 'Kenya', 'Nairobi', 'active', NOW(), NOW(), NOW())`,
+      { name, email: email.trim().toLowerCase(), passwordHash }
+    );
+    await conn.execute("INSERT INTO admins (user_id, admin_level) VALUES (:userId, 'super')", { userId: result.insertId });
+    await conn.commit();
+  } catch (err) {
+    await conn.rollback();
+    if (err.code === 'ER_DUP_ENTRY') throw new Error(`An account already uses ${email}. Make it an admin from the Admins page instead.`);
+    throw err;
+  } finally {
+    conn.release();
+  }
   console.log(`Admin created: user_id ${result.insertId}. Log in, then turn on two-factor in Account settings.`);
   process.exit(0);
 }

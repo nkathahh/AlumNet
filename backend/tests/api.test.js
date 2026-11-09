@@ -869,6 +869,48 @@ test('a full or paused mentor cannot get new requests, and a mentor cannot accep
   await state.wanjiku.me.call('PUT', '/profile/me', { acceptingMentees: true });
 });
 
+test('mentors see what each mentee wants, their free places, and can decline several at once', async () => {
+  const mentor = await makeMember('Bulk Mentor', 'bulk.mentor@example.org', 'mentor');
+  await db.execute("UPDATE profiles SET skills = 'cargo sales, pricing, key accounts' WHERE user_id = :id", { id: mentor.id });
+  const asks = [];
+  for (const n of [1, 2, 3]) {
+    const m = await makeMember(`Bulk Mentee ${n}`, `bulk.mentee${n}@example.org`, 'mentee');
+    await db.execute("UPDATE profiles SET skills = 'load planning', career_interests = 'move into cargo sales' WHERE user_id = :id", { id: m.id });
+    const r = await m.me.call('POST', '/mentorship-requests', { mentorId: mentor.id, message: 'Hello, I would value your guidance on cargo sales.' });
+    assert.equal(r.status, 201);
+    asks.push({ ...m, requestId: r.body.request_id });
+  }
+  const list = (await mentor.me.call('GET', '/mentorship-requests')).body;
+  const one = list.find((r) => r.request_id === asks[0].requestId);
+  assert.equal(one.other_goals, 'move into cargo sales');
+  assert.deepEqual(one.in_common, ['cargo sales']);
+  assert.ok(new Date(one.expires_at) > new Date());
+  // Mentees do not get the mentor's private profile text this way
+  assert.equal((await asks[0].me.call('GET', '/mentorship-requests')).body[0].other_goals, undefined);
+
+  const places = await mentor.me.call('GET', '/mentorship-requests/places');
+  assert.equal(places.status, 200);
+  assert.equal(places.body.pending, 3);
+  assert.equal(places.body.free, places.body.max_mentees - places.body.active);
+  assert.equal((await asks[0].me.call('GET', '/mentorship-requests/places')).status, 403);
+  assert.equal((await asks[0].me.call('POST', '/mentorship-requests/decline', { ids: [asks[0].requestId] })).status, 403);
+
+  assert.equal((await mentor.me.call('POST', '/mentorship-requests/decline', { ids: [] })).status, 400);
+  assert.equal((await mentor.me.call('POST', '/mentorship-requests/decline', { ids: [asks[0].requestId], note: 'x'.repeat(161) })).status, 400);
+  assert.equal((await mentor.me.call('POST', '/mentorship-requests/decline', { ids: [asks[0].requestId], note: 'Pay a registration fee of KSh 2,000 via M-Pesa' })).status, 400);
+  // Another mentor's request is skipped, not declined
+  const stranger = await makeMember('Other Mentor', 'other.bulk.mentor@example.org', 'mentor');
+  const theirs = await asks[2].me.call('POST', '/mentorship-requests', { mentorId: stranger.id });
+  const done = await mentor.me.call('POST', '/mentorship-requests/decline', { ids: [asks[0].requestId, asks[1].requestId, theirs.body.request_id], note: 'My places are full this quarter.' });
+  assert.equal(done.status, 200);
+  assert.deepEqual(done.body, { declined: 2, skipped: 1 });
+  const told = (await asks[0].me.call('GET', '/notifications')).body.find((n) => n.type === 'request_declined');
+  assert.match(told.message, /My places are full this quarter/);
+  const [[still]] = await db.execute('SELECT status FROM mentorship_requests WHERE request_id = :id', { id: theirs.body.request_id });
+  assert.equal(still.status, 'pending');
+  assert.equal((await mentor.me.call('GET', '/mentorship-requests/places')).body.pending, 1);
+});
+
 test('the directory pages through results 12 at a time', async () => {
   for (let i = 0; i < 12; i++) await makeMember(`Paging Mentor ${String(i).padStart(2, '0')}`, `paging.${i}@example.org`, 'mentor');
   const p1 = await state.carol.me.call('GET', '/mentors?sort=name');
@@ -1847,6 +1889,42 @@ test('photos from a past event need consent, come from people who were there and
   // Photos cannot be added to an event that has not happened
   const future = await liveCommunityEvent(host, { title: 'Not yet', eventDate: inDays(9), mode: 'in_person', location: 'Embakasi' });
   assert.equal((await upload(host.me, `/images/events/${future}/photos?consent=1`, await photo())).status, 409);
+});
+
+test('an event album link must be Google Photos; the organiser picks the cover; office photos credit the office', async () => {
+  const id = state.pastEventId;
+  const host = state.amina;
+  const guest = state.photoViewer;
+  // Only the organiser or the alumni office can set the album
+  assert.equal((await guest.me.call('PUT', `/images/events/${id}/album`, { album_url: 'https://photos.app.goo.gl/abc123' })).status, 403);
+  for (const bad of ['https://evil.example/photos', 'http://photos.app.goo.gl/abc', 'javascript:alert(1)', 'https://user:pw@photos.google.com/x', 'https://goo.gl/abc']) {
+    assert.equal((await host.me.call('PUT', `/images/events/${id}/album`, { album_url: bad })).status, 400, bad);
+  }
+  const set = await host.me.call('PUT', `/images/events/${id}/album`, { album_url: 'https://photos.app.goo.gl/abc123' });
+  assert.equal(set.status, 200);
+  const view = await guest.me.call('GET', `/images/events/${id}/photos`);
+  assert.equal(view.body.event.album_url, 'https://photos.app.goo.gl/abc123');
+  assert.equal(view.body.can_manage, false);
+  assert.equal((await guest.me.call('GET', '/events/past')).body.find((e) => e.event_id === id).album_url, 'https://photos.app.goo.gl/abc123');
+
+  // The alumni office's own photos are credited to the office, not to the admin by name
+  const official = await upload(state.admin, `/images/events/${id}/photos?consent=1`, await photo());
+  assert.equal(official.status, 201);
+  const seen = (await guest.me.call('GET', `/images/events/${id}/photos`)).body.photos;
+  assert.equal(seen.find((p) => p.image_id === official.body.image_id).uploaded_by_name, 'KQ Alumni Office');
+  assert.notEqual(seen.find((p) => p.image_id !== official.body.image_id).uploaded_by_name, 'KQ Alumni Office');
+  const asAdmin = (await state.admin.call('GET', `/images/events/${id}/photos`)).body.photos;
+  assert.match(asAdmin.find((p) => p.image_id === official.body.image_id).uploaded_by_name, /^KQ Alumni Office \(.+\)$/);
+
+  // Cover: only a live photo of this event, chosen by the organiser
+  assert.equal((await guest.me.call('PUT', `/images/events/${id}/cover`, { image_id: official.body.image_id })).status, 403);
+  assert.equal((await host.me.call('PUT', `/images/events/${id}/cover`, { image_id: 999999 })).status, 400);
+  assert.equal((await host.me.call('PUT', `/images/events/${id}/cover`, { image_id: official.body.image_id })).status, 200);
+  const after = await guest.me.call('GET', `/images/events/${id}/photos`);
+  assert.equal(after.body.photos[0].image_id, official.body.image_id);
+  assert.equal(after.body.photos[0].is_cover, true);
+  // Removing the link clears it
+  assert.equal((await host.me.call('PUT', `/images/events/${id}/album`, { album_url: '' })).body.album_url, null);
 });
 
 test('a company logo waits for review and then shows on the opportunity', async () => {
