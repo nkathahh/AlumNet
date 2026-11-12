@@ -61,6 +61,9 @@ def _connect_args():
         user=os.getenv("DB_USER"),
         password=os.getenv("DB_PASSWORD"),
         database=os.getenv("DB_NAME"),
+        # Each statement commits at once. A reused connection would otherwise keep
+        # an old read snapshot and miss rows written since (new profiles, cached vectors)
+        autocommit=True,
         **_ssl_options()
     )
 
