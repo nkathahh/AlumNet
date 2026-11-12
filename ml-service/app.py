@@ -4,8 +4,10 @@ import hmac
 import json
 import os
 import tempfile
+import threading
 from dotenv import load_dotenv
 import mysql.connector
+import mysql.connector.pooling
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -45,8 +47,15 @@ def _ssl_options():
     return {"ssl_ca": path, "ssl_verify_cert": True}
 
 
-def get_connection():
-    return mysql.connector.connect(
+# Opening an encrypted MySQL connection takes several network round trips, which
+# is over a second when the database is in another region. Connections are kept
+# open in a small pool and reused; close() hands a connection back to the pool.
+_POOL = None
+_POOL_LOCK = threading.Lock()
+
+
+def _connect_args():
+    return dict(
         host=os.getenv("DB_HOST"),
         port=int(os.getenv("DB_PORT", 3306)),
         user=os.getenv("DB_USER"),
@@ -54,6 +63,36 @@ def get_connection():
         database=os.getenv("DB_NAME"),
         **_ssl_options()
     )
+
+
+def get_connection():
+    global _POOL
+    if os.getenv("DB_POOL_SIZE") == "0":
+        return mysql.connector.connect(**_connect_args())
+    try:
+        with _POOL_LOCK:
+            if _POOL is None:
+                # No session state is kept between requests, so connections are
+                # not reset on return (a reset would cost another round trip)
+                _POOL = mysql.connector.pooling.MySQLConnectionPool(
+                    pool_name="alumnet", pool_size=int(os.getenv("DB_POOL_SIZE", 4)),
+                    pool_reset_session=False, **_connect_args()
+                )
+        conn = _POOL.get_connection()
+    except mysql.connector.errors.PoolError:
+        # Every pooled connection is busy: use a one-off connection rather than wait
+        return mysql.connector.connect(**_connect_args())
+    # The pool checks each connection as it hands it out and reconnects one the
+    # database has closed (for example after a restart), so recovery is automatic
+    return conn
+
+
+@app.errorhandler(mysql.connector.Error)
+def database_unavailable(err):
+    """The database is unreachable (for example powered off). Say so clearly;
+    the pool reconnects once it is back."""
+    app.logger.warning("Database error: %s", err)
+    return jsonify(error="The matching service cannot reach the database right now. Please try again shortly."), 503
 
 
 # When ML_API_KEY is set, only callers with the same key (the AlumNet backend)

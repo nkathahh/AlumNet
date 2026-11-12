@@ -20,27 +20,30 @@ async function interactionSignals(menteeId, mentorIds) {
   mentorIds.forEach((id, i) => { params[`m${i}`] = id; });
   const marks = mentorIds.map((_, i) => `:m${i}`).join(', ');
 
-  const [saved] = await pool.execute(`SELECT mentor_id FROM bookmarks WHERE mentee_id = :me AND mentor_id IN (${marks})`, params);
+  // The three lookups are independent, so they run at the same time: with the
+  // database in another region each one costs a network round trip (NFR-01)
+  const [[saved], [events], [profiles]] = await Promise.all([
+    pool.execute(`SELECT mentor_id FROM bookmarks WHERE mentee_id = :me AND mentor_id IN (${marks})`, params),
+    // Topics of approved events the mentee registered for in the last year
+    pool.execute(
+      `SELECT e.title, e.topics FROM event_registrations r JOIN events e ON e.event_id = r.event_id
+       WHERE r.user_id = :me AND e.status = 'approved' AND e.topics IS NOT NULL AND e.topics <> ''
+         AND e.event_date >= (NOW() - INTERVAL 365 DAY)
+       ORDER BY e.event_date DESC LIMIT 10`,
+      { me: menteeId }
+    ),
+    pool.execute(
+      `SELECT u.user_id, u.department, p.headline, p.skills, p.experience
+       FROM users u LEFT JOIN profiles p ON p.user_id = u.user_id WHERE u.user_id IN (${marks})`,
+      params
+    )
+  ]);
   for (const { mentor_id: id } of saved) {
     const s = signals.get(id);
     s.boost += 2;
     s.reasons.push('On your shortlist');
   }
-
-  // Topics of approved events the mentee registered for in the last year
-  const [events] = await pool.execute(
-    `SELECT e.title, e.topics FROM event_registrations r JOIN events e ON e.event_id = r.event_id
-     WHERE r.user_id = :me AND e.status = 'approved' AND e.topics IS NOT NULL AND e.topics <> ''
-       AND e.event_date >= (NOW() - INTERVAL 365 DAY)
-     ORDER BY e.event_date DESC LIMIT 10`,
-    { me: menteeId }
-  );
   if (events.length) {
-    const [profiles] = await pool.execute(
-      `SELECT u.user_id, u.department, p.headline, p.skills, p.experience
-       FROM users u LEFT JOIN profiles p ON p.user_id = u.user_id WHERE u.user_id IN (${marks})`,
-      params
-    );
     for (const p of profiles) {
       const mentorText = [p.department, p.headline, p.skills, p.experience].filter(Boolean).join(' ');
       const matched = events.filter((e) => topicOverlap(e.topics, mentorText).length).slice(0, 2);
@@ -59,7 +62,9 @@ async function getRecommendations(req, res, next) {
     const { userId, role } = req.user;
     if (role !== 'mentee') return res.status(403).json({ error: 'Mentor recommendations are for mentees' });
 
-    // Matching needs the three fields the model reads; say exactly what is missing
+    // The profile check and the matching service are asked at the same time. The
+    // match result is only used once the profile is known to be complete.
+    const matching = mlGet('/recommend', { mentee_id: userId }).then((r) => ({ r }), (e) => ({ e }));
     const [[profile]] = await pool.execute(
       'SELECT skills, experience, career_interests FROM profiles WHERE user_id = :userId',
       { userId }
@@ -73,12 +78,15 @@ async function getRecommendations(req, res, next) {
       });
     }
 
-    const { data } = await mlGet('/recommend', { mentee_id: userId });
-    const matches = data || [];
+    const outcome = await matching;
+    if (outcome.e) throw outcome.e;
+    const matches = outcome.r.data || [];
+    const ids = matches.map((m) => m.mentor_id);
 
-    // Card details also apply blocks, HR status and availability
-    const cards = new Map((await cardsFor(userId, matches.map((m) => m.mentor_id))).map((c) => [c.mentor_id, c]));
-    const signals = await interactionSignals(userId, [...cards.keys()]);
+    // Card details (which also apply blocks, HR status and availability) and the
+    // mentee's own signals are independent, so they are fetched together
+    const [cardRows, signals] = await Promise.all([cardsFor(userId, ids), interactionSignals(userId, ids)]);
+    const cards = new Map(cardRows.map((c) => [c.mentor_id, c]));
     const ranked = matches
       .filter((m) => cards.has(m.mentor_id))
       .map((m) => {
