@@ -1,0 +1,21 @@
+{
+  "test": "NFR-05 recovery on the live release (07faec1)",
+  "method": "Signed in as a demo mentee, sent a mentorship request, powered the Aiven database off from the Aiven console, waited, powered it on, and probed GET /api/mentorship-requests every 10 seconds from the browser throughout. No server was restarted by hand.",
+  "times_utc": {
+    "request_sent": "2026-11-12T03:12:21Z",
+    "database_power_off_confirmed": "2026-11-12T03:13:25Z",
+    "first_failed_request": "2026-11-12T03:13:34Z",
+    "database_power_on_clicked": "2026-11-12T03:15:06Z",
+    "last_failed_request": "2026-11-12T03:20:34Z",
+    "first_successful_request": "2026-11-12T03:20:47Z"
+  },
+  "results": {
+    "aiven_rebuild_after_power_on": "about 5 min 30 s (provider side)",
+    "alumnet_recovery_after_database_returned": "within one 10 s probe interval (13 s between the last failure and the first success), with no manual restart",
+    "total_outage_seen_by_members": "7 min 13 s",
+    "request_survived": true,
+    "matching_after_recovery": "worked; the first recommendation request took 18.3 s while the matching service reconnected and warmed up",
+    "error_shown_during_outage": "HTTP 500 'Something went wrong' (fixed afterwards: the server now answers 503 'AlumNet cannot reach its database right now' and pages show a reconnecting notice)"
+  },
+  "cleanup": "The test request (id 15, to demo mentor Catherine Akinyi) was withdrawn after the check."
+}

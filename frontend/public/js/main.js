@@ -84,6 +84,11 @@ const AUTH_PATHS = ['/auth/login', '/auth/google', '/auth/2fa/verify', '/auth/si
       const page = currentPage();
       if (PAGE_ROLES[page] || page === 'onboarding.html') window.location.href = 'login.html?expired=1';
     }
+    // The database is briefly unreachable: show one calm notice that clears itself
+    if (res.status === 503) {
+      const data = await res.clone().json().catch(() => null);
+      if (data && data.code === 'db_unavailable') showReconnecting(true);
+    } else if (res.ok) showReconnecting(false);
     if (res.status === 403 && path !== '/auth/privacy') {
       const data = await res.clone().json().catch(() => null);
       if (data && data.code === 'privacy_update') showPrivacyUpdate(data.version);
@@ -92,6 +97,18 @@ const AUTH_PATHS = ['/auth/login', '/auth/google', '/auth/2fa/verify', '/auth/si
     return res;
   };
 })();
+
+function showReconnecting(on) {
+  let bar = document.getElementById('reconnecting-bar');
+  if (!on) { if (bar) bar.remove(); return; }
+  if (bar) return;
+  bar = document.createElement('div');
+  bar.id = 'reconnecting-bar';
+  bar.className = 'reconnecting-bar';
+  bar.setAttribute('role', 'status');
+  bar.textContent = 'AlumNet is reconnecting to its database. Your work is safe; try again in a minute.';
+  document.body.prepend(bar);
+}
 
 function clearSession() {
   localStorage.removeItem('alumnet_signed_in');

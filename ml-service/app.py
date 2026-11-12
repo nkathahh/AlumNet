@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify
+import functools
 import hashlib
 import hmac
 import json
@@ -29,6 +30,18 @@ MODEL_NAME = 'BAAI/bge-small-en-v1.5'
 # model's "Files and versions" page on Hugging Face; /health reports it.
 MODEL_REVISION = os.getenv("MODEL_REVISION") or None
 MODEL = SentenceTransformer(MODEL_NAME, revision=MODEL_REVISION)
+
+# Short texts that come up again and again (a mentee's own profile fields, common
+# searches) are kept in memory once encoded, so repeat requests skip the model.
+# A changed profile is a different text, so it is encoded afresh.
+@functools.lru_cache(maxsize=4096)
+def _encode_one(text):
+    return tuple(float(x) for x in MODEL.encode([text], normalize_embeddings=True)[0])
+
+
+def encode_texts(texts):
+    return [list(_encode_one(t)) for t in texts]
+
 
 # BGE models find passages better when a search query starts with this instruction
 QUERY_PREFIX = 'Represent this sentence for searching relevant passages: '
@@ -329,7 +342,7 @@ def search():
 
     vectors = encode_cached(conn, [(m['user_id'], 'search', search_text(m)) for m in mentors])
     conn.close()
-    query_vec = MODEL.encode([QUERY_PREFIX + q], normalize_embeddings=True)[0]
+    query_vec = encode_texts([QUERY_PREFIX + q])[0]
 
     results = []
     for m in mentors:
@@ -372,9 +385,9 @@ def recommend():
     me_exp = field(mentee, 'experience')
     me_goals = field(mentee, 'career_interests')
 
-    # Mentee texts change often and are cheap, so they are encoded fresh.
+    # Mentee texts are encoded once and kept in memory until they change (encode_texts).
     # Mentor vectors come from the cache and are only re-encoded when a profile changes.
-    v_whole, v_skills, v_exp, v_goals = MODEL.encode([mentee_text or ' ', me_skills or ' ', me_exp or ' ', me_goals or ' '], normalize_embeddings=True)
+    v_whole, v_skills, v_exp, v_goals = encode_texts([mentee_text or ' ', me_skills or ' ', me_exp or ' ', me_goals or ' '])
     items = []
     for m in mentors:
         uid = m['user_id']

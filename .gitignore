@@ -11,3 +11,6 @@ backups/
 coverage/
 backend/uploads/
 uploads/
+
+# Report drafts kept beside the code, not part of the repository
+docs-for-report/

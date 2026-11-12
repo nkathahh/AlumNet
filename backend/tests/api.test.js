@@ -2210,7 +2210,7 @@ test('in production the server refuses to start with missing or weak secrets', (
   assert.match(run.stderr, /will not start in production/);
 });
 
-test('NFR-05: when the database is unreachable the server says it is starting, then recovers on its own', async () => {
+test('NFR-05: when the database is unreachable the server says so, then recovers on its own', async () => {
   const net = require('node:net');
   const port = PORT - 7;
   const dbPort = PORT - 8;
@@ -2231,13 +2231,18 @@ test('NFR-05: when the database is unreachable the server says it is starting, t
     assert.match((await first.json()).error, /starting/);
 
     // The database comes back (a stand-in that forwards to the real one)
-    proxy = net.createServer((c) => {
-      const up = net.connect(Number(process.env.DB_PORT || 3306), process.env.DB_HOST || '127.0.0.1');
-      c.pipe(up).pipe(c);
-      up.on('error', () => c.destroy());
-      c.on('error', () => up.destroy());
-    });
-    await new Promise((r) => proxy.listen(dbPort, '127.0.0.1', r));
+    const sockets = new Set();
+    const openProxy = async () => {
+      proxy = net.createServer((c) => {
+        const up = net.connect(Number(process.env.DB_PORT || 3306), process.env.DB_HOST || '127.0.0.1');
+        sockets.add(c); sockets.add(up);
+        c.pipe(up).pipe(c);
+        up.on('error', () => c.destroy());
+        c.on('error', () => up.destroy());
+      });
+      await new Promise((r) => proxy.listen(dbPort, '127.0.0.1', r));
+    };
+    await openProxy();
     let healthy = false;
     for (let i = 0; i < 60 && !healthy; i++) {
       await wait(250);
@@ -2245,6 +2250,34 @@ test('NFR-05: when the database is unreachable the server says it is starting, t
     }
     assert.ok(healthy, `the server did not recover:\n${log}`);
     assert.match(log, /Database not ready \(attempt 1\)/);
+
+    // The database goes away while the server is running: members get a clear
+    // "reconnecting" answer (503), not a generic server error
+    const signIn = () => fetch(`http://localhost:${port}/api/auth/login`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'AlumNet' },
+      body: JSON.stringify({ email: 'nobody.nfr05@example.org', password: 'wrong-password' })
+    });
+    for (const sock of sockets) sock.destroy();
+    await new Promise((r) => proxy.close(r));
+    proxy = null;
+    let down;
+    for (let i = 0; i < 20; i++) {
+      down = await signIn();
+      if (down.status === 503) break;
+      await wait(250);
+    }
+    assert.equal(down.status, 503);
+    assert.equal((await down.json()).code, 'db_unavailable');
+
+    // ...and it carries on by itself once the database is back
+    await openProxy();
+    let back;
+    for (let i = 0; i < 40; i++) {
+      back = await signIn();
+      if (back.status !== 503) break;
+      await wait(250);
+    }
+    assert.equal(back.status, 401);
   } finally {
     if (proc.exitCode === null) await new Promise((r) => { proc.once('exit', r); proc.kill('SIGTERM'); });
     if (proxy) await new Promise((r) => proxy.close(r));

@@ -16,6 +16,9 @@ const notificationsRoutes = require('./routes/notifications.routes');
 const { requireAppHeader } = require('./middleware/auth.middleware');
 const pool = require('./config/db');
 
+// Errors that mean the database cannot be reached at all (NFR-05)
+const DB_DOWN_CODES = new Set(['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'EHOSTUNREACH', 'ENOTFOUND', 'EAI_AGAIN', 'PROTOCOL_CONNECTION_LOST', 'ER_CON_COUNT_ERROR']);
+
 const app = express();
 
 // Needed behind a hosting proxy so rate limiting sees real client addresses
@@ -134,6 +137,12 @@ app.use((err, req, res, next) => {
   // check can be added.
   if (['ER_DATA_TOO_LONG', 'ER_TRUNCATED_WRONG_VALUE', 'ER_TRUNCATED_WRONG_VALUE_FOR_FIELD', 'WARN_DATA_TRUNCATED', 'ER_WARN_DATA_OUT_OF_RANGE'].includes(err.code)) {
     return res.status(400).json({ error: 'One of the fields is too long or not in the right format. Shorten it and try again.' });
+  }
+  // The database is unreachable (powered off, restarting or a network fault).
+  // That is not the member's fault and passes on its own: say so plainly with a
+  // 503 so pages can show a calm "reconnecting" notice, not a generic error.
+  if (!err.isAxiosError && (DB_DOWN_CODES.has(err.code) || err.fatal)) {
+    return res.status(503).json({ code: 'db_unavailable', error: 'AlumNet cannot reach its database right now. It reconnects by itself; please try again in a minute.' });
   }
   const status = err.status || 500;
   // Do not leak internal error details to users in production
