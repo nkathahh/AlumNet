@@ -3,7 +3,7 @@
 ![CI](https://github.com/nkathahh/AlumNet/actions/workflows/ci.yml/badge.svg)
 
 An alumni mentorship portal for Kenya Airways. AlumNet matches current staff (mentees)
-with retired staff (mentors) using semantic text embeddings, and supports mentorship
+with former staff (mentors) using semantic text embeddings, and supports mentorship
 requests, alumni events, career opportunities and notifications, with an admin console
 for moderation.
 
@@ -310,8 +310,11 @@ using synthetic mentors and mentees with blind relevance labels. Method choices 
 development set, and a held-out test set is run once, which the script enforces. See
 `ml-service/evaluation/README.md` for the method and steps.
 
-**Current status:** the evaluation kit and pilot runs are complete. Relevance labelling is in
-progress, and the full development and test results will follow.
+**Results:** the held-out test run (run `20261024_200422`, commit `334dba1`) is complete.
+On 10 test mentees and 20 mentors, both embedding methods reached Hit@3 0.90 and MRR 0.86,
+against 0.70 for the department baseline and Hit@3 0.90 with MRR 0.93 for TF-IDF. The
+embeddings did not beat TF-IDF, and the two failed on different mentees. Full results are in
+`ml-service/evaluation/results` and Chapter 5 of the project report.
 
 ## Testing
 
@@ -366,19 +369,23 @@ The tests refuse to run against any database whose name does not end in `_test`.
 
 ### Manual test cases
 
-Functional test cases TC-01 to TC-27 cover the user journeys across all roles. Results and
-screenshots are in Chapter 5 of the project report.
+Functional test cases TC-01 to TC-38 cover the user journeys across all roles. Each one is
+automated and runs in CI. The cases, their traceability to the requirements and the results
+are in Chapter 5 of the project report.
 
 ## Known limitations and outstanding defects
 
-- **Evaluation incomplete:** relevance labelling and the final test run are still to be done.
-  The fit band limits (72 and 62) are provisional until then.
-- **No usability study yet:** the interface follows usability heuristics and passes the
-  automated accessibility check (axe-core, WCAG 2.1 AA) on the main pages, but it has not been
-  tested with real users (System Usability Scale).
-- **Known ranking error:** for one mentee (Joyce), a mentor with strong skills overlap
-  (Catherine) ranks above the better overall fit (Brian). Field-weighted scoring corrected this
-  in the pilot, but only narrowly, and the full evaluation will test it.
+- **Small synthetic evaluation:** the matching evaluation used 20 synthetic mentors and
+  15 synthetic mentees, so ten test mentees cannot separate methods of similar quality, and
+  the results may not hold for real staff.
+- **Usability study:** the System Usability Scale study with representative users runs from
+  17 to 21 November 2026. Until then the interface has only passed the automated
+  accessibility check (axe-core, WCAG 2.1 AA) on the main pages.
+- **Ranking method:** the live service ranks mentors by whole-profile similarity and uses the
+  field similarities to explain each match. The field-weighted method chosen on the
+  development set scored the same on the test set.
+- **Response time:** live, 90% of recommendation requests finish within 3 seconds (target
+  95%), because the server and the database are in different regions.
 - **Scam checks are rules, not a model:** text inside images and links whose page changes after
   approval are not caught; reports from members and the re-check are the backstop.
 - **Single-admin installations** cannot use the second-admin rule for HR imports or for adding
@@ -394,6 +401,15 @@ screenshots are in Chapter 5 of the project report.
 
 ## AI assistance
 
-AI tools assisted with code, the evaluation design and drafting synthetic profiles. All
-suggestions were reviewed, tested and either accepted or rejected by the author. Relevance
-labels were created by the author without AI, so the model is not judged by another model.
+AI tools (Claude, Anthropic) assisted with code, tests, the deployment configuration, the
+evaluation design and drafting the synthetic profiles. The author reviewed and tested every
+suggestion before keeping it. Relevance labels were made by two human judges who could not
+see model scores or each other's labels. A language model settled the 80 pairs on which they
+disagreed; its labels are kept separately in `ml-service/evaluation/labels/pooled/judge_C.csv`
+and are reported as a model judge.
+
+## Licence and access
+
+Shared for academic assessment at Strathmore University. All rights reserved: no licence is
+granted to reuse or redistribute the code. The embedding model BAAI/bge-small-en-v1.5 is
+used under its MIT licence.
