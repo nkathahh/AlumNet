@@ -2,6 +2,8 @@
 
 ![CI](https://github.com/nkathahh/AlumNet/actions/workflows/ci.yml/badge.svg)
 
+**Live site:** [https://alumnet.pages.dev](https://alumnet.pages.dev)
+
 An alumni mentorship portal for Kenya Airways. AlumNet matches current staff (mentees)
 with former staff (mentors) using semantic text embeddings, and supports mentorship
 requests, alumni events, career opportunities and notifications, with an admin console
