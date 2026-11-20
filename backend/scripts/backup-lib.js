@@ -45,6 +45,12 @@ async function connect({ host, port, user, password, database, ssl }) {
     typeCast: (field, next) => (field.type === 'JSON' ? field.string() : next())
   });
   await db.query("SET time_zone = '+03:00'");
+  // Some hosts (Aiven) run with ANSI_QUOTES, which makes SHOW CREATE TABLE quote
+  // names with " instead of `. Switch it off for this session so a backup taken
+  // there loads into any MySQL server.
+  const [[mode]] = await db.query('SELECT @@SESSION.sql_mode AS m');
+  const modes = String(mode.m || '').split(',').filter((x) => x && x !== 'ANSI_QUOTES' && x !== 'ANSI');
+  await db.query('SET SESSION sql_mode = ?', [modes.join(',')]);
   return db;
 }
 

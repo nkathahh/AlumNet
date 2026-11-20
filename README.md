@@ -378,14 +378,15 @@ are in Chapter 5 of the project report.
 - **Small synthetic evaluation:** the matching evaluation used 20 synthetic mentors and
   15 synthetic mentees, so ten test mentees cannot separate methods of similar quality, and
   the results may not hold for real staff.
-- **Usability study:** the System Usability Scale study with representative users runs from
-  17 to 21 November 2026. Until then the interface has only passed the automated
-  accessibility check (axe-core, WCAG 2.1 AA) on the main pages.
+- **Usability study:** ten participants (five mentees, five mentors) is enough to reveal
+  major problems, not to give a precise System Usability Scale score.
 - **Ranking method:** the live service ranks mentors by whole-profile similarity and uses the
   field similarities to explain each match. The field-weighted method chosen on the
   development set scored the same on the test set.
-- **Response time:** live, 90% of recommendation requests finish within 3 seconds (target
-  95%), because the server and the database are in different regions.
+- **Response time:** with the database on Aiven in another region, only 90% of
+  recommendation requests finished within 3 seconds. Since the move to Azure MySQL in the
+  same region (19 November 2026) the median is 0.16 s. The matching service still takes about
+  a minute to wake after an idle period.
 - **Scam checks are rules, not a model:** text inside images and links whose page changes after
   approval are not caught; reports from members and the re-check are the backstop.
 - **Single-admin installations** cannot use the second-admin rule for HR imports or for adding
@@ -410,6 +411,6 @@ and are reported as a model judge.
 
 ## Licence and access
 
-Shared for academic assessment at Strathmore University. All rights reserved: no licence is
+Published for academic assessment at Strathmore University and for review by Kenya Airways. All rights reserved: no licence is
 granted to reuse or redistribute the code. The embedding model BAAI/bge-small-en-v1.5 is
 used under its MIT licence.

@@ -1,0 +1,19 @@
+{
+  "test": "NFR-05 application server failure: alumnet-api Container App stopped and started from the Azure portal",
+  "date": "2026-11-17",
+  "time_zone": "EAT (UTC+03:00)",
+  "release": "d8427cc",
+  "probe": "GET /api/mentorship-requests as the demo mentee every 5 s through https://alumnet.pages.dev",
+  "request": {"request_id": 16, "sent_at": "21:52:25", "status": "pending", "withdrawn_after_test": true},
+  "stop_confirmed": "21:53:39",
+  "last_success_before_failure": "21:53:40.410",
+  "first_failure": "21:53:45.409",
+  "response_during_failure": "503 {\"error\":\"The AlumNet server is starting up. Please try again in a minute.\"} from the Cloudflare gateway",
+  "start_clicked": "21:54:23",
+  "last_failure": "21:54:25.420",
+  "first_success_after_start": "21:54:30.416",
+  "recovery_after_start_seconds": 7,
+  "total_unavailable_seconds": 50,
+  "request_survived": true,
+  "manual_steps": "Only the stop and start used to simulate the failure; nothing else was restarted or repaired"
+}

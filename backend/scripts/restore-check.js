@@ -49,6 +49,9 @@ async function main() {
     await db.query(`DROP DATABASE IF EXISTS ${mysql.escapeId(name)}`);
     await db.query(`CREATE DATABASE ${mysql.escapeId(name)} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
     await db.query(`USE ${mysql.escapeId(name)}`);
+    // Backups taken before the ANSI_QUOTES fix quote table names with ".
+    // Load those with ANSI_QUOTES on; every value in a backup is in single quotes.
+    if (/CREATE TABLE "/.test(sql)) await db.query("SET SESSION sql_mode = CONCAT(@@SESSION.sql_mode, ',ANSI_QUOTES')");
 
     // Statements end with ";" and a line break; line breaks inside values are
     // always escaped, so this split never cuts a value in two

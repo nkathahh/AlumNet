@@ -1,0 +1,89 @@
+{
+  "measured_at": "2026-11-18T18:50:20.154Z",
+  "base_url": "https://alumnet.pages.dev",
+  "runs": 20,
+  "target_seconds": 3,
+  "node": "v24.22.1",
+  "results": [
+    {
+      "page": "Mentor recommendations",
+      "route": "/api/recommendations",
+      "one_at_a_time": {
+        "median_s": 3.003,
+        "p95_s": 4.169,
+        "max_s": 4.179
+      },
+      "20_at_once": {
+        "median_s": 11.273,
+        "p95_s": 17.821,
+        "max_s": 18.06,
+        "refused": 0
+      },
+      "meets_target": false
+    },
+    {
+      "page": "Mentor search (by meaning)",
+      "route": "/api/mentors?q=leadership%20and%20safety",
+      "one_at_a_time": {
+        "median_s": 4.253,
+        "p95_s": 4.663,
+        "max_s": 4.69
+      },
+      "20_at_once": {
+        "median_s": 11.282,
+        "p95_s": 17.028,
+        "max_s": 17.483,
+        "refused": 0
+      },
+      "meets_target": false
+    },
+    {
+      "page": "Events with fit labels",
+      "route": "/api/events",
+      "one_at_a_time": {
+        "median_s": 2.631,
+        "p95_s": 3.439,
+        "max_s": 3.689
+      },
+      "20_at_once": {
+        "median_s": 11.206,
+        "p95_s": 16.786,
+        "max_s": 16.883,
+        "refused": 0
+      },
+      "meets_target": true
+    },
+    {
+      "page": "Opportunities with fit labels",
+      "route": "/api/opportunities",
+      "one_at_a_time": {
+        "median_s": 2.747,
+        "p95_s": 3.065,
+        "max_s": 3.523
+      },
+      "20_at_once": {
+        "median_s": 11.632,
+        "p95_s": 17.011,
+        "max_s": 17.023,
+        "refused": 0
+      },
+      "meets_target": true
+    },
+    {
+      "page": "Mentee dashboard summary",
+      "route": "/api/dashboard/mentee-summary",
+      "one_at_a_time": {
+        "median_s": 0.948,
+        "p95_s": 1.468,
+        "max_s": 1.627
+      },
+      "20_at_once": {
+        "median_s": 2.117,
+        "p95_s": 2.429,
+        "max_s": 2.504,
+        "refused": 0
+      },
+      "meets_target": true
+    }
+  ]
+}

@@ -9,19 +9,19 @@ the guide names under "Plan credits around the chosen host").
 Browser ──HTTPS──▶ Cloudflare Pages ──(gateway secret)──▶ Azure Container App: alumnet-api
                     pages + gateway                          Node/Express server
                     function                                  │               │
-                                                              │ internal only │ TLS
+                                                              │ HTTPS + key   │ TLS
                                                               │ + ML_API_KEY  │
                                                               ▼               ▼
-                                             Azure Container App:      Aiven MySQL
-                                             alumnet-ml (BGE model)    (managed database)
+                                             Azure Container App:      Azure Database
+                                             alumnet-ml (BGE model)    for MySQL
 ```
 
 | Part | Host | Where it is in the course guide |
 |---|---|---|
 | Pages and gateway | Cloudflare Pages, deployed from GitHub `main` | Example 1, steps 3 to 6 |
 | Server (Express API) | Azure Container App `alumnet-api` | "Azure credit, which may support an alternative deployment agreed with your supervisor" |
-| Matching model | Azure Container App `alumnet-ml`, pinned model revision, no public address | Same; model loaded from the Hugging Face Hub at a fixed revision (Example 3) |
-| Database | Aiven for MySQL, free plan | Example 2: "an appropriate managed database" |
+| Matching model | Azure Container App `alumnet-ml`, pinned model revision, public address that refuses any request without `ML_API_KEY` | Same; model loaded from the Hugging Face Hub at a fixed revision (Example 3) |
+| Database | Azure Database for MySQL Flexible Server (B1ms, South Africa North), from 19 November 2026; Aiven for MySQL free plan before that | Example 2: "an appropriate managed database" |
 | Releases | GitHub Actions: tests, then build both containers, labelled with the commit | Example 3: a sync workflow from GitHub `main` |
 
 **Why this combination.** Cloudflare Pages serves static pages and small functions, so it
@@ -31,7 +31,41 @@ being free in July 2026, and the AWS route (Example 2) uses billable resources. 
 Students gives $100 of credit with no card, and Container Apps has a free monthly allowance
 (180,000 vCPU-seconds and 2 million requests) and can scale to zero, so a demo deployment costs
 nothing or very little of the credit. None of the course examples hosts MySQL, so the database
-is on Aiven's free plan, with an encrypted connection. Agree this route with the supervisor.
+was first on Aiven's free plan. On 19 November 2026 it moved to Azure Database for MySQL in
+the same region as the containers (see "Database on Azure" below). Agree this route with the supervisor.
+
+## Database on Azure (live since 19 November 2026)
+
+Aiven's free MySQL is in Bangalore, so every recommendation crossed regions, and the plan
+retires on 21 December 2026. The database was therefore moved to **Azure Database for MySQL
+Flexible Server**, Burstable B1ms with 20 GiB, in **South Africa North** next to the containers.
+It costs about USD 19 a month of the Azure for Students credit. Stop it from its Overview page
+when no demo is near (storage is still billed, and Azure starts it again after 30 days).
+
+How it was moved, all from the `backend` folder:
+
+1. `npm run backup -- --env=.env.live` (fresh backup of Aiven).
+2. Server created in the portal: MySQL 8.4, public access, "Allow public access from any Azure
+   service" ticked, and your own IP added under Networking (add it again whenever your IP changes).
+3. `npm run restore-check -- --env=.env.azure --keep` restored it into `alumnet_restore_test`
+   on Azure and checked every table (36 tables, 780 rows). `.env.azure` holds the Azure `DB_*`
+   settings and `BACKUP_KEY`; git ignores it.
+4. In Workbench the tables were renamed into a new `alumnet` database
+   (`RENAME TABLE alumnet_restore_test.x TO alumnet.x` for every table), then the scratch
+   database was dropped.
+5. Both Container Apps got the new `DB_HOST`, `DB_USER`, `DB_PASSWORD` (secret `db-password`),
+   `DB_NAME=alumnet` and `DB_SSL_CA` holding Azure's three root certificates
+   (DigiCert Global Root CA, DigiCert Global Root G2 and Microsoft RSA Root CA 2017).
+6. After the update the internal address of `alumnet-ml` answered "Not found" from inside the
+   environment, so its ingress was made external
+   (`az containerapp ingress update -n alumnet-ml -g alumnet --type external`). The address
+   did not change, and `ML_API_KEY` still guards every request.
+
+Afterwards `.env.live` was renamed `.env.aiven` and `.env.azure` became `.env.live`, so backups
+and latency runs use Azure. Live response times fell from a recommendation median of 3.00 s to
+0.16 s (`ml-service/evaluation/results/latency_end_to_end_20261119112121.json`). Keep the
+Aiven service for a week as a fallback: to switch back, set the Aiven `DB_*` values and its
+`DB_SSL_CA` on both apps again.
 
 **Why the gateway is a Pages Function, not a separate Worker.** Example 1 puts the gateway on
 its own `api.` subdomain of a custom domain. AlumNet's sign-in uses a first-party cookie on the
@@ -361,7 +395,8 @@ WebP when they are uploaded and saved through `backend/src/utils/storage.js`.
 
 - `ML_API_KEY` must be set on `alumnet-ml`. Its image sets `ML_REQUIRE_KEY=1`, so the service
   refuses to start without the key, and a missing key shows up as a failed start, not an open
-  service. It also has no public address (internal ingress).
+  service. Since 19 November 2026 it has a public address (see "Database on Azure"), so the
+  key is what protects it: without it every request except `/health` gets 401.
 - `TOTP_ENC_KEY` must be set on `alumnet-api` before anyone turns on two-factor, and never changed.
 - `GATEWAY_SECRET` must be the same on `alumnet-api` and in Cloudflare Pages. Without it on the
   server, the server would accept requests that skip the gateway.

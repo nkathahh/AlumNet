@@ -1,0 +1,89 @@
+{
+  "measured_at": "2026-11-19T10:19:58.143Z",
+  "base_url": "https://alumnet.pages.dev",
+  "runs": 20,
+  "target_seconds": 3,
+  "node": "v24.22.1",
+  "results": [
+    {
+      "page": "Mentor recommendations",
+      "route": "/api/recommendations",
+      "one_at_a_time": {
+        "median_s": 0.148,
+        "p95_s": 0.157,
+        "max_s": 0.171
+      },
+      "20_at_once": {
+        "median_s": 0.713,
+        "p95_s": 1.054,
+        "max_s": 1.098,
+        "refused": 0
+      },
+      "meets_target": true
+    },
+    {
+      "page": "Mentor search (by meaning)",
+      "route": "/api/mentors?q=leadership%20and%20safety",
+      "one_at_a_time": {
+        "median_s": 0.131,
+        "p95_s": 0.135,
+        "max_s": 0.14
+      },
+      "20_at_once": {
+        "median_s": 0.298,
+        "p95_s": 0.328,
+        "max_s": 0.328,
+        "refused": 13
+      },
+      "meets_target": true
+    },
+    {
+      "page": "Events with fit labels",
+      "route": "/api/events",
+      "one_at_a_time": {
+        "median_s": 0.105,
+        "p95_s": 0.11,
+        "max_s": 0.138
+      },
+      "20_at_once": {
+        "median_s": 0.213,
+        "p95_s": 0.257,
+        "max_s": 0.259,
+        "refused": 0
+      },
+      "meets_target": true
+    },
+    {
+      "page": "Opportunities with fit labels",
+      "route": "/api/opportunities",
+      "one_at_a_time": {
+        "median_s": 0.105,
+        "p95_s": 0.11,
+        "max_s": 0.118
+      },
+      "20_at_once": {
+        "median_s": 0.209,
+        "p95_s": 0.264,
+        "max_s": 0.265,
+        "refused": 0
+      },
+      "meets_target": true
+    },
+    {
+      "page": "Mentee dashboard summary",
+      "route": "/api/dashboard/mentee-summary",
+      "one_at_a_time": {
+        "median_s": 0.084,
+        "p95_s": 0.086,
+        "max_s": 0.086
+      },
+      "20_at_once": {
+        "median_s": 0.138,
+        "p95_s": 0.148,
+        "max_s": 0.151,
+        "refused": 0
+      },
+      "meets_target": true
+    }
+  ]
+}
